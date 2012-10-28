@@ -40,4 +40,6 @@ virtual_oss.c
 CFLAGS += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib -lcuse4bsd -lpthread
 
+BINDIR=/usr/local/bin
+
 .include <bsd.prog.mk>
