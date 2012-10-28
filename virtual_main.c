@@ -74,6 +74,7 @@ void
 atomic_wakeup(void)
 {
 	pthread_cond_broadcast(&atomic_cv);
+	cuse_poll_wakeup();
 }
 
 static vblock_t *
@@ -226,11 +227,11 @@ vclient_alloc(uint32_t bufsize)
 	vblock_init(&pvc->tx_ready);
 	vblock_init(&pvc->tx_free);
 
-	if (vblock_fill(&pvc->rx_free, 2, bufsize)) {
+	if (vblock_fill(&pvc->rx_free, VMAX_FRAGS, bufsize)) {
 		vclient_free(pvc);
 		return (NULL);
 	}
-	if (vblock_fill(&pvc->tx_free, 2, bufsize)) {
+	if (vblock_fill(&pvc->tx_free, VMAX_FRAGS, bufsize)) {
 		vclient_free(pvc);
 		return (NULL);
 	}
@@ -620,32 +621,18 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 		}
 		break;
 	case SNDCTL_DSP_GETISPACE:
-		pvb = vblock_peek(&pvc->rx_ready);
-		if (pvb != NULL) {
-			data.buf_info.bytes = pvb->buf_size - pvb->buf_pos;
-			data.buf_info.fragments = 1;
-			data.buf_info.fragstotal = 2;
-			data.buf_info.fragsize = pvc->profile->bufsize;
-		} else {
-			data.buf_info.bytes = 0;
-			data.buf_info.fragments = 0;
-			data.buf_info.fragstotal = 2;
-			data.buf_info.fragsize = pvc->profile->bufsize;
-		}
+		data.buf_info.bytes =
+		    vblock_count_bytes(&pvc->rx_ready, 0);
+		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
+		data.buf_info.fragstotal = VMAX_FRAGS;
+		data.buf_info.fragsize = pvc->profile->bufsize;
 		break;
 	case SNDCTL_DSP_GETOSPACE:
-		pvb = vblock_peek(&pvc->tx_free);
-		if (pvb != NULL) {
-			data.buf_info.bytes = pvb->buf_size - pvb->buf_pos;
-			data.buf_info.fragments = 1;
-			data.buf_info.fragstotal = 2;
-			data.buf_info.fragsize = pvc->profile->bufsize;
-		} else {
-			data.buf_info.bytes = 0;
-			data.buf_info.fragments = 0;
-			data.buf_info.fragstotal = 2;
-			data.buf_info.fragsize = pvc->profile->bufsize;
-		}
+		data.buf_info.bytes =
+		    vblock_count_bytes(&pvc->tx_free, 0);
+		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
+		data.buf_info.fragstotal = VMAX_FRAGS;
+		data.buf_info.fragsize = pvc->profile->bufsize;
 		break;
 	case SNDCTL_DSP_GETCAPS:
 		data.val = PCM_CAP_REALTIME | PCM_CAP_DUPLEX;
@@ -1127,7 +1114,6 @@ main(int argc, char **argv)
 
 		voss_dups++;
 	}
-
 	/* Give each DSP device 4 threads */
 
 	for (idx = 0; idx != (voss_dups * 4); idx++) {
