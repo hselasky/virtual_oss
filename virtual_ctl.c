@@ -107,6 +107,9 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	atomic_lock();
 
 	switch (cmd) {
+	case VIRTUAL_OSS_GET_VERSION:
+		data.val = VIRTUAL_OSS_VERSION;
+		break;
 	case VIRTUAL_OSS_GET_DEV_INFO:
 		pvp = vprofile_by_index(data.dev_info.number);
 		if (pvp == NULL ||
