@@ -34,6 +34,7 @@ struct virtual_oss_dev_info {
 	char	name[VIRTUAL_OSS_NAME_MAX];
 	int	number;
 	int	channel;
+	int	bits;
 	int	rx_amp;
 	int	tx_amp;
 	int	rx_chan;
@@ -49,6 +50,7 @@ struct virtual_oss_dev_info {
 
 struct virtual_oss_mon_info {
 	int	number;
+	int	bits;
 	int	src_chan;
 	int	dst_chan;
 	int	pol;
@@ -65,6 +67,7 @@ struct virtual_oss_dev_peak {
 	char	name[VIRTUAL_OSS_NAME_MAX];
 	int	number;
 	int	channel;
+	int	bits;
 	long long rx_peak_value;
 	long long tx_peak_value;
 };
@@ -73,6 +76,7 @@ struct virtual_oss_dev_peak {
 
 struct virtual_oss_mon_peak {
 	int	number;
+	int	bits;
 	long long peak_value;
 };
 

@@ -49,20 +49,12 @@ vctl_close(struct cuse_dev *pdev, int fflags)
 }
 
 static vprofile_t *
-vprofile_by_name(const char *name, int index, int len)
+vprofile_by_index(int index)
 {
 	vprofile_t *pvp;
 
-	if (name == NULL || name[0] == 0) {
-		TAILQ_FOREACH(pvp, &virtual_profile_head, entry) {
-			if (!index--)
-				return (pvp);
-		}
-		return (NULL);
-	}
-
 	TAILQ_FOREACH(pvp, &virtual_profile_head, entry) {
-		if (strncmp(pvp->name, name, len) == 0)
+		if (!index--)
 			return (pvp);
 	}
 	return (NULL);
@@ -116,14 +108,14 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 
 	switch (cmd) {
 	case VIRTUAL_OSS_GET_DEV_INFO:
-		pvp = vprofile_by_name(data.dev_info.name,
-		    data.dev_info.number, VIRTUAL_OSS_NAME_MAX);
+		pvp = vprofile_by_index(data.dev_info.number);
 		if (pvp == NULL ||
 		    data.dev_info.channel < 0 ||
 		    data.dev_info.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
+		strlcpy(data.dev_info.name, pvp->name, sizeof(data.dev_info.name));
 		chan = data.dev_info.channel;
 		data.dev_info.rx_amp = pvp->rx_shift[chan];
 		data.dev_info.tx_amp = pvp->tx_shift[chan];
@@ -133,10 +125,10 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.dev_info.tx_mute = pvp->tx_mute[chan] ? 1 : 0;
 		data.dev_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
 		data.dev_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
+		data.dev_info.bits = pvp->bits;
 		break;
 	case VIRTUAL_OSS_SET_DEV_INFO:
-		pvp = vprofile_by_name(data.dev_info.name,
-		    data.dev_info.number, VIRTUAL_OSS_NAME_MAX);
+		pvp = vprofile_by_index(data.dev_info.number);
 		if (pvp == NULL ||
 		    data.dev_info.channel < 0 ||
 		    data.dev_info.channel >= (int)pvp->channels ||
@@ -167,6 +159,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.mon_info.pol = pvm->pol;
 		data.mon_info.mute = pvm->mute;
 		data.mon_info.amp = pvm->shift;
+		data.mon_info.bits = voss_dsp_bits;
 		break;
 	case VIRTUAL_OSS_SET_INPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,
@@ -195,6 +188,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.mon_info.pol = pvm->pol;
 		data.mon_info.mute = pvm->mute;
 		data.mon_info.amp = pvm->shift;
+		data.mon_info.bits = voss_dsp_bits;
 		break;
 	case VIRTUAL_OSS_SET_OUTPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,
@@ -212,19 +206,20 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvm->shift = data.mon_info.amp;
 		break;
 	case VIRTUAL_OSS_GET_DEV_PEAK:
-		pvp = vprofile_by_name(data.dev_peak.name,
-		    data.dev_peak.number, VIRTUAL_OSS_NAME_MAX);
+		pvp = vprofile_by_index(data.dev_peak.number);
 		if (pvp == NULL ||
 		    data.dev_peak.channel < 0 ||
 		    data.dev_peak.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
+		strlcpy(data.dev_peak.name, pvp->name, sizeof(data.dev_peak.name));
 		chan = data.dev_peak.channel;
 		data.dev_peak.rx_peak_value = pvp->rx_peak_value[chan];
 		pvp->rx_peak_value[chan] = 0;
 		data.dev_peak.tx_peak_value = pvp->tx_peak_value[chan];
 		pvp->tx_peak_value[chan] = 0;
+		data.dev_peak.bits = pvp->bits;
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_PEAK:
 		pvm = vmonitor_by_index(data.mon_peak.number,
@@ -234,6 +229,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			break;
 		}
 		data.mon_peak.peak_value = pvm->peak_value;
+		data.mon_peak.bits = voss_dsp_bits;
 		pvm->peak_value = 0;
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_MON_PEAK:
@@ -244,6 +240,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			break;
 		}
 		data.mon_peak.peak_value = pvm->peak_value;
+		data.mon_peak.bits = voss_dsp_bits;
 		pvm->peak_value = 0;
 		break;
 	case VIRTUAL_OSS_ADD_INPUT_MON:
