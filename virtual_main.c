@@ -805,28 +805,55 @@ usage(void)
 	    "\t" "-c 1 -m 0,0 -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -l vdsp.loopback \\\n"
+	    "\t" "-s <samples> \\\n"
+	    "\t" "-b <bits> \\\n"
+	    "\t" "-r <rate> \\\n"
+	    "\t" "-a <amp -63..63> \\\n"
+	    "\t" "-p <pol 0..1> \\\n"
+	    "\t" "-e <mute 0..1> \\\n"
+	    "\t" "-m <mapping> \\\n"
+	    "\t" "-m <rx0,tx0,rx1,tx1...rxN,txN> \\\n"
+	    "\t" "-c <numchans> \\\n"
+	    "\t" "-M <monitorfilter> \\\n"
 	    "\t" "-M i,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-t vdsp.ctl \n"
 	    "\t" "Left channel = 0\n"
 	    "\t" "Right channel = 1\n"
-	    "\t" "Mapping = rx0,tx0,rx1,tx1\n"
 	    "\t" "Max channels = %d\n", VMAX_CHAN);
 
 	exit(EX_USAGE);
 }
 
 static void
-dup_profile(const vprofile_t *pvp)
+dup_profile(const vprofile_t *pvp, int amp, int pol, int mute)
 {
 	vprofile_t *ptr;
 	struct cuse_dev *pdev;
+	int x;
+
+	mute = mute ? 1 : 0;
+	pol = pol ? 1 : 0;
+
+	if (amp < -63)
+		amp = -63;
+	else if (amp > 63)
+		amp = 63;
 
 	ptr = malloc(sizeof(*ptr));
 	if (ptr == NULL)
 		errx(EX_USAGE, "Out of memory");
 
 	memcpy(ptr, pvp, sizeof(*ptr));
+
+	for (x = 0; x != ptr->channels; x++) {
+		ptr->tx_mute[x] = mute;
+		ptr->rx_mute[x] = mute;
+		ptr->tx_shift[x] = amp;
+		ptr->rx_shift[x] = amp;
+		ptr->tx_pol[x] = pol;
+		ptr->rx_pol[x] = pol;
+	}
 
 	pdev = cuse_dev_create(&vclient_methods, ptr, NULL,
 	    0, 0, voss_dsp_perm, ptr->name);
@@ -866,8 +893,11 @@ main(int argc, char **argv)
 	int val;
 	int idx;
 	int type;
+	int opt_mute = 0;
+	int opt_amp = 0;
+	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "c:r:b:f:m:M:d:l:s:t:h?";
+	const char *optstr = "e:p:a:c:r:b:f:m:M:d:l:s:t:h?";
 	struct virtual_profile profile;
 
 	memset(&profile, 0, sizeof(profile));
@@ -887,6 +917,15 @@ main(int argc, char **argv)
 
 	while ((c = getopt(argc, argv, optstr)) != -1) {
 		switch (c) {
+		case 'a':
+			opt_amp = atoi(optarg);
+			break;
+		case 'e':
+			opt_mute = atoi(optarg);
+			break;
+		case 'p':
+			opt_pol = atoi(optarg);
+			break;
 		case 'c':
 			profile.channels = atoi(optarg);
 			if (profile.channels == 0)
@@ -958,7 +997,7 @@ main(int argc, char **argv)
 			if (profile.bufsize >= (1024 * 1024))
 				errx(EX_USAGE, "-s option value is too big");
 
-			dup_profile(&profile);
+			dup_profile(&profile, opt_amp, opt_pol, opt_mute);
 			break;
 		case 'l':
 			profile.name = optarg;
@@ -973,7 +1012,7 @@ main(int argc, char **argv)
 			if (profile.bufsize >= (1024 * 1024))
 				errx(EX_USAGE, "-s option value is too big");
 
-			dup_profile(&profile);
+			dup_profile(&profile, opt_amp, opt_pol, opt_mute);
 			break;
 		case 's':
 			if (samples != 0)
