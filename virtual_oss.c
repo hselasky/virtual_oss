@@ -399,8 +399,10 @@ virtual_oss_process(void *arg)
 				/* dump any written data */
 
 				pvb = vblock_peek(&pvc->tx_ready);
-				vblock_remove(pvb, &pvc->tx_ready);
-				vblock_insert(pvb, &pvc->tx_free);
+				if (pvb != NULL) {
+					vblock_remove(pvb, &pvc->tx_ready);
+					vblock_insert(pvb, &pvc->tx_free);
+				}
 
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
