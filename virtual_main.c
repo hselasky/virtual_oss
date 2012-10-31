@@ -850,7 +850,7 @@ dup_profile(const vprofile_t *pvp, int amp, int pol, int mute)
 		ptr->tx_mute[x] = mute;
 		ptr->rx_mute[x] = mute;
 		ptr->tx_shift[x] = amp;
-		ptr->rx_shift[x] = amp;
+		ptr->rx_shift[x] = -amp;
 		ptr->tx_pol[x] = pol;
 		ptr->rx_pol[x] = pol;
 	}
