@@ -562,6 +562,8 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_GETBLKSIZE:
 		data.val = pvc->profile->bufsize;
 		break;
+	case SNDCTL_DSP_SETFRAGMENT:
+		break;
 	case SNDCTL_DSP_SETBLKSIZE:
 		break;
 	case SNDCTL_DSP_RESET:
