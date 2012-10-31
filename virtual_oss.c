@@ -407,7 +407,7 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
-				if (pvb == NULL || pvc->rx_enabled == 0 || dst_chans > src_chans)
+				if (pvc->rx_enabled == 0 || dst_chans > src_chans)
 					continue;
 
 				for (x = 0; x != dst_chans; x++) {
@@ -448,6 +448,12 @@ virtual_oss_process(void *arg)
 						}
 					}
 				}
+
+				format_maximum(buffer_monitor, pvc->profile->rx_peak_value,
+				    pvc->profile->channels, samples);
+
+				if (pvb == NULL)
+					continue;
 
 				format_export(pvc->format, buffer_monitor,
 				    pvb->buf_start, pvb->buf_size);
