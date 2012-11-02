@@ -309,6 +309,8 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 	vclient_t *pvc;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (CUSE_ERR_INVALID);
 
 	atomic_lock();
 	TAILQ_REMOVE(pvc->profile->pvc_head, pvc, entry);
@@ -331,6 +333,9 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	int retval;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (CUSE_ERR_INVALID);
+
 	retval = 0;
 
 	atomic_lock();
@@ -408,6 +413,9 @@ vclient_write(struct cuse_dev *pdev, int fflags,
 	int retval;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (CUSE_ERR_INVALID);
+
 	retval = 0;
 
 	atomic_lock();
@@ -419,7 +427,13 @@ vclient_write(struct cuse_dev *pdev, int fflags,
 	pvc->tx_enabled = 1;
 
 	while (len > 0) {
-		pvb = vblock_peek(&pvc->tx_free);
+		/* make sure send is synchronous when not blocking */
+		if ((fflags & CUSE_FFLAG_NONBLOCK) == 0 &&
+		    vblock_peek(&pvc->tx_ready) != NULL)
+			pvb = NULL;
+		else
+			pvb = vblock_peek(&pvc->tx_free);
+
 		if (pvb == NULL) {
 			/* out of data */
 			if (fflags & CUSE_FFLAG_NONBLOCK) {
@@ -497,6 +511,8 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 	int error;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (CUSE_ERR_INVALID);
 
 	len = IOCPARM_LEN(cmd);
 
@@ -751,6 +767,8 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 	int retval = CUSE_POLL_NONE;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (retval);
 
 	atomic_lock();
 
