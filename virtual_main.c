@@ -587,8 +587,7 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_SYNC:
 		break;
 	case SNDCTL_DSP_SPEED:
-		if (data.val != (int)pvc->profile->rate)
-			error = CUSE_ERR_INVALID;
+		data.val = (int)pvc->profile->rate;
 		break;
 	case SOUND_PCM_READ_RATE:
 		data.val = (int)pvc->profile->rate;
