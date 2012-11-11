@@ -470,7 +470,7 @@ virtual_oss_process(void *arg)
 
 			atomic_unlock();
 
-			format_remix(buffer_data,
+			format_remix(buffer_temp,
 			    voss_mix_channels,
 			    voss_dsp_channels,
 			    voss_dsp_samples);
