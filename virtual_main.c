@@ -917,7 +917,7 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "e:p:a:c:r:b:f:m:M:d:l:s:t:h?";
+	const char *optstr = "e:p:a:C:c:r:b:f:m:M:d:l:s:t:h?";
 	struct virtual_profile profile;
 
 	memset(&profile, 0, sizeof(profile));
