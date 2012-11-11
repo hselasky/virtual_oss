@@ -67,10 +67,10 @@ virtual_oss_process(void *arg)
 
 	afmt = voss_dsp_fmt;
 
-	buffer_dsp = malloc(buffer_dsp_size * 2);
-	buffer_temp = malloc(voss_dsp_samples * voss_dsp_channels * 8 * 2);
-	buffer_monitor = malloc(voss_dsp_samples * voss_dsp_channels * 8 * 2);
-	buffer_data = malloc(voss_dsp_samples * voss_dsp_channels * 8 * 2);
+	buffer_dsp = malloc(buffer_dsp_size);
+	buffer_temp = malloc(voss_dsp_samples * voss_max_channels * 8);
+	buffer_monitor = malloc(voss_dsp_samples * voss_max_channels * 8);
+	buffer_data = malloc(voss_dsp_samples * voss_max_channels * 8);
 
 	if (buffer_dsp == NULL || buffer_temp == NULL ||
 	    buffer_monitor == NULL || buffer_data == NULL)
@@ -129,8 +129,13 @@ virtual_oss_process(void *arg)
 			format_import(afmt, buffer_dsp,
 			    buffer_dsp_size, buffer_data);
 
+			format_remix(buffer_data,
+			    voss_dsp_channels,
+			    voss_mix_channels,
+			    voss_dsp_samples);
+
 			samples = voss_dsp_samples;
-			src_chans = voss_dsp_channels;
+			src_chans = voss_mix_channels;
 
 			atomic_lock();
 
@@ -403,7 +408,6 @@ virtual_oss_process(void *arg)
 					vblock_remove(pvb, &pvc->tx_ready);
 					vblock_insert(pvb, &pvc->tx_free);
 				}
-
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
@@ -465,6 +469,11 @@ virtual_oss_process(void *arg)
 			atomic_wakeup();
 
 			atomic_unlock();
+
+			format_remix(buffer_data,
+			    voss_mix_channels,
+			    voss_dsp_channels,
+			    voss_dsp_samples);
 
 			/* Export and transmit resulting audio */
 

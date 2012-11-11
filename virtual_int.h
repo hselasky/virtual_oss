@@ -116,6 +116,8 @@ extern vmonitor_head_t virtual_monitor_output;
 
 extern const struct cuse_methods vctl_methods;
 
+extern uint32_t voss_max_channels;
+extern uint32_t voss_mix_channels;
 extern uint32_t voss_dsp_samples;
 extern uint32_t voss_dsp_channels;
 extern uint32_t voss_dsp_sample_rate;
@@ -137,6 +139,7 @@ extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);
 extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t);
 extern void format_maximum(const int64_t *, int64_t *, uint32_t, uint32_t);
+extern void format_remix(int64_t *, uint32_t, uint32_t, uint32_t);
 
 extern void *virtual_oss_process(void *);
 

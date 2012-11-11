@@ -801,6 +801,8 @@ vclient_head_t virtual_loopback_head;
 vmonitor_head_t virtual_monitor_input;
 vmonitor_head_t virtual_monitor_output;
 
+uint32_t voss_max_channels;
+uint32_t voss_mix_channels;
 uint32_t voss_dsp_samples;
 uint32_t voss_dsp_channels;
 uint32_t voss_dsp_sample_rate;
@@ -818,7 +820,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
-	    "\t" "-c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
+	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
 	    "\t" "-c 1 -m 0,0 -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -l vdsp.loopback \\\n"
@@ -830,7 +832,8 @@ usage(void)
 	    "\t" "-e <mute 0..1> \\\n"
 	    "\t" "-m <mapping> \\\n"
 	    "\t" "-m <rx0,tx0,rx1,tx1...rxN,txN> \\\n"
-	    "\t" "-c <numchans> \\\n"
+	    "\t" "-C <mixchans>\\\n"
+	    "\t" "-c <dspchans> \\\n"
 	    "\t" "-M <monitorfilter> \\\n"
 	    "\t" "-M i,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
@@ -934,6 +937,17 @@ main(int argc, char **argv)
 
 	while ((c = getopt(argc, argv, optstr)) != -1) {
 		switch (c) {
+		case 'C':
+			if (voss_mix_channels != 0) {
+				errx(EX_USAGE, "The -C argument may "
+				    "only be used once");
+			}
+			voss_mix_channels = atoi(optarg);
+			if (voss_mix_channels >= VMAX_CHAN) {
+				errx(EX_USAGE, "Number of mixing "
+				    "channels is too high");
+			}
+			break;
 		case 'a':
 			opt_amp = atoi(optarg);
 			break;
@@ -1159,6 +1173,15 @@ main(int argc, char **argv)
 
 	if (voss_dsp_device == NULL)
 		errx(EX_USAGE, "Missing -f argument");
+
+	/* use DSP channels as default */
+	if (voss_mix_channels == 0)
+		voss_mix_channels = voss_dsp_channels;
+
+	if (voss_mix_channels > voss_dsp_channels)
+		voss_max_channels = voss_mix_channels;
+	else
+		voss_max_channels = voss_dsp_channels;
 
 	/* Create CTL device */
 

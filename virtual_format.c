@@ -24,6 +24,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include <sys/soundcard.h>
 #include <sys/queue.h>
@@ -245,5 +246,44 @@ format_maximum(const int64_t *src, int64_t *dst, uint32_t ch, uint32_t len)
 			if (temp > dst[x])
 				dst[x] = temp;
 		}
+	}
+}
+
+void
+format_remix(int64_t *buffer_data, uint32_t in_chans,
+    uint32_t out_chans, uint32_t samples)
+{
+	uint32_t x;
+
+	if (out_chans > in_chans) {
+		uint32_t dst = out_chans * (samples - 1);
+		uint32_t src = in_chans * (samples - 1);
+		uint32_t fill = out_chans - in_chans;
+
+		for (x = 0; x != samples; x++) {
+			memset(buffer_data + dst + in_chans, 0, 8 * fill);
+			if (src != dst) {
+				memcpy(buffer_data + dst,
+				    buffer_data + src,
+				    in_chans * 8);
+			}
+			dst -= out_chans;
+			src -= in_chans;
+		}
+	} else if (out_chans < in_chans) {
+		uint32_t dst = 0;
+		uint32_t src = 0;
+
+		for (x = 0; x != samples; x++) {
+			if (src != dst) {
+				memcpy(buffer_data + dst,
+				    buffer_data + src,
+				    out_chans * 8);
+			}
+			dst += out_chans;
+			src += in_chans;
+		}
+
+
 	}
 }
