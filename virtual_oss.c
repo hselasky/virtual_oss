@@ -43,7 +43,8 @@ virtual_oss_process(void *arg)
 	vclient_t *pvc;
 	vblock_t *pvb;
 	vmonitor_t *pvm;
-	int fd = -1;
+	int fd_rx = -1;
+	int fd_tx = -1;
 	int off;
 	int afmt;
 	int src_chans;
@@ -77,36 +78,71 @@ virtual_oss_process(void *arg)
 		errx(1, "Cannot allocate buffer memory");
 
 	while (1) {
-		if (fd > -1) {
-			close(fd);
+		if (fd_rx > -1) {
+			close(fd_rx);
 			sleep(1);
 		}
-		fd = open(voss_dsp_device, O_RDWR);
-		if (fd < 0) {
-			warn("Could not open %s", voss_dsp_device);
+		if (fd_tx > -1) {
+			close(fd_tx);
+			sleep(1);
+		}
+		fd_rx = open(voss_dsp_rx_device, O_RDONLY);
+		if (fd_rx < 0) {
+			warn("Could not open %s", voss_dsp_rx_device);
 			sleep(1);
 			continue;
 		}
+		fd_tx = open(voss_dsp_tx_device, O_WRONLY);
+		if (fd_tx < 0) {
+			warn("Could not open %s", voss_dsp_tx_device);
+			sleep(1);
+			continue;
+		}
+
 		blocks = 0;
-		len = ioctl(fd, FIONBIO, &blocks);
+		len = ioctl(fd_rx, FIONBIO, &blocks);
+		if (len < 0) {
+			warn("Could not set blocking mode on DSP");
+			continue;
+		}
+		blocks = 0;
+		len = ioctl(fd_tx, FIONBIO, &blocks);
 		if (len < 0) {
 			warn("Could not set blocking mode on DSP");
 			continue;
 		}
 		blocks = voss_dsp_fmt;
-		len = ioctl(fd, SNDCTL_DSP_SETFMT, &blocks);
+		len = ioctl(fd_rx, SNDCTL_DSP_SETFMT, &blocks);
+		if (len < 0) {
+			warn("Could not set FMT=0x%08x", blocks);
+			continue;
+		}
+		blocks = voss_dsp_fmt;
+		len = ioctl(fd_tx, SNDCTL_DSP_SETFMT, &blocks);
 		if (len < 0) {
 			warn("Could not set FMT=0x%08x", blocks);
 			continue;
 		}
 		blocks = voss_dsp_channels;
-		len = ioctl(fd, SOUND_PCM_WRITE_CHANNELS, &blocks);
+		len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
+		if (len < 0) {
+			warn("Could not set CHANNELS=%d", blocks);
+			continue;
+		}
+		blocks = voss_dsp_channels;
+		len = ioctl(fd_rx, SOUND_PCM_WRITE_CHANNELS, &blocks);
 		if (len < 0) {
 			warn("Could not set CHANNELS=%d", blocks);
 			continue;
 		}
 		blocks = voss_dsp_sample_rate;
-		len = ioctl(fd, SNDCTL_DSP_SPEED, &blocks);
+		len = ioctl(fd_rx, SNDCTL_DSP_SPEED, &blocks);
+		if (len < 0) {
+			warn("Could not set SPEED=%d Hz", blocks);
+			continue;
+		}
+		blocks = voss_dsp_sample_rate;
+		len = ioctl(fd_tx, SNDCTL_DSP_SPEED, &blocks);
 		if (len < 0) {
 			warn("Could not set SPEED=%d Hz", blocks);
 			continue;
@@ -117,7 +153,7 @@ virtual_oss_process(void *arg)
 			len = 0;
 
 			while (off < (int)buffer_dsp_size) {
-				len = read(fd, buffer_dsp + off,
+				len = read(fd_rx, buffer_dsp + off,
 				    buffer_dsp_size - off);
 				if (len <= 0)
 					break;
@@ -482,7 +518,7 @@ virtual_oss_process(void *arg)
 
 			blocks = 0;
 
-			ioctl(fd, SNDCTL_DSP_GETODELAY, &blocks);
+			ioctl(fd_tx, SNDCTL_DSP_GETODELAY, &blocks);
 
 			blocks /= (int)buffer_dsp_size;
 
@@ -501,7 +537,7 @@ virtual_oss_process(void *arg)
 			while (blocks--) {
 				off = 0;
 				while (off < (int)buffer_dsp_size) {
-					len = write(fd, buffer_dsp + off,
+					len = write(fd_tx, buffer_dsp + off,
 					    (buffer_dsp_size - off));
 					if (len <= 0)
 						break;

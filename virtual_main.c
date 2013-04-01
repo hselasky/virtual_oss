@@ -811,7 +811,8 @@ uint32_t voss_dsp_fmt;
 
 static int voss_dsp_perm = 0666;
 
-const char *voss_dsp_device;
+const char *voss_dsp_rx_device;
+const char *voss_dsp_tx_device;
 const char *voss_ctl_device;
 
 int	voss_dups;
@@ -821,6 +822,7 @@ usage(void)
 {
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
 	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
+	    "\t" "-P /dev/dsp3 -R /dev/dsp1 \\\n"
 	    "\t" "-c 1 -m 0,0 -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 -l vdsp.loopback \\\n"
@@ -917,7 +919,7 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "e:p:a:C:c:r:b:f:m:M:d:l:s:t:h?";
+	const char *optstr = "e:p:a:C:c:r:b:f:m:M:d:l:s:t:h?P:R:";
 	struct virtual_profile profile;
 
 	memset(&profile, 0, sizeof(profile));
@@ -985,11 +987,13 @@ main(int argc, char **argv)
 			}
 			break;
 		case 'f':
+		case 'P':
+		case 'R':
 			if (profile.bits == 0 || profile.rate == 0 ||
 			    profile.channels == 0 || samples == 0)
 				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
 
-			if (voss_dsp_channels != 0)
+			if (voss_dsp_channels != 0 && c == 'f')
 				errx(EX_USAGE, "The -f argument may only be used once");
 
 			voss_dsp_channels = profile.channels;
@@ -1013,7 +1017,10 @@ main(int argc, char **argv)
 				break;
 			}
 			voss_dsp_samples = samples;
-			voss_dsp_device = optarg;
+			if (c == 'f' || c == 'R')
+				voss_dsp_rx_device = optarg;
+			if (c == 'f' || c == 'P')
+				voss_dsp_tx_device = optarg;
 			break;
 		case 'd':
 			profile.name = optarg;
@@ -1171,7 +1178,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (voss_dsp_device == NULL)
+	if (voss_dsp_rx_device == NULL || voss_dsp_tx_device == NULL)
 		errx(EX_USAGE, "Missing -f argument");
 
 	/* use DSP channels as default */

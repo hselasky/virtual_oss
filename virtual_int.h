@@ -123,7 +123,8 @@ extern uint32_t voss_dsp_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
 extern uint32_t voss_dsp_fmt;
-extern const char *voss_dsp_device;
+extern const char *voss_dsp_rx_device;
+extern const char *voss_dsp_tx_device;
 extern const char *voss_ctl_device;
 
 extern void atomic_lock(void);
