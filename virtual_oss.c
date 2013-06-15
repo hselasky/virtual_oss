@@ -63,6 +63,9 @@ virtual_oss_process(void *arg)
 	int64_t *buffer_temp;
 	int64_t *buffer_data;
 
+	int64_t fmt_max;
+	uint8_t fmt_limit[VMAX_CHAN];
+
 	buffer_dsp_size = voss_dsp_samples *
 	    voss_dsp_channels * (voss_dsp_bits / 8);
 
@@ -236,11 +239,23 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_temp, pvc->profile->rx_peak_value,
 				    pvc->profile->channels, samples);
 
+				/* Update limiter */
+				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
+				for (x = 0; x != VMAX_CHAN; x++) {
+					while ((pvc->profile->rx_peak_value[x] >>
+					    pvc->profile->limiter) > fmt_max) {
+						pvc->profile->limiter++;
+					}
+				}
+				for (x = 0; x != VMAX_CHAN; x++)
+					fmt_limit[x] = pvc->profile->limiter;
+
 				if (pvb == NULL)
 					continue;
 
 				format_export(pvc->format, buffer_temp,
-				    pvb->buf_start, pvb->buf_size);
+				    pvb->buf_start, pvb->buf_size,
+				    fmt_limit, pvc->profile->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
 				vblock_insert(pvb, &pvc->rx_ready);
@@ -492,11 +507,23 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_monitor, pvc->profile->rx_peak_value,
 				    pvc->profile->channels, samples);
 
+				/* Update limiter */
+				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
+				for (x = 0; x != VMAX_CHAN; x++) {
+					while ((pvc->profile->rx_peak_value[x] >>
+					    pvc->profile->limiter) > fmt_max) {
+						pvc->profile->limiter++;
+					}
+				}
+				for (x = 0; x != VMAX_CHAN; x++)
+					fmt_limit[x] = pvc->profile->limiter;
+
 				if (pvb == NULL)
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
-				    pvb->buf_start, pvb->buf_size);
+				    pvb->buf_start, pvb->buf_size,
+				    fmt_limit, pvc->profile->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
 				vblock_insert(pvb, &pvc->rx_ready);
@@ -504,17 +531,32 @@ virtual_oss_process(void *arg)
 
 			atomic_wakeup();
 
-			atomic_unlock();
-
 			format_remix(buffer_temp,
 			    voss_mix_channels,
 			    voss_dsp_channels,
 			    voss_dsp_samples);
 
+			/* Compute master output peak values */
+
+			format_maximum(buffer_temp, voss_output_peak,
+			    voss_dsp_channels, voss_dsp_samples);
+
+			/* Update limiter */
+			fmt_max = format_max(afmt);
+
+			for (x = 0; x != VMAX_CHAN; x++) {
+				y = voss_output_group[x];
+				while ((voss_output_peak[x] >> voss_output_limiter[y]) > fmt_max)
+					voss_output_limiter[y]++;
+				fmt_limit[x] = voss_output_limiter[y];
+			}
+
 			/* Export and transmit resulting audio */
 
 			format_export(afmt, buffer_temp, buffer_dsp,
-			    buffer_dsp_size);
+			    buffer_dsp_size, fmt_limit, voss_dsp_channels);
+
+			atomic_unlock();
 
 			blocks = 0;
 

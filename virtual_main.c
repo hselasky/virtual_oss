@@ -830,6 +830,7 @@ usage(void)
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
 	    "\t" "-a <amp -63..63> \\\n"
+	    "\t" "-g <ch0grp,ch1grp...chnNgrp> \\\n"
 	    "\t" "-p <pol 0..1> \\\n"
 	    "\t" "-e <mute 0..1> \\\n"
 	    "\t" "-m <mapping> \\\n"
@@ -919,7 +920,7 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "e:p:a:C:c:r:b:f:m:M:d:l:s:t:h?P:R:";
+	const char *optstr = "e:p:a:C:c:r:b:f:g:m:M:d:l:s:t:h?P:R:";
 	struct virtual_profile profile;
 
 	memset(&profile, 0, sizeof(profile));
@@ -984,6 +985,28 @@ main(int argc, char **argv)
 			default:
 				errx(EX_USAGE, "Invalid number of sample bits");
 				break;
+			}
+			break;
+		case 'g':
+			ptr = optarg;
+			val = 0;
+			idx = 0;
+			while (1) {
+				c = *ptr++;
+				if (c == ',' || c == 0) {
+					if (idx >= VMAX_CHAN)
+						errx(EX_USAGE, "Too many channel groups");
+					voss_output_group[idx] = val;
+					if (c == 0)
+						break;
+					val = 0;
+					idx++;
+					continue;
+				}
+				if (c >= '0' && c <= '9') {
+					val *= 10;
+					val += c - '0';
+				}
 			}
 			break;
 		case 'f':
@@ -1089,8 +1112,10 @@ main(int argc, char **argv)
 					idx++;
 					continue;
 				}
-				val *= 10;
-				val += c - '0';
+				if (c >= '0' && c <= '9') {
+					val *= 10;
+					val += c - '0';
+				}
 			}
 			break;
 		case 'M':
@@ -1150,8 +1175,10 @@ main(int argc, char **argv)
 						idx++;
 						continue;
 					}
-					val *= 10;
-					val += c - '0';
+					if (c >= '0' && c <= '9') {
+						val *= 10;
+						val += c - '0';
+					}
 				}
 				if (idx < 4)
 					errx(EX_USAGE, "Too few parameters for -M");

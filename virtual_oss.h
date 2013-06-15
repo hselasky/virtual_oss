@@ -30,6 +30,7 @@
 
 #define	VIRTUAL_OSS_NAME_MAX	32
 #define	VIRTUAL_OSS_VERSION 0x00010002
+#define	VIRTUAL_OSS_LIMITER_MAX	64	/* exclusive */
 
 #define	VIRTUAL_OSS_GET_VERSION		_IOR('O', 0, int)
 
@@ -88,5 +89,37 @@ struct virtual_oss_mon_peak {
 
 #define	VIRTUAL_OSS_ADD_INPUT_MON	 _IOR('O', 10, int)
 #define	VIRTUAL_OSS_ADD_OUTPUT_MON	 _IOR('O', 11, int)
+
+struct virtual_oss_output_chn_grp {
+	int channel;
+	int group;
+};
+
+#define	VIRTUAL_OSS_SET_OUTPUT_CHN_GRP	 _IOW('O', 12, struct virtual_oss_output_chn_grp)
+#define	VIRTUAL_OSS_GET_OUTPUT_CHN_GRP	_IOWR('O', 13, struct virtual_oss_output_chn_grp)
+
+struct virtual_oss_output_limit {
+	int group;
+	int limit;
+};
+
+#define	VIRTUAL_OSS_SET_OUTPUT_LIMIT	_IOW('O', 14, struct virtual_oss_output_limit)
+#define	VIRTUAL_OSS_GET_OUTPUT_LIMIT   _IOWR('O', 15, struct virtual_oss_output_limit)
+
+struct virtual_oss_dev_limit {
+	int number;
+	int limit;
+};
+
+#define	VIRTUAL_OSS_SET_DEV_LIMIT	_IOW('O', 16, struct virtual_oss_dev_limit)
+#define	VIRTUAL_OSS_GET_DEV_LIMIT      _IOWR('O', 17, struct virtual_oss_dev_limit)
+
+struct virtual_oss_output_peak {
+	int	channel;
+	int	bits;
+	long long peak_value;
+};
+
+#define	VIRTUAL_OSS_GET_OUTPUT_PEAK	_IOWR('O', 18, struct virtual_oss_output_peak)
 
 #endif					/* _VIRTUAL_OSS_H_ */

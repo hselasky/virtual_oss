@@ -71,6 +71,7 @@ struct virtual_profile {
 	uint8_t tx_pol[VMAX_CHAN];
 	uint8_t bits;
 	uint8_t channels;
+	uint8_t limiter;
 	uint32_t bufsize;
 	uint32_t rate;
 };
@@ -116,6 +117,9 @@ extern vmonitor_head_t virtual_monitor_output;
 
 extern const struct cuse_methods vctl_methods;
 
+extern uint8_t voss_output_group[VMAX_CHAN];
+extern uint8_t voss_output_limiter[VMAX_CHAN];
+extern int64_t voss_output_peak[VMAX_CHAN];
 extern uint32_t voss_max_channels;
 extern uint32_t voss_mix_channels;
 extern uint32_t voss_dsp_samples;
@@ -138,7 +142,8 @@ extern void vblock_remove(vblock_t *, vblock_head_t *);
 extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);
-extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t);
+extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t, const uint8_t *, uint8_t);
+extern int64_t format_max(uint32_t);
 extern void format_maximum(const int64_t *, int64_t *, uint32_t, uint32_t);
 extern void format_remix(int64_t *, uint32_t, uint32_t, uint32_t);
 

@@ -36,6 +36,10 @@
 
 #include "virtual_oss.h"
 
+uint8_t voss_output_group[VMAX_CHAN];
+uint8_t voss_output_limiter[VMAX_CHAN];
+int64_t voss_output_peak[VMAX_CHAN];
+
 static int
 vctl_open(struct cuse_dev *pdev, int fflags)
 {
@@ -82,6 +86,10 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_mon_info mon_info;
 		struct virtual_oss_dev_peak dev_peak;
 		struct virtual_oss_mon_peak mon_peak;
+		struct virtual_oss_output_chn_grp out_chg;
+		struct virtual_oss_output_limit out_lim;
+		struct virtual_oss_dev_limit dev_lim;
+		struct virtual_oss_output_peak out_peak;
 	}     data;
 
 	vprofile_t *pvp;
@@ -257,6 +265,71 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		    &virtual_monitor_output);
 		if (pvm == NULL)
 			error = CUSE_ERR_INVALID;
+		break;
+	case VIRTUAL_OSS_SET_OUTPUT_CHN_GRP:
+		if (data.out_chg.channel < 0 ||
+		    data.out_chg.channel >= (int)voss_dsp_channels ||
+		    data.out_chg.group < 0 || 
+		    data.out_chg.group >= VMAX_CHAN) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		voss_output_group[data.out_chg.channel] = data.out_chg.group;
+		break;
+	case VIRTUAL_OSS_GET_OUTPUT_CHN_GRP:
+		if (data.out_chg.channel < 0 ||
+		    data.out_chg.channel >= (int)voss_dsp_channels) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.out_chg.group = voss_output_group[data.out_chg.channel];
+		break;
+	case VIRTUAL_OSS_SET_OUTPUT_LIMIT:
+		if (data.out_lim.group < 0 ||
+		    data.out_lim.group >= VMAX_CHAN ||
+		    data.out_lim.limit < 0 ||
+		    data.out_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		voss_output_limiter[data.out_lim.group] = data.out_lim.limit;
+		break;
+	case VIRTUAL_OSS_GET_OUTPUT_LIMIT:
+		if (data.out_lim.group < 0 ||
+		    data.out_lim.group >= VMAX_CHAN) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.out_lim.limit = voss_output_limiter[data.out_lim.group];
+		break;
+	case VIRTUAL_OSS_SET_DEV_LIMIT:
+		pvp = vprofile_by_index(data.dev_peak.number);
+		if (pvp == NULL ||
+		    data.dev_lim.limit < 0 ||
+		    data.dev_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		pvp->limiter = data.dev_lim.limit;
+		break;
+	case VIRTUAL_OSS_GET_DEV_LIMIT:
+		pvp = vprofile_by_index(data.dev_peak.number);
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.dev_lim.limit = pvp->limiter;
+		break;
+	case VIRTUAL_OSS_GET_OUTPUT_PEAK:
+		chan = data.out_peak.channel;
+		if (chan < 0 ||
+		    chan >= (int)voss_dsp_channels) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.out_peak.bits = voss_dsp_bits;
+		data.out_peak.peak_value = voss_output_peak[chan];
+		voss_output_peak[chan] = 0;
 		break;
 	default:
 		error = CUSE_ERR_INVALID;

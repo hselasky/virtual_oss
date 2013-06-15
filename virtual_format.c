@@ -119,9 +119,11 @@ format_import(uint32_t fmt, const uint8_t *src, uint32_t len,
 }
 
 void
-format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
+format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
+    const uint8_t *plimit, uint8_t max_channels)
 {
 	const uint8_t *end = dst + len;
+	uint8_t ch = 0;
 	int64_t val;
 
 	if (fmt & (AFMT_S16_BE
@@ -132,6 +134,10 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 
 			val = *src++;
 
+			val >>= plimit[ch];
+			ch++;
+			if (ch == max_channels)
+				ch = 0;
 			if (val > 0x7FFF)
 				val = 0x7FFF;
 			else if (val < -0x7FFF)
@@ -152,13 +158,17 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 		}
 
 	} else if (fmt & (AFMT_S24_BE
-		    | AFMT_S24_LE
-		    | AFMT_U24_BE
+	    | AFMT_S24_LE
+	    | AFMT_U24_BE
 	    | AFMT_U24_LE)) {
 		while (dst != end) {
 
 			val = *src++;
 
+			val >>= plimit[ch];
+			ch++;
+			if (ch == max_channels)
+				ch = 0;
 			if (val > 0x7FFFFF)
 				val = 0x7FFFFF;
 			else if (val < -0x7FFFFF)
@@ -180,13 +190,17 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 			dst += 3;
 		}
 	} else if (fmt & (AFMT_S32_BE
-		    | AFMT_S32_LE
-		    | AFMT_U32_BE
+	    | AFMT_S32_LE
+	    | AFMT_U32_BE
 	    | AFMT_U32_LE)) {
 		while (dst != end) {
 
 			val = *src++;
 
+			val >>= plimit[ch];
+			ch++;
+			if (ch == max_channels)
+				ch = 0;
 			if (val > 0x7FFFFFFFLL)
 				val = 0x7FFFFFFFLL;
 			else if (val < -0x7FFFFFFFLL)
@@ -216,6 +230,10 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 
 			val = *src++;
 
+			val >>= plimit[ch];
+			ch++;
+			if (ch == max_channels)
+				ch = 0;
 			if (val > 0x7F)
 				val = 0x7F;
 			else if (val < -0x7F)
@@ -229,6 +247,31 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 			dst += 1;
 		}
 	}
+}
+
+int64_t
+format_max(uint32_t fmt)
+{
+	if (fmt & (AFMT_S16_BE
+	    | AFMT_S16_LE
+	    | AFMT_U16_BE
+	    | AFMT_U16_LE)) {
+		return (0x7FFF);
+	} else if (fmt & (AFMT_S24_BE
+	    | AFMT_S24_LE
+	    | AFMT_U24_BE
+	    | AFMT_U24_LE)) {
+		return (0x7FFFFF);
+	} else if (fmt & (AFMT_S32_BE
+	    | AFMT_S32_LE
+	    | AFMT_U32_BE
+	    | AFMT_U32_LE)) {
+		return (0x7FFFFFFF);
+	} else if (fmt & (AFMT_U8
+	    | AFMT_S8)) {
+		return (0x7F);
+	}
+	return (0);
 }
 
 void
