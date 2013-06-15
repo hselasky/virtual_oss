@@ -36,6 +36,7 @@
 #include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/filio.h>
+#include <sys/rtprio.h>
 
 #include <cuse4bsd.h>
 #include <pthread.h>
@@ -829,6 +830,7 @@ usage(void)
 	    "\t" "-s <samples> \\\n"
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
+	    "\t" "-i <rtprio> \\\n"
 	    "\t" "-a <amp -63..63> \\\n"
 	    "\t" "-g <ch0grp,ch1grp...chnNgrp> \\\n"
 	    "\t" "-p <pol 0..1> \\\n"
@@ -920,8 +922,9 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "e:p:a:C:c:r:b:f:g:m:M:d:l:s:t:h?P:R:";
+	const char *optstr = "e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:";
 	struct virtual_profile profile;
+	struct rtprio rtp;
 
 	memset(&profile, 0, sizeof(profile));
 
@@ -973,6 +976,13 @@ main(int argc, char **argv)
 				errx(EX_USAGE, "Sample rate is too low, 8000 Hz");
 			if (profile.rate > 0xFFFFFF)
 				errx(EX_USAGE, "Sample rate is too high");
+			break;
+		case 'i':
+			memset(&rtp, 0, sizeof(rtp));
+			rtp.type = RTP_PRIO_REALTIME;
+			rtp.prio = atoi(optarg);
+			if (rtprio(RTP_SET, getpid(), &rtp) != 0)
+				printf("Cannot set realtime priority\n");
 			break;
 		case 'b':
 			profile.bits = atoi(optarg);
