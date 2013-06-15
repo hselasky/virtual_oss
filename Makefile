@@ -28,8 +28,10 @@
 
 .PATH: .
 
+VERSION=1.0.2
 PROG=virtual_oss
 MAN=
+PACKAGE=${PROG}-${VERSION}
 
 SRCS= \
 virtual_ctl.c \
@@ -43,3 +45,15 @@ LDFLAGS += -L/usr/local/lib -lcuse4bsd -lpthread
 BINDIR=/usr/local/bin
 
 .include <bsd.prog.mk>
+
+help:
+	@echo "Targets are: all, install, clean, package, help"
+
+package: clean
+	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch]
+	rm -rf ${PACKAGE}
+	mkdir ${PACKAGE}
+	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
+	rm -rf ${PACKAGE}.tar
+	tar -jcvf ${PACKAGE}.tar.bz2 ${PACKAGE}
+
