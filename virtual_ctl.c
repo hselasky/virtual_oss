@@ -303,7 +303,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.out_lim.limit = voss_output_limiter[data.out_lim.group];
 		break;
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
-		pvp = vprofile_by_index(data.dev_peak.number);
+		pvp = vprofile_by_index(data.dev_lim.number);
 		if (pvp == NULL ||
 		    data.dev_lim.limit < 0 ||
 		    data.dev_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
@@ -313,7 +313,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvp->limiter = data.dev_lim.limit;
 		break;
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
-		pvp = vprofile_by_index(data.dev_limit.number);
+		pvp = vprofile_by_index(data.dev_lim.number);
 		if (pvp == NULL) {
 			error = CUSE_ERR_INVALID;
 			break;
