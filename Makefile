@@ -32,6 +32,12 @@ VERSION=1.0.2
 PROG=virtual_oss
 MAN=
 PACKAGE=${PROG}-${VERSION}
+PTHREAD_LIBS?= -lpthread
+PREFIX?=        /usr/local
+LOCALBASE?=     /usr/local
+BINDIR=         ${PREFIX}/sbin
+MANDIR=         ${PREFIX}/man/man
+LIBDIR=         ${PREFIX}/lib
 
 SRCS= \
 virtual_ctl.c \
@@ -39,10 +45,8 @@ virtual_format.c \
 virtual_main.c \
 virtual_oss.c
 
-CFLAGS += -I/usr/local/include
-LDFLAGS += -L/usr/local/lib -lcuse4bsd -lpthread
-
-BINDIR=/usr/local/bin
+CFLAGS += -I${LOCALBASE}/include
+LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS}
 
 .include <bsd.prog.mk>
 
