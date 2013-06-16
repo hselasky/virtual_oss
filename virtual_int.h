@@ -120,6 +120,7 @@ extern const struct cuse_methods vctl_methods;
 extern uint8_t voss_output_group[VMAX_CHAN];
 extern uint8_t voss_output_limiter[VMAX_CHAN];
 extern int64_t voss_output_peak[VMAX_CHAN];
+extern int64_t voss_input_peak[VMAX_CHAN];
 extern uint32_t voss_max_channels;
 extern uint32_t voss_mix_channels;
 extern uint32_t voss_dsp_samples;

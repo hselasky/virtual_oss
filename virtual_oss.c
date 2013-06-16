@@ -168,6 +168,11 @@ virtual_oss_process(void *arg)
 			format_import(afmt, buffer_dsp,
 			    buffer_dsp_size, buffer_data);
 
+			/* Compute master input peak values */
+
+			format_maximum(buffer_data, voss_input_peak,
+			    voss_dsp_channels, voss_dsp_samples);
+
 			format_remix(buffer_data,
 			    voss_dsp_channels,
 			    voss_mix_channels,

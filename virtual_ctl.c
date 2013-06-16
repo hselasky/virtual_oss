@@ -39,6 +39,7 @@
 uint8_t voss_output_group[VMAX_CHAN];
 uint8_t voss_output_limiter[VMAX_CHAN];
 int64_t voss_output_peak[VMAX_CHAN];
+int64_t voss_input_peak[VMAX_CHAN];
 
 static int
 vctl_open(struct cuse_dev *pdev, int fflags)
@@ -89,7 +90,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_output_chn_grp out_chg;
 		struct virtual_oss_output_limit out_lim;
 		struct virtual_oss_dev_limit dev_lim;
-		struct virtual_oss_output_peak out_peak;
+		struct virtual_oss_master_peak master_peak;
 	}     data;
 
 	vprofile_t *pvp;
@@ -321,15 +322,26 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.dev_lim.limit = pvp->limiter;
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_PEAK:
-		chan = data.out_peak.channel;
+		chan = data.master_peak.channel;
 		if (chan < 0 ||
 		    chan >= (int)voss_dsp_channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		data.out_peak.bits = voss_dsp_bits;
-		data.out_peak.peak_value = voss_output_peak[chan];
+		data.master_peak.bits = voss_dsp_bits;
+		data.master_peak.peak_value = voss_output_peak[chan];
 		voss_output_peak[chan] = 0;
+		break;
+	case VIRTUAL_OSS_GET_INPUT_PEAK:
+		chan = data.master_peak.channel;
+		if (chan < 0 ||
+		    chan >= (int)voss_dsp_channels) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.master_peak.bits = voss_dsp_bits;
+		data.master_peak.peak_value = voss_input_peak[chan];
+		voss_input_peak[chan] = 0;
 		break;
 	default:
 		error = CUSE_ERR_INVALID;
