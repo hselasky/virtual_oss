@@ -47,6 +47,9 @@ struct virtual_oss_dev_info {
 	int	tx_mute;
 	int	rx_pol;
 	int	tx_pol;
+	int	type;
+#define	VIRTUAL_OSS_TYPE_NORMAL 0
+#define	VIRTUAL_OSS_TYPE_LOOPBACK 1
 };
 
 #define	VIRTUAL_OSS_GET_DEV_INFO	_IOWR('O', 1, struct virtual_oss_dev_info)

@@ -42,6 +42,28 @@ int64_t voss_output_peak[VMAX_CHAN];
 int64_t voss_input_peak[VMAX_CHAN];
 
 static int
+vprofile_get_type_locked(const vprofile_t *pvp)
+{
+	return ((pvp->pvc_head == &virtual_loopback_head) ?
+	    VIRTUAL_OSS_TYPE_LOOPBACK : VIRTUAL_OSS_TYPE_NORMAL);
+}
+
+static void
+vprofile_set_type_locked(vprofile_t *pvp, int type)
+{
+	switch (type) {
+	case VIRTUAL_OSS_TYPE_NORMAL:
+		pvp->pvc_head = &virtual_client_head;
+		break;
+	case VIRTUAL_OSS_TYPE_LOOPBACK:
+		pvp->pvc_head = &virtual_loopback_head;
+		break;
+	default:
+		break;
+	}
+}
+
+static int
 vctl_open(struct cuse_dev *pdev, int fflags)
 {
 	return (0);
@@ -138,6 +160,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.dev_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
 		data.dev_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
 		data.dev_info.bits = pvp->bits;
+		data.dev_info.type = vprofile_get_type_locked(pvp);
 		break;
 	case VIRTUAL_OSS_SET_DEV_INFO:
 		pvp = vprofile_by_index(data.dev_info.number);
@@ -158,6 +181,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvp->tx_mute[chan] = data.dev_info.tx_mute ? 1 : 0;
 		pvp->rx_pol[chan] = data.dev_info.rx_pol ? 1 : 0;
 		pvp->tx_pol[chan] = data.dev_info.tx_pol ? 1 : 0;
+		vprofile_set_type_locked(pvp, data.dev_info.type);
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,
