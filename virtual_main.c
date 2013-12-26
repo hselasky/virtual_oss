@@ -835,7 +835,8 @@ usage(void)
 	    "\t" "-a <amp -63..63> \\\n"
 	    "\t" "-g <ch0grp,ch1grp...chnNgrp> \\\n"
 	    "\t" "-p <pol 0..1> \\\n"
-	    "\t" "-e <mute 0..1> \\\n"
+	    "\t" "-e <rxtx_mute 0..1> \\\n"
+	    "\t" "-e <rx_mute 0..1>,<tx_mute 0..1> \\\n"
 	    "\t" "-m <mapping> \\\n"
 	    "\t" "-m <rx0,tx0,rx1,tx1...rxN,txN> \\\n"
 	    "\t" "-C <mixchans>\\\n"
@@ -852,13 +853,14 @@ usage(void)
 }
 
 static void
-dup_profile(const vprofile_t *pvp, int amp, int pol, int mute)
+dup_profile(const vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 {
 	vprofile_t *ptr;
 	struct cuse_dev *pdev;
 	int x;
 
-	mute = mute ? 1 : 0;
+	rx_mute = rx_mute ? 1 : 0;
+	tx_mute = tx_mute ? 1 : 0;
 	pol = pol ? 1 : 0;
 
 	if (amp < -63)
@@ -873,8 +875,8 @@ dup_profile(const vprofile_t *pvp, int amp, int pol, int mute)
 	memcpy(ptr, pvp, sizeof(*ptr));
 
 	for (x = 0; x != ptr->channels; x++) {
-		ptr->tx_mute[x] = mute;
-		ptr->rx_mute[x] = mute;
+		ptr->tx_mute[x] = tx_mute;
+		ptr->rx_mute[x] = rx_mute;
 		ptr->tx_shift[x] = amp;
 		ptr->rx_shift[x] = -amp;
 		ptr->tx_pol[x] = pol;
@@ -923,7 +925,7 @@ main(int argc, char **argv)
 	int val;
 	int idx;
 	int type;
-	int opt_mute = 0;
+	int opt_mute[2] = {0,0};
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
@@ -964,7 +966,32 @@ main(int argc, char **argv)
 			opt_amp = atoi(optarg);
 			break;
 		case 'e':
-			opt_mute = atoi(optarg);
+			idx = 0;
+			ptr = optarg;
+			memset(opt_mute, 0, sizeof(opt_mute));
+			while (1) {
+				c = *ptr++;
+				if (c == ',' || c == 0) {
+					idx++;
+					if (c == 0)
+						break;
+					continue;
+				}
+				if (idx < 2 && c >= '0' && c <= '1') {
+					opt_mute[idx] = c - '0';
+				} else {
+					errx(EX_USAGE, "Invalid -e parameter");
+				}
+			}
+			switch (idx) {
+			case 1:
+				opt_mute[1] = opt_mute[0];
+				break;
+			case 2:
+				break;
+			default:
+				errx(EX_USAGE, "Invalid -e parameter");
+			}
 			break;
 		case 'p':
 			opt_pol = atoi(optarg);
@@ -1074,7 +1101,7 @@ main(int argc, char **argv)
 			if (profile.bufsize >= (1024 * 1024))
 				errx(EX_USAGE, "-s option value is too big");
 
-			dup_profile(&profile, opt_amp, opt_pol, opt_mute);
+			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
 		case 'l':
 			profile.name = optarg;
@@ -1089,7 +1116,7 @@ main(int argc, char **argv)
 			if (profile.bufsize >= (1024 * 1024))
 				errx(EX_USAGE, "-s option value is too big");
 
-			dup_profile(&profile, opt_amp, opt_pol, opt_mute);
+			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
 		case 's':
 			if (samples != 0)
