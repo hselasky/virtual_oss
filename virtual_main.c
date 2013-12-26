@@ -794,7 +794,8 @@ static const struct cuse_methods vclient_methods = {
 	.cm_poll = vclient_poll,
 };
 
-vprofile_head_t virtual_profile_head;
+vprofile_head_t virtual_profile_client_head;
+vprofile_head_t virtual_profile_loopback_head;
 
 vclient_head_t virtual_client_head;
 vclient_head_t virtual_loopback_head;
@@ -886,7 +887,11 @@ dup_profile(const vprofile_t *pvp, int amp, int pol, int mute)
 		errx(EX_USAGE, "Could not create '/dev/%s'", ptr->name);
 
 	atomic_lock();
-	TAILQ_INSERT_TAIL(&virtual_profile_head, ptr, entry);
+	if (ptr->pvc_head == &virtual_client_head) {
+		TAILQ_INSERT_TAIL(&virtual_profile_client_head, ptr, entry);
+	} else if (ptr->pvc_head == &virtual_loopback_head) {
+		TAILQ_INSERT_TAIL(&virtual_profile_loopback_head, ptr, entry);
+	}
 	atomic_unlock();
 
 	voss_dups++;
@@ -928,7 +933,8 @@ main(int argc, char **argv)
 
 	memset(&profile, 0, sizeof(profile));
 
-	TAILQ_INIT(&virtual_profile_head);
+	TAILQ_INIT(&virtual_profile_client_head);
+	TAILQ_INIT(&virtual_profile_loopback_head);
 
 	TAILQ_INIT(&virtual_client_head);
 	TAILQ_INIT(&virtual_loopback_head);

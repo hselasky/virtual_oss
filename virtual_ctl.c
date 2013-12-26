@@ -42,28 +42,6 @@ int64_t voss_output_peak[VMAX_CHAN];
 int64_t voss_input_peak[VMAX_CHAN];
 
 static int
-vprofile_get_type_locked(const vprofile_t *pvp)
-{
-	return ((pvp->pvc_head == &virtual_loopback_head) ?
-	    VIRTUAL_OSS_TYPE_LOOPBACK : VIRTUAL_OSS_TYPE_NORMAL);
-}
-
-static void
-vprofile_set_type_locked(vprofile_t *pvp, int type)
-{
-	switch (type) {
-	case VIRTUAL_OSS_TYPE_NORMAL:
-		pvp->pvc_head = &virtual_client_head;
-		break;
-	case VIRTUAL_OSS_TYPE_LOOPBACK:
-		pvp->pvc_head = &virtual_loopback_head;
-		break;
-	default:
-		break;
-	}
-}
-
-static int
 vctl_open(struct cuse_dev *pdev, int fflags)
 {
 	return (0);
@@ -76,11 +54,11 @@ vctl_close(struct cuse_dev *pdev, int fflags)
 }
 
 static vprofile_t *
-vprofile_by_index(int index)
+vprofile_by_index(const vprofile_head_t *phead, int index)
 {
 	vprofile_t *pvp;
 
-	TAILQ_FOREACH(pvp, &virtual_profile_head, entry) {
+	TAILQ_FOREACH(pvp, phead, entry) {
 		if (!index--)
 			return (pvp);
 	}
@@ -105,13 +83,13 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 {
 	union {
 		int	val;
-		struct virtual_oss_dev_info dev_info;
+		struct virtual_oss_io_info io_info;
 		struct virtual_oss_mon_info mon_info;
-		struct virtual_oss_dev_peak dev_peak;
+		struct virtual_oss_io_peak io_peak;
 		struct virtual_oss_mon_peak mon_peak;
 		struct virtual_oss_output_chn_grp out_chg;
 		struct virtual_oss_output_limit out_lim;
-		struct virtual_oss_dev_limit dev_lim;
+		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
 	}     data;
 
@@ -136,52 +114,69 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	}
 
 	atomic_lock();
+	switch (cmd) {
+	case VIRTUAL_OSS_GET_DEV_INFO:
+	case VIRTUAL_OSS_SET_DEV_INFO:
+	case VIRTUAL_OSS_GET_DEV_PEAK:
+	case VIRTUAL_OSS_SET_DEV_LIMIT:
+	case VIRTUAL_OSS_GET_DEV_LIMIT:
+		pvp = vprofile_by_index(&virtual_profile_client_head, data.val);
+		break;
+	case VIRTUAL_OSS_GET_LOOP_INFO:
+	case VIRTUAL_OSS_SET_LOOP_INFO:
+	case VIRTUAL_OSS_GET_LOOP_PEAK:
+	case VIRTUAL_OSS_SET_LOOP_LIMIT:
+	case VIRTUAL_OSS_GET_LOOP_LIMIT:
+		pvp = vprofile_by_index(&virtual_profile_loopback_head, data.val);
+		break;
+	default:
+		pvp = NULL;
+		break;
+	}
 
 	switch (cmd) {
 	case VIRTUAL_OSS_GET_VERSION:
 		data.val = VIRTUAL_OSS_VERSION;
 		break;
 	case VIRTUAL_OSS_GET_DEV_INFO:
-		pvp = vprofile_by_index(data.dev_info.number);
+	case VIRTUAL_OSS_GET_LOOP_INFO:
 		if (pvp == NULL ||
-		    data.dev_info.channel < 0 ||
-		    data.dev_info.channel >= (int)pvp->channels) {
+		    data.io_info.channel < 0 ||
+		    data.io_info.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		strlcpy(data.dev_info.name, pvp->name, sizeof(data.dev_info.name));
-		chan = data.dev_info.channel;
-		data.dev_info.rx_amp = pvp->rx_shift[chan];
-		data.dev_info.tx_amp = pvp->tx_shift[chan];
-		data.dev_info.rx_chan = pvp->rx_src[chan];
-		data.dev_info.tx_chan = pvp->tx_dst[chan];
-		data.dev_info.rx_mute = pvp->rx_mute[chan] ? 1 : 0;
-		data.dev_info.tx_mute = pvp->tx_mute[chan] ? 1 : 0;
-		data.dev_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
-		data.dev_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
-		data.dev_info.bits = pvp->bits;
-		data.dev_info.type = vprofile_get_type_locked(pvp);
+		strlcpy(data.io_info.name, pvp->name, sizeof(data.io_info.name));
+		chan = data.io_info.channel;
+		data.io_info.rx_amp = pvp->rx_shift[chan];
+		data.io_info.tx_amp = pvp->tx_shift[chan];
+		data.io_info.rx_chan = pvp->rx_src[chan];
+		data.io_info.tx_chan = pvp->tx_dst[chan];
+		data.io_info.rx_mute = pvp->rx_mute[chan] ? 1 : 0;
+		data.io_info.tx_mute = pvp->tx_mute[chan] ? 1 : 0;
+		data.io_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
+		data.io_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
+		data.io_info.bits = pvp->bits;
 		break;
 	case VIRTUAL_OSS_SET_DEV_INFO:
-		pvp = vprofile_by_index(data.dev_info.number);
+	case VIRTUAL_OSS_SET_LOOP_INFO:
 		if (pvp == NULL ||
-		    data.dev_info.channel < 0 ||
-		    data.dev_info.channel >= (int)pvp->channels ||
-		    data.dev_info.rx_amp < -31 || data.dev_info.rx_amp > 31 ||
-		    data.dev_info.tx_amp < -31 || data.dev_info.tx_amp > 31) {
+		    data.io_info.channel < 0 ||
+		    data.io_info.channel >= (int)pvp->channels ||
+		    data.io_info.rx_amp < -31 || data.io_info.rx_amp > 31 ||
+		    data.io_info.tx_amp < -31 || data.io_info.tx_amp > 31) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		chan = data.dev_info.channel;
-		pvp->rx_shift[chan] = data.dev_info.rx_amp;
-		pvp->tx_shift[chan] = data.dev_info.tx_amp;
-		pvp->rx_src[chan] = data.dev_info.rx_chan;
-		pvp->tx_dst[chan] = data.dev_info.tx_chan;
-		pvp->rx_mute[chan] = data.dev_info.rx_mute ? 1 : 0;
-		pvp->tx_mute[chan] = data.dev_info.tx_mute ? 1 : 0;
-		pvp->rx_pol[chan] = data.dev_info.rx_pol ? 1 : 0;
-		pvp->tx_pol[chan] = data.dev_info.tx_pol ? 1 : 0;
-		vprofile_set_type_locked(pvp, data.dev_info.type);
+		chan = data.io_info.channel;
+		pvp->rx_shift[chan] = data.io_info.rx_amp;
+		pvp->tx_shift[chan] = data.io_info.tx_amp;
+		pvp->rx_src[chan] = data.io_info.rx_chan;
+		pvp->tx_dst[chan] = data.io_info.tx_chan;
+		pvp->rx_mute[chan] = data.io_info.rx_mute ? 1 : 0;
+		pvp->tx_mute[chan] = data.io_info.tx_mute ? 1 : 0;
+		pvp->rx_pol[chan] = data.io_info.rx_pol ? 1 : 0;
+		pvp->tx_pol[chan] = data.io_info.tx_pol ? 1 : 0;
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,
@@ -242,20 +237,20 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvm->shift = data.mon_info.amp;
 		break;
 	case VIRTUAL_OSS_GET_DEV_PEAK:
-		pvp = vprofile_by_index(data.dev_peak.number);
+	case VIRTUAL_OSS_GET_LOOP_PEAK:
 		if (pvp == NULL ||
-		    data.dev_peak.channel < 0 ||
-		    data.dev_peak.channel >= (int)pvp->channels) {
+		    data.io_peak.channel < 0 ||
+		    data.io_peak.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		strlcpy(data.dev_peak.name, pvp->name, sizeof(data.dev_peak.name));
-		chan = data.dev_peak.channel;
-		data.dev_peak.rx_peak_value = pvp->rx_peak_value[chan];
+		strlcpy(data.io_peak.name, pvp->name, sizeof(data.io_peak.name));
+		chan = data.io_peak.channel;
+		data.io_peak.rx_peak_value = pvp->rx_peak_value[chan];
 		pvp->rx_peak_value[chan] = 0;
-		data.dev_peak.tx_peak_value = pvp->tx_peak_value[chan];
+		data.io_peak.tx_peak_value = pvp->tx_peak_value[chan];
 		pvp->tx_peak_value[chan] = 0;
-		data.dev_peak.bits = pvp->bits;
+		data.io_peak.bits = pvp->bits;
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_PEAK:
 		pvm = vmonitor_by_index(data.mon_peak.number,
@@ -328,22 +323,22 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.out_lim.limit = voss_output_limiter[data.out_lim.group];
 		break;
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
-		pvp = vprofile_by_index(data.dev_lim.number);
+	case VIRTUAL_OSS_SET_LOOP_LIMIT:
 		if (pvp == NULL ||
-		    data.dev_lim.limit < 0 ||
-		    data.dev_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
+		    data.io_lim.limit < 0 ||
+		    data.io_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		pvp->limiter = data.dev_lim.limit;
+		pvp->limiter = data.io_lim.limit;
 		break;
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
-		pvp = vprofile_by_index(data.dev_lim.number);
+	case VIRTUAL_OSS_GET_LOOP_LIMIT:
 		if (pvp == NULL) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		data.dev_lim.limit = pvp->limiter;
+		data.io_lim.limit = pvp->limiter;
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_PEAK:
 		chan = data.master_peak.channel;

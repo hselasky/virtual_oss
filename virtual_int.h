@@ -110,7 +110,9 @@ struct virtual_monitor {
 
 extern vclient_head_t virtual_client_head;
 extern vclient_head_t virtual_loopback_head;
-extern vprofile_head_t virtual_profile_head;
+
+extern vprofile_head_t virtual_profile_client_head;
+extern vprofile_head_t virtual_profile_loopback_head;
 
 extern vmonitor_head_t virtual_monitor_input;
 extern vmonitor_head_t virtual_monitor_output;
