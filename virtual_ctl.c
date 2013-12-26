@@ -288,7 +288,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		break;
 	case VIRTUAL_OSS_SET_OUTPUT_CHN_GRP:
 		if (data.out_chg.channel < 0 ||
-		    data.out_chg.channel >= (int)voss_dsp_channels ||
+		    data.out_chg.channel >= (int)voss_max_channels ||
 		    data.out_chg.group < 0 || 
 		    data.out_chg.group >= VMAX_CHAN) {
 			error = CUSE_ERR_INVALID;
@@ -298,7 +298,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_CHN_GRP:
 		if (data.out_chg.channel < 0 ||
-		    data.out_chg.channel >= (int)voss_dsp_channels) {
+		    data.out_chg.channel >= (int)voss_max_channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
@@ -343,7 +343,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_OUTPUT_PEAK:
 		chan = data.master_peak.channel;
 		if (chan < 0 ||
-		    chan >= (int)voss_dsp_channels) {
+		    chan >= (int)voss_max_channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
