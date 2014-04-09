@@ -35,7 +35,7 @@
 #define	VIRTUAL_OSS_GET_VERSION		_IOR('O', 0, int)
 
 struct virtual_oss_io_info {
-	int	number;		/* must be first */
+	int	number;			/* must be first */
 	int	channel;
 	char	name[VIRTUAL_OSS_NAME_MAX];
 	int	bits;
@@ -72,7 +72,7 @@ struct virtual_oss_mon_info {
 #define	VIRTUAL_OSS_SET_OUTPUT_MON_INFO	 _IOW('O', 8, struct virtual_oss_mon_info)
 
 struct virtual_oss_io_peak {
-	int	number;		/* must be first */
+	int	number;			/* must be first */
 	int	channel;
 	char	name[VIRTUAL_OSS_NAME_MAX];
 	int	bits;
@@ -96,24 +96,24 @@ struct virtual_oss_mon_peak {
 #define	VIRTUAL_OSS_ADD_OUTPUT_MON	 _IOR('O', 14, int)
 
 struct virtual_oss_output_chn_grp {
-	int channel;
-	int group;
+	int	channel;
+	int	group;
 };
 
 #define	VIRTUAL_OSS_SET_OUTPUT_CHN_GRP	 _IOW('O', 15, struct virtual_oss_output_chn_grp)
 #define	VIRTUAL_OSS_GET_OUTPUT_CHN_GRP	_IOWR('O', 16, struct virtual_oss_output_chn_grp)
 
 struct virtual_oss_output_limit {
-	int group;
-	int limit;
+	int	group;
+	int	limit;
 };
 
 #define	VIRTUAL_OSS_SET_OUTPUT_LIMIT	_IOW('O', 17, struct virtual_oss_output_limit)
 #define	VIRTUAL_OSS_GET_OUTPUT_LIMIT   _IOWR('O', 18, struct virtual_oss_output_limit)
 
 struct virtual_oss_io_limit {
-	int number;	/* must be first */
-	int limit;
+	int	number;			/* must be first */
+	int	limit;
 };
 
 #define	VIRTUAL_OSS_SET_DEV_LIMIT	_IOW('O', 19, struct virtual_oss_io_limit)
@@ -130,5 +130,38 @@ struct virtual_oss_master_peak {
 
 #define	VIRTUAL_OSS_GET_OUTPUT_PEAK	_IOWR('O', 23, struct virtual_oss_master_peak)
 #define	VIRTUAL_OSS_GET_INPUT_PEAK	_IOWR('O', 24, struct virtual_oss_master_peak)
+
+#define	VIRTUAL_OSS_SET_RECORDING	_IOW('O', 25, int)
+#define	VIRTUAL_OSS_GET_RECORDING	_IOR('O', 26, int)
+
+struct virtual_oss_recording_delay {
+	int	number;
+	int	delay;			/* in samples */
+};
+
+#define	VIRTUAL_OSS_SET_DEV_REC_DELAY	_IOW('O', 27, struct virtual_oss_recording_delay)
+#define	VIRTUAL_OSS_GET_DEV_REC_DELAY	_IOWR('O', 28, struct virtual_oss_recording_delay)
+
+#define	VIRTUAL_OSS_SET_LOOP_REC_DELAY	_IOW('O', 29, struct virtual_oss_recording_delay)
+#define	VIRTUAL_OSS_GET_LOOP_REC_DELAY	_IOWR('O', 30, struct virtual_oss_recording_delay)
+
+struct virtual_oss_audio_echo_locator {
+	int	channel_output;
+	int	channel_input;
+	int	signal_level;
+	int	signal_delay;		/* in samples */
+};
+
+#define	VIRTUAL_OSS_SET_AUDIO_ECHO_LOCATOR	_IOW('O', 31, struct virtual_oss_audio_echo_locator)
+#define	VIRTUAL_OSS_GET_AUDIO_ECHO_LOCATOR	_IOWR('O', 32, struct virtual_oss_audio_echo_locator)
+
+struct virtual_oss_midi_echo_locator {
+	int	channel_output;
+	int	channel_input;
+	int	signal_delay;
+};
+
+#define	VIRTUAL_OSS_SET_MIDI_ECHO_LOCATOR	_IOW('O', 33, struct virtual_oss_midi_echo_locator)
+#define	VIRTUAL_OSS_GET_MIDI_ECHO_LOCATOR	_IOWR('O', 34, struct virtual_oss_midi_echo_locator)
 
 #endif					/* _VIRTUAL_OSS_H_ */
