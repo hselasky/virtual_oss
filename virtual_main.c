@@ -323,6 +323,46 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 }
 
 static int
+vclient_read_silence_locked(struct cuse_dev *pdev, void *peer_ptr, int len, vclient_t *pvc)
+{
+	int delta;
+	int sample_size;
+	int retval = 0;
+	int error;
+	uint8_t buffer[pvc->profile->bufsize];
+
+	while (len > 0) {
+		delta = pvc->profile->rec_delay - pvc->rec_delay;
+		if (delta > sizeof(buffer))
+			delta = sizeof(buffer);
+		if (delta > len)
+			delta = len;
+		if (delta < 1)
+			break;
+
+		format_silence(pvc->format, buffer, delta);
+
+		pvc->rx_busy = 1;
+		atomic_unlock();
+
+		error = cuse_copy_out(buffer, peer_ptr, delta);
+
+		atomic_lock();
+		pvc->rx_busy = 0;
+
+		if (error != 0) {
+			retval = error;
+			break;
+		}
+		peer_ptr = (uint8_t *)peer_ptr + delta;
+		len -= delta;
+		pvc->rec_delay += delta;
+		retval += delta;
+	}
+	return (retval);
+}
+
+static int
 vclient_read(struct cuse_dev *pdev, int fflags,
     void *peer_ptr, int len)
 {
@@ -337,8 +377,6 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	if (pvc == NULL)
 		return (CUSE_ERR_INVALID);
 
-	retval = 0;
-
 	atomic_lock();
 
 	if (pvc->rx_busy) {
@@ -347,6 +385,11 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	}
 	pvc->rx_enabled = 1;
 
+	retval = vclient_read_silence_locked(pdev, peer_ptr, len, pvc);
+	if (retval != 0) {
+		atomic_unlock();
+		return (retval);
+	}
 	while (len > 0) {
 		pvb = vblock_peek(&pvc->rx_ready);
 		if (pvb == NULL) {
@@ -810,6 +853,7 @@ uint32_t voss_dsp_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
 uint32_t voss_dsp_fmt;
+int	voss_is_recording = 1;
 
 static int voss_dsp_perm = 0666;
 
@@ -925,7 +969,7 @@ main(int argc, char **argv)
 	int val;
 	int idx;
 	int type;
-	int opt_mute[2] = {0,0};
+	int opt_mute[2] = {0, 0};
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
