@@ -197,8 +197,7 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
-				if (pvc->rx_enabled == 0 ||
-				    dst_chans > src_chans)
+				if (dst_chans > src_chans)
 					continue;
 
 				for (x = 0; x != dst_chans; x++) {
@@ -255,7 +254,7 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != VMAX_CHAN; x++)
 					fmt_limit[x] = pvc->profile->limiter;
 
-				if (pvb == NULL)
+				if (pvb == NULL || pvc->rx_enabled == 0 || voss_is_recording == 0)
 					continue;
 
 				format_export(pvc->format, buffer_temp,
@@ -467,7 +466,7 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
-				if (pvc->rx_enabled == 0 || dst_chans > src_chans)
+				if (dst_chans > src_chans)
 					continue;
 
 				for (x = 0; x != dst_chans; x++) {
@@ -523,7 +522,7 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != VMAX_CHAN; x++)
 					fmt_limit[x] = pvc->profile->limiter;
 
-				if (pvb == NULL)
+				if (pvb == NULL || pvc->rx_enabled == 0 || voss_is_recording == 0)
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
