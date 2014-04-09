@@ -91,6 +91,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_output_limit out_lim;
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
+		struct virtual_oss_recording_delay rec_delay;
 	}     data;
 
 	vprofile_t *pvp;
@@ -120,6 +121,8 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_DEV_PEAK:
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
+	case VIRTUAL_OSS_SET_DEV_REC_DELAY:
+	case VIRTUAL_OSS_GET_DEV_REC_DELAY:
 		pvp = vprofile_by_index(&virtual_profile_client_head, data.val);
 		break;
 	case VIRTUAL_OSS_GET_LOOP_INFO:
@@ -127,6 +130,8 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_LOOP_PEAK:
 	case VIRTUAL_OSS_SET_LOOP_LIMIT:
 	case VIRTUAL_OSS_GET_LOOP_LIMIT:
+	case VIRTUAL_OSS_SET_LOOP_REC_DELAY:
+	case VIRTUAL_OSS_GET_LOOP_REC_DELAY:
 		pvp = vprofile_by_index(&virtual_profile_loopback_head, data.val);
 		break;
 	default:
@@ -362,6 +367,33 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.master_peak.peak_value = voss_input_peak[chan];
 		voss_input_peak[chan] = 0;
 		break;
+	case VIRTUAL_OSS_SET_RECORDING:
+		voss_is_recording = data.val;
+		break;
+	case VIRTUAL_OSS_GET_RECORDING:
+		data.val = voss_is_recording;
+		break;
+	case VIRTUAL_OSS_SET_DEV_REC_DELAY:
+	case VIRTUAL_OSS_SET_LOOP_REC_DELAY:
+		if (pvp == NULL ||
+		    data.rec_delay.delay < 0 ||
+		    data.rec_delay.delay > voss_dsp_sample_rate) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		pvp->rec_delay = data.rec_delay.delay * 
+		    (pvp->channels * (pvp->bits / 8));
+		break;
+	case VIRTUAL_OSS_GET_DEV_REC_DELAY:
+	case VIRTUAL_OSS_GET_LOOP_REC_DELAY:
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.rec_delay.delay = pvp->rec_delay /
+		    (pvp->channels * (pvp->bits / 8));
+		break;
+
 	default:
 		error = CUSE_ERR_INVALID;
 		break;
