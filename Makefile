@@ -40,13 +40,14 @@ MANDIR=         ${PREFIX}/man/man
 LIBDIR=         ${PREFIX}/lib
 
 SRCS= \
+virtual_audio_delay.c \
 virtual_ctl.c \
 virtual_format.c \
 virtual_main.c \
 virtual_oss.c
 
 CFLAGS += -I${LOCALBASE}/include
-LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS}
+LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS} -lm
 
 .include <bsd.prog.mk>
 
