@@ -158,8 +158,8 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 		}
 
 	} else if (fmt & (AFMT_S24_BE
-	    | AFMT_S24_LE
-	    | AFMT_U24_BE
+		    | AFMT_S24_LE
+		    | AFMT_U24_BE
 	    | AFMT_U24_LE)) {
 		while (dst != end) {
 
@@ -190,8 +190,8 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 			dst += 3;
 		}
 	} else if (fmt & (AFMT_S32_BE
-	    | AFMT_S32_LE
-	    | AFMT_U32_BE
+		    | AFMT_S32_LE
+		    | AFMT_U32_BE
 	    | AFMT_U32_LE)) {
 		while (dst != end) {
 
@@ -258,13 +258,13 @@ format_max(uint32_t fmt)
 	    | AFMT_U16_LE)) {
 		return (0x7FFF);
 	} else if (fmt & (AFMT_S24_BE
-	    | AFMT_S24_LE
-	    | AFMT_U24_BE
+		    | AFMT_S24_LE
+		    | AFMT_U24_BE
 	    | AFMT_U24_LE)) {
 		return (0x7FFFFF);
 	} else if (fmt & (AFMT_S32_BE
-	    | AFMT_S32_LE
-	    | AFMT_U32_BE
+		    | AFMT_S32_LE
+		    | AFMT_U32_BE
 	    | AFMT_U32_LE)) {
 		return (0x7FFFFFFF);
 	} else if (fmt & (AFMT_U8
@@ -328,5 +328,97 @@ format_remix(int64_t *buffer_data, uint32_t in_chans,
 		}
 
 
+	}
+}
+
+void
+format_silence(uint32_t fmt, uint8_t *dst, uint32_t len)
+{
+	const uint8_t *end = dst + len;
+
+	if (fmt & (AFMT_S16_BE
+	    | AFMT_S16_LE
+	    | AFMT_U16_BE
+	    | AFMT_U16_LE)) {
+		uint16_t val;
+
+		if (fmt & (AFMT_U16_LE | AFMT_U16_BE))
+			val = 1U << 15;
+		else
+			val = 0;
+
+		while (dst != end) {
+			if (fmt & (AFMT_S16_LE | AFMT_U16_LE)) {
+				dst[0] = val;
+				dst[1] = val >> 8;
+			} else {
+				dst[1] = val;
+				dst[0] = val >> 8;
+			}
+			dst += 2;
+		}
+
+	} else if (fmt & (AFMT_S24_BE
+		    | AFMT_S24_LE
+		    | AFMT_U24_BE
+	    | AFMT_U24_LE)) {
+		uint32_t val;
+
+		if (fmt & (AFMT_U24_LE | AFMT_U24_BE))
+			val = 1U << 23;
+		else
+			val = 0;
+
+		while (dst != end) {
+			if (fmt & (AFMT_S24_LE | AFMT_U24_LE)) {
+				dst[0] = val;
+				dst[1] = val >> 8;
+				dst[2] = val >> 16;
+			} else {
+				dst[2] = val;
+				dst[1] = val >> 8;
+				dst[0] = val >> 16;
+			}
+			dst += 3;
+		}
+	} else if (fmt & (AFMT_S32_BE
+		    | AFMT_S32_LE
+		    | AFMT_U32_BE
+	    | AFMT_U32_LE)) {
+		uint32_t val;
+
+		if (fmt & (AFMT_U32_LE | AFMT_U32_BE))
+			val = 1U << 31;
+		else
+			val = 0;
+
+		while (dst != end) {
+			if (fmt & (AFMT_S32_LE | AFMT_U32_LE)) {
+				dst[0] = val;
+				dst[1] = val >> 8;
+				dst[2] = val >> 16;
+				dst[3] = val >> 24;
+			} else {
+				dst[3] = val;
+				dst[2] = val >> 8;
+				dst[1] = val >> 16;
+				dst[0] = val >> 24;
+			}
+			dst += 4;
+		}
+
+	} else if (fmt & (AFMT_U8
+	    | AFMT_S8)) {
+		uint8_t val;
+
+		if (fmt & AFMT_U8)
+			val = 1U << 7;
+		else
+			val = 0;
+
+		while (dst != end) {
+			dst[0] = val;
+			dst += 1;
+		}
 	}
 }
