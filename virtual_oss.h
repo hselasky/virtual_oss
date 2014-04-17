@@ -142,6 +142,7 @@ struct virtual_oss_audio_delay_locator {
 	int	channel_last;
 	int	signal_output_level;		/* 2**n */
 	int	signal_input_delay;		/* in samples, roundtrip */
+	int	signal_delay_hz;		/* in samples, HZ */
 	int	locator_enabled;
 };
 
@@ -153,6 +154,7 @@ struct virtual_oss_midi_delay_locator {
 	int	channel_output;
 	int	channel_input;
 	int	signal_delay;
+	int	signal_delay_hz;		/* in samples, HZ */
 	int	locator_enabled;
 };
 

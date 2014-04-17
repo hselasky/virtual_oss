@@ -408,6 +408,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.ad_locator.channel_input = voss_ad_input_channel;
 		data.ad_locator.channel_last = voss_mix_channels - 1;
 		data.ad_locator.signal_input_delay = voss_ad_last_delay;
+		data.ad_locator.signal_delay_hz = voss_dsp_sample_rate;
 		break;
 
 	case VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR:
