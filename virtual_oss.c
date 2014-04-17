@@ -187,22 +187,6 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_data,
 				    8 * samples * src_chans);
 			}
-
-			/* clear output mix buffer */
-
-			memset(buffer_temp, 0, 8 * samples * src_chans);
-
-			/* -- 0 -- Run audio delay locator */
-
-			if (voss_ad_enabled != 0) {
-				y = (voss_dsp_samples * voss_mix_channels);
-				for (x = 0; x != y; x += voss_mix_channels) {
-					buffer_temp[x + voss_ad_output_channel] +=
-						voss_ad_getput_sample(buffer_data
-						    [x + voss_ad_input_channel]);
-				}
-			}
-
 			/*
 			 * -- 1 -- Distribute input samples to all
 			 * client devices
@@ -220,19 +204,22 @@ virtual_oss_process(void *arg)
 					src = pvc->profile->rx_src[x];
 					shift = pvc->profile->rx_shift[x];
 
-					if (pvc->profile->rx_mute[x] || src >= src_chans) {
-						continue;
+					if (pvc->profile->rx_mute[x] ||
+					    src >= src_chans) {
+						for (y = 0; y != samples; y++) {
+							buffer_temp[(y * dst_chans) + x] = 0;
+						}
 					} else {
 						if (pvc->profile->rx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] +=
+									buffer_temp[(y * dst_chans) + x] =
 									    -(buffer_data[(y * src_chans) + src] >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] +=
+									buffer_temp[(y * dst_chans) + x] =
 									    -(buffer_data[(y * src_chans) + src] << shift);
 								}
 							}
@@ -240,12 +227,12 @@ virtual_oss_process(void *arg)
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] +=
+									buffer_temp[(y * dst_chans) + x] =
 									    (buffer_data[(y * src_chans) + src] >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] +=
+									buffer_temp[(y * dst_chans) + x] =
 									    (buffer_data[(y * src_chans) + src] << shift);
 								}
 							}
@@ -283,8 +270,19 @@ virtual_oss_process(void *arg)
 			memset(buffer_temp, 0, sizeof(buffer_temp[0]) *
 			    samples * src_chans);
 
+			/* -- 2.0 -- Run audio delay locator */
+
+			if (voss_ad_enabled != 0) {
+				y = (voss_dsp_samples * voss_mix_channels);
+				for (x = 0; x != y; x += voss_mix_channels) {
+					buffer_temp[x + voss_ad_output_channel] +=
+						voss_ad_getput_sample(buffer_data
+						    [x + voss_ad_input_channel]);
+				}
+			}
+
 			/*
-			 * -- 2 -- Load output samples from all client
+			 * -- 2.1 -- Load output samples from all client
 			 * devices
 			 */
 
