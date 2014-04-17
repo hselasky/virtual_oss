@@ -171,6 +171,7 @@ extern void format_silence(uint32_t, uint8_t *, uint32_t);
 
 extern void *virtual_oss_process(void *);
 
+extern void voss_ad_reset(void);
 extern void voss_ad_init(uint32_t);
 extern double voss_ad_getput_sample(double);
 

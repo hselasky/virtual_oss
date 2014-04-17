@@ -36,17 +36,21 @@
 
 #include "virtual_int.h"
 
+#define	NUM_PHASE 2.0
+
 static uint32_t voss_ad_last;
 
 static struct voss_ad {
+	double *wave;
+
 	double *sin_a;
 	double *cos_a;
 
 	double *sin_b;
 	double *cos_b;
 
-	double *sin_c;
-	double *cos_c;
+	double *buf_a;
+	double *buf_b;
 
 	double sum_sin_a;
 	double sum_cos_a;
@@ -54,111 +58,86 @@ static struct voss_ad {
 	double sum_sin_b;
 	double sum_cos_b;
 
-	double sum_sin_c;
-	double sum_cos_c;
-
 	uint32_t len_a;
 	uint32_t len_b;
-	uint32_t len_c;
 
 	uint32_t offset_a;
 	uint32_t offset_b;
-	uint32_t offset_c;
-
-	uint32_t inv_ab;
-	uint32_t inv_ac;
-	uint32_t inv_bc;
 } voss_ad;
 
-static void
-voss_ad_next_prime(int *p)
+void
+voss_ad_reset(void)
 {
-	int val = *p | 1;
-	int x;
-	int y;
-repeat:
-	for (x = 3; x < val; x += 2) {
-		if ((val % x) == 0) {
-			val += 2;
-			goto repeat;
-		}
-	}
-	*p = val;
+	uint32_t x;
+
+	for (x = 0; x != voss_ad.len_a; x++)
+		voss_ad.buf_a[x] = 0;
+
+	for (x = 0; x != voss_ad.len_b; x++)
+		voss_ad.buf_b[x] = 0;
+
+	voss_ad.sum_sin_a = 0;
+	voss_ad.sum_cos_a = 0;
+	voss_ad.sum_sin_b = 0;
+	voss_ad.sum_cos_b = 0;
+
+	voss_ad.offset_a = 0;
+	voss_ad.offset_b = 0;
 }
 
 void
 voss_ad_init(uint32_t rate)
 {
-	int samples_a;
-	int samples_b;
-	int samples_c;
+	int samples;
+	int len;
 	int x;
 
-	samples_a = rate / 440;
-	voss_ad_next_prime(&samples_a);
-	samples_b = samples_a + 2;
-	voss_ad_next_prime(&samples_b);
-	samples_c = samples_b + 2;
-	voss_ad_next_prime(&samples_c);
+	len = sqrt(rate);
 
-	for (x = 1; x != samples_b; x++) {
-		if (((x * samples_a) % samples_b) == 1)
-			break;
-	}
-	voss_ad.inv_ab = x;
+	samples = len * len;
 
-	for (x = 1; x != samples_c; x++) {
-		if (((x * samples_a) % samples_c) == 1)
-			break;
-	}
-	voss_ad.inv_ac = x;
+	voss_ad.wave = malloc(sizeof(voss_ad.wave[0]) * samples);
 
-	for (x = 1; x != samples_c; x++) {
-		if (((x * samples_b) % samples_c) == 1)
-			break;
-	}
-	voss_ad.inv_bc = x;
+	voss_ad.sin_a = malloc(sizeof(voss_ad.sin_a[0]) * len);
+	voss_ad.cos_a = malloc(sizeof(voss_ad.cos_a[0]) * len);
+	voss_ad.buf_a = malloc(sizeof(voss_ad.buf_a[0]) * len);
+	voss_ad.len_a = len;
 
-	voss_ad.sin_a = malloc(sizeof(voss_ad.sin_a[0]) * samples_a);
-	voss_ad.cos_a = malloc(sizeof(voss_ad.cos_a[0]) * samples_a);
+	voss_ad.sin_b = malloc(sizeof(voss_ad.sin_b[0]) * samples);
+	voss_ad.cos_b = malloc(sizeof(voss_ad.cos_b[0]) * samples);
+	voss_ad.buf_b = malloc(sizeof(voss_ad.buf_b[0]) * samples);
+	voss_ad.len_b = samples;
 
-	voss_ad.sin_b = malloc(sizeof(voss_ad.sin_b[0]) * samples_b);
-	voss_ad.cos_b = malloc(sizeof(voss_ad.cos_b[0]) * samples_b);
-
-	voss_ad.sin_c = malloc(sizeof(voss_ad.sin_c[0]) * samples_c);
-	voss_ad.cos_c = malloc(sizeof(voss_ad.cos_c[0]) * samples_c);
-
-	if (voss_ad.sin_a == NULL || voss_ad.sin_b == NULL ||
-	    voss_ad.cos_a == NULL || voss_ad.cos_b == NULL ||
-	    voss_ad.cos_c == NULL || voss_ad.cos_c == NULL)
+	if (voss_ad.sin_a == NULL || voss_ad.cos_a == NULL ||
+	    voss_ad.sin_b == NULL || voss_ad.cos_b == NULL ||
+	    voss_ad.buf_a == NULL || voss_ad.buf_b == NULL)
 		errx(EX_SOFTWARE, "Out of memory");
 
-	voss_ad.len_a = samples_a;
-	voss_ad.len_b = samples_b;
-	voss_ad.len_c = samples_c;
-
-	for (x = 0; x != samples_a; x++) {
-		voss_ad.sin_a[x] = sin(2.0 * M_PI * ((double)x) / ((double)samples_a));
-		voss_ad.cos_a[x] = cos(2.0 * M_PI * ((double)x) / ((double)samples_a));
-	}
-	for (x = 0; x != samples_b; x++) {
-		voss_ad.sin_b[x] = sin(2.0 * M_PI * ((double)x) / ((double)samples_b));
-		voss_ad.cos_b[x] = cos(2.0 * M_PI * ((double)x) / ((double)samples_b));
-	}
-	for (x = 0; x != samples_c; x++) {
-		voss_ad.sin_c[x] = sin(2.0 * M_PI * ((double)x) / ((double)samples_c));
-		voss_ad.cos_c[x] = cos(2.0 * M_PI * ((double)x) / ((double)samples_c));
+	for (x = 0; x != len; x++) {
+		voss_ad.sin_a[x] = sin(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len));
+		voss_ad.cos_a[x] = cos(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len));
+		voss_ad.buf_a[x] = 0;
 	}
 
-	printf("VOSS AD: %d %d %d %d\n", voss_ad.len_a, voss_ad.len_b, voss_ad.len_c, voss_ad.inv_ab);
+	for (x = 0; x != samples; x++) {
 
+		voss_ad.wave[x] = sin(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len)) *
+		  (1.0 + sin(2.0 * M_PI * ((double)x) / ((double)samples))) / 2.0;
+
+		voss_ad.sin_b[x] = sin(2.0 * M_PI * ((double)x) / ((double)samples));
+		voss_ad.cos_b[x] = cos(2.0 * M_PI * ((double)x) / ((double)samples));
+		voss_ad.buf_b[x] = 0;
+	}
 }
 
 static double
 voss_add_decode_offset(double x /* cos */, double y /* sin */)
 {
-	double r = sqrt((x * x) + (y * y));
 	uint32_t v;
+	double r;
+
+	r = sqrt((x * x) + (y * y));
+
 	if (r == 0.0)
 		return (0);
 
@@ -201,84 +180,43 @@ voss_add_decode_offset(double x /* cos */, double y /* sin */)
 double
 voss_ad_getput_sample(double sample)
 {
-	uint32_t xa = voss_ad.offset_a;
-	uint32_t xb = voss_ad.offset_b;
-	uint32_t xc = voss_ad.offset_c;
-
 	double retval;
+	double phase;
+	uint32_t xa;
+	uint32_t xb;
 
-	retval = (voss_ad.sin_a[xa] + voss_ad.sin_b[xb] + voss_ad.sin_c[xc]) / 3.0;
+	xa = voss_ad.offset_a;
+	xb = voss_ad.offset_b;
+	retval = voss_ad.wave[xb];
 
+	sample -= voss_ad.buf_a[xa];
 	voss_ad.sum_sin_a += voss_ad.sin_a[xa] * sample;
 	voss_ad.sum_cos_a += voss_ad.cos_a[xa] * sample;
+	voss_ad.buf_a[xa] += sample;
 
+	sample = sqrt((voss_ad.sum_sin_a * voss_ad.sum_sin_a) +
+	    (voss_ad.sum_cos_a * voss_ad.sum_cos_a));
+
+	sample -= voss_ad.buf_b[xb];
 	voss_ad.sum_sin_b += voss_ad.sin_b[xb] * sample;
 	voss_ad.sum_cos_b += voss_ad.cos_b[xb] * sample;
+	voss_ad.buf_b[xb] += sample;
 
-	voss_ad.sum_sin_c += voss_ad.sin_c[xc] * sample;
-	voss_ad.sum_cos_c += voss_ad.cos_c[xc] * sample;
-
-	xa++;
-	xb++;
-	xc++;
-
-	if (xa == voss_ad.len_a)
+	if (++xa == voss_ad.len_a)
 		xa = 0;
-	if (xb == voss_ad.len_b)
-		xb = 0;
-	if (xc == voss_ad.len_c)
-		xc = 0;
 
+	if (++xb == voss_ad.len_b) {
+		xb = 0;
+
+		phase = voss_add_decode_offset(
+		  voss_ad.sum_cos_b, voss_ad.sum_sin_b);
+
+		voss_ad_last = (uint32_t)(phase * (double)(voss_ad.len_b) / (2.0 * M_PI)) - (voss_ad.len_a / 2);
+		if (voss_ad_last > voss_ad.len_b)
+			voss_ad_last = voss_ad.len_b;
+	}
 	voss_ad.offset_a = xa;
 	voss_ad.offset_b = xb;
-	voss_ad.offset_c = xc;
-
-	if (xa == 0 && xb == 0 && xc == 0) {
-		double off;
-
-		off = voss_add_decode_offset(voss_ad.sum_cos_a, voss_ad.sum_sin_a);
-		off = (off * ((double)voss_ad.len_a)) / (2.0 * M_PI);
-
-		xa = round(off);
-
-		if (xa < 0 || xa >= voss_ad.len_a)
-			xa = 0;
-
- 		off = voss_add_decode_offset(voss_ad.sum_cos_b, voss_ad.sum_sin_b);
-		off = (off * ((double)voss_ad.len_b)) / (2.0 * M_PI);
-
-		xb = round(off);
-		if (xb < 0 || xb >= voss_ad.len_b)
-			xb = 0;
-
- 		off = voss_add_decode_offset(voss_ad.sum_cos_c, voss_ad.sum_sin_c);
-		off = (off * ((double)voss_ad.len_c)) / (2.0 * M_PI);
-
-		xc = round(off);
-		if (xc < 0 || xc >= voss_ad.len_c)
-			xc = 0;
-
-		printf("%d %d %d\n", xb, xa, xc);
-
-		xb = ((voss_ad.len_b + xb - xa) * voss_ad.inv_ab) % voss_ad.len_b;
-		xc = ((voss_ad.len_c + xc - xa) * voss_ad.inv_ac) % voss_ad.len_c;
-
-		xc = ((voss_ad.len_c + xc - xb) * voss_ad.inv_bc) % voss_ad.len_c;
-
-		voss_ad_last = (xc * voss_ad.len_a * voss_ad.len_b) +
-		  (xb * voss_ad.len_a) + xa;
-
-		printf("OFF = %d\n", voss_ad_last);
-
-		voss_ad.sum_sin_a = 0;
-		voss_ad.sum_cos_a = 0;
-
-		voss_ad.sum_sin_b = 0;
-		voss_ad.sum_cos_b = 0;
-
-		voss_ad.sum_sin_c = 0;
-		voss_ad.sum_cos_c = 0;
-	}
 
 	return (retval);
 }
