@@ -47,6 +47,8 @@ struct virtual_oss_io_info {
 	int	tx_mute;
 	int	rx_pol;
 	int	tx_pol;
+	int	rx_delay;	/* in samples */
+	int	rx_delay_limit;	/* in samples */
 };
 
 #define	VIRTUAL_OSS_GET_DEV_INFO	_IOWR('O', 1, struct virtual_oss_io_info)
@@ -134,28 +136,18 @@ struct virtual_oss_master_peak {
 #define	VIRTUAL_OSS_SET_RECORDING	_IOW('O', 25, int)
 #define	VIRTUAL_OSS_GET_RECORDING	_IOR('O', 26, int)
 
-struct virtual_oss_recording_delay {
-	int	number;
-	int	delay;			/* in samples */
-};
-
-#define	VIRTUAL_OSS_SET_DEV_REC_DELAY	_IOW('O', 27, struct virtual_oss_recording_delay)
-#define	VIRTUAL_OSS_GET_DEV_REC_DELAY	_IOWR('O', 28, struct virtual_oss_recording_delay)
-
-#define	VIRTUAL_OSS_SET_LOOP_REC_DELAY	_IOW('O', 29, struct virtual_oss_recording_delay)
-#define	VIRTUAL_OSS_GET_LOOP_REC_DELAY	_IOWR('O', 30, struct virtual_oss_recording_delay)
-
 struct virtual_oss_audio_delay_locator {
 	int	channel_output;
 	int	channel_input;
+	int	channel_last;
 	int	signal_output_level;		/* 2**n */
 	int	signal_input_delay;		/* in samples, roundtrip */
 	int	locator_enabled;
 };
 
-#define	VIRTUAL_OSS_SET_AUDIO_DELAY_LOCATOR	_IOW('O', 31, struct virtual_oss_audio_delay_locator)
-#define	VIRTUAL_OSS_GET_AUDIO_DELAY_LOCATOR	_IOWR('O', 32, struct virtual_oss_audio_delay_locator)
-#define	VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR	_IO('O', 33)
+#define	VIRTUAL_OSS_SET_AUDIO_DELAY_LOCATOR	_IOW('O', 27, struct virtual_oss_audio_delay_locator)
+#define	VIRTUAL_OSS_GET_AUDIO_DELAY_LOCATOR	_IOR('O', 28, struct virtual_oss_audio_delay_locator)
+#define	VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR	_IO('O', 29)
 
 struct virtual_oss_midi_delay_locator {
 	int	channel_output;
@@ -164,8 +156,8 @@ struct virtual_oss_midi_delay_locator {
 	int	locator_enabled;
 };
 
-#define	VIRTUAL_OSS_SET_MIDI_DELAY_LOCATOR	_IOW('O', 34, struct virtual_oss_midi_delay_locator)
-#define	VIRTUAL_OSS_GET_MIDI_DELAY_LOCATOR	_IOWR('O', 35, struct virtual_oss_midi_delay_locator)
-#define	VIRTUAL_OSS_RST_MIDI_DELAY_LOCATOR	_IO('O', 36)
+#define	VIRTUAL_OSS_SET_MIDI_DELAY_LOCATOR	_IOW('O', 30, struct virtual_oss_midi_delay_locator)
+#define	VIRTUAL_OSS_GET_MIDI_DELAY_LOCATOR	_IOR('O', 31, struct virtual_oss_midi_delay_locator)
+#define	VIRTUAL_OSS_RST_MIDI_DELAY_LOCATOR	_IO('O', 32)
 
 #endif					/* _VIRTUAL_OSS_H_ */

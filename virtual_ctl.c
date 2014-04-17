@@ -91,7 +91,6 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_output_limit out_lim;
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
-		struct virtual_oss_recording_delay rec_delay;
 		struct virtual_oss_audio_delay_locator ad_locator;
 	}     data;
 
@@ -122,8 +121,6 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_DEV_PEAK:
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
-	case VIRTUAL_OSS_SET_DEV_REC_DELAY:
-	case VIRTUAL_OSS_GET_DEV_REC_DELAY:
 		pvp = vprofile_by_index(&virtual_profile_client_head, data.val);
 		break;
 	case VIRTUAL_OSS_GET_LOOP_INFO:
@@ -131,8 +128,6 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_LOOP_PEAK:
 	case VIRTUAL_OSS_SET_LOOP_LIMIT:
 	case VIRTUAL_OSS_GET_LOOP_LIMIT:
-	case VIRTUAL_OSS_SET_LOOP_REC_DELAY:
-	case VIRTUAL_OSS_GET_LOOP_REC_DELAY:
 		pvp = vprofile_by_index(&virtual_profile_loopback_head, data.val);
 		break;
 	default:
@@ -163,6 +158,9 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.io_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
 		data.io_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
 		data.io_info.bits = pvp->bits;
+		data.io_info.rx_delay = pvp->rec_delay /
+		    (pvp->channels * (pvp->bits / 8));
+		data.io_info.rx_delay_limit = voss_dsp_sample_rate;
 		break;
 	case VIRTUAL_OSS_SET_DEV_INFO:
 	case VIRTUAL_OSS_SET_LOOP_INFO:
@@ -170,7 +168,9 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		    data.io_info.channel < 0 ||
 		    data.io_info.channel >= (int)pvp->channels ||
 		    data.io_info.rx_amp < -31 || data.io_info.rx_amp > 31 ||
-		    data.io_info.tx_amp < -31 || data.io_info.tx_amp > 31) {
+		    data.io_info.tx_amp < -31 || data.io_info.tx_amp > 31 ||
+		    data.io_info.rx_delay < 0 ||
+		    data.io_info.rx_delay > (int)voss_dsp_sample_rate) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
@@ -183,6 +183,8 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvp->tx_mute[chan] = data.io_info.tx_mute ? 1 : 0;
 		pvp->rx_pol[chan] = data.io_info.rx_pol ? 1 : 0;
 		pvp->tx_pol[chan] = data.io_info.tx_pol ? 1 : 0;
+		pvp->rec_delay = data.io_info.rx_delay * 
+		    (pvp->channels * (pvp->bits / 8));
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,
@@ -368,31 +370,13 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.master_peak.peak_value = voss_input_peak[chan];
 		voss_input_peak[chan] = 0;
 		break;
+
 	case VIRTUAL_OSS_SET_RECORDING:
 		voss_is_recording = data.val;
 		break;
+
 	case VIRTUAL_OSS_GET_RECORDING:
 		data.val = voss_is_recording;
-		break;
-	case VIRTUAL_OSS_SET_DEV_REC_DELAY:
-	case VIRTUAL_OSS_SET_LOOP_REC_DELAY:
-		if (pvp == NULL ||
-		    data.rec_delay.delay < 0 ||
-		    data.rec_delay.delay > voss_dsp_sample_rate) {
-			error = CUSE_ERR_INVALID;
-			break;
-		}
-		pvp->rec_delay = data.rec_delay.delay * 
-		    (pvp->channels * (pvp->bits / 8));
-		break;
-	case VIRTUAL_OSS_GET_DEV_REC_DELAY:
-	case VIRTUAL_OSS_GET_LOOP_REC_DELAY:
-		if (pvp == NULL) {
-			error = CUSE_ERR_INVALID;
-			break;
-		}
-		data.rec_delay.delay = pvp->rec_delay /
-		    (pvp->channels * (pvp->bits / 8));
 		break;
 
 	case VIRTUAL_OSS_SET_AUDIO_DELAY_LOCATOR:
@@ -422,6 +406,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.ad_locator.signal_output_level = voss_ad_output_signal;
 		data.ad_locator.channel_output = voss_ad_output_channel;
 		data.ad_locator.channel_input = voss_ad_input_channel;
+		data.ad_locator.channel_last = voss_mix_channels - 1;
 		data.ad_locator.signal_input_delay = voss_ad_last_delay;
 		break;
 
