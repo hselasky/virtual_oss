@@ -36,7 +36,7 @@
 
 #include "virtual_int.h"
 
-#define	NUM_PHASE 2.0
+#define	REF_FREQ 500	/* HZ */
 
 static uint32_t voss_ad_last;
 
@@ -88,6 +88,7 @@ voss_ad_reset(void)
 void
 voss_ad_init(uint32_t rate)
 {
+	double freq;
 	int samples;
 	int len;
 	int x;
@@ -113,15 +114,24 @@ voss_ad_init(uint32_t rate)
 	    voss_ad.buf_a == NULL || voss_ad.buf_b == NULL)
 		errx(EX_SOFTWARE, "Out of memory");
 
+	freq = 1.0;
+
+	while (1) {
+		double temp = freq * ((double)rate) / ((double)len);
+		if (temp >= REF_FREQ)
+			break;
+		freq += 1.0;
+	}
+
 	for (x = 0; x != len; x++) {
-		voss_ad.sin_a[x] = sin(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len));
-		voss_ad.cos_a[x] = cos(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len));
+		voss_ad.sin_a[x] = sin(freq * 2.0 * M_PI * ((double)x) / ((double)len));
+		voss_ad.cos_a[x] = cos(freq * 2.0 * M_PI * ((double)x) / ((double)len));
 		voss_ad.buf_a[x] = 0;
 	}
 
 	for (x = 0; x != samples; x++) {
 
-		voss_ad.wave[x] = sin(NUM_PHASE * 2.0 * M_PI * ((double)x) / ((double)len)) *
+		voss_ad.wave[x] = sin(freq * 2.0 * M_PI * ((double)x) / ((double)len)) *
 		  (1.0 + sin(2.0 * M_PI * ((double)x) / ((double)samples))) / 2.0;
 
 		voss_ad.sin_b[x] = sin(2.0 * M_PI * ((double)x) / ((double)samples));
