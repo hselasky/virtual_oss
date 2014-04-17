@@ -145,23 +145,27 @@ struct virtual_oss_recording_delay {
 #define	VIRTUAL_OSS_SET_LOOP_REC_DELAY	_IOW('O', 29, struct virtual_oss_recording_delay)
 #define	VIRTUAL_OSS_GET_LOOP_REC_DELAY	_IOWR('O', 30, struct virtual_oss_recording_delay)
 
-struct virtual_oss_audio_echo_locator {
+struct virtual_oss_audio_delay_locator {
 	int	channel_output;
 	int	channel_input;
-	int	signal_level;
-	int	signal_delay;		/* in samples */
+	int	signal_output_level;		/* 2**n */
+	int	signal_input_delay;		/* in samples, roundtrip */
+	int	locator_enabled;
 };
 
-#define	VIRTUAL_OSS_SET_AUDIO_ECHO_LOCATOR	_IOW('O', 31, struct virtual_oss_audio_echo_locator)
-#define	VIRTUAL_OSS_GET_AUDIO_ECHO_LOCATOR	_IOWR('O', 32, struct virtual_oss_audio_echo_locator)
+#define	VIRTUAL_OSS_SET_AUDIO_DELAY_LOCATOR	_IOW('O', 31, struct virtual_oss_audio_delay_locator)
+#define	VIRTUAL_OSS_GET_AUDIO_DELAY_LOCATOR	_IOWR('O', 32, struct virtual_oss_audio_delay_locator)
+#define	VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR	_IO('O', 33)
 
-struct virtual_oss_midi_echo_locator {
+struct virtual_oss_midi_delay_locator {
 	int	channel_output;
 	int	channel_input;
 	int	signal_delay;
+	int	locator_enabled;
 };
 
-#define	VIRTUAL_OSS_SET_MIDI_ECHO_LOCATOR	_IOW('O', 33, struct virtual_oss_midi_echo_locator)
-#define	VIRTUAL_OSS_GET_MIDI_ECHO_LOCATOR	_IOWR('O', 34, struct virtual_oss_midi_echo_locator)
+#define	VIRTUAL_OSS_SET_MIDI_DELAY_LOCATOR	_IOW('O', 34, struct virtual_oss_midi_delay_locator)
+#define	VIRTUAL_OSS_GET_MIDI_DELAY_LOCATOR	_IOWR('O', 35, struct virtual_oss_midi_delay_locator)
+#define	VIRTUAL_OSS_RST_MIDI_DELAY_LOCATOR	_IO('O', 36)
 
 #endif					/* _VIRTUAL_OSS_H_ */

@@ -38,7 +38,11 @@
 
 #define	REF_FREQ 500	/* HZ */
 
-static uint32_t voss_ad_last;
+uint32_t voss_ad_last_delay;
+uint8_t voss_ad_enabled;
+uint8_t voss_ad_output_signal;
+uint8_t voss_ad_input_channel;
+uint8_t voss_ad_output_channel;
 
 static struct voss_ad {
 	double *wave;
@@ -83,6 +87,8 @@ voss_ad_reset(void)
 
 	voss_ad.offset_a = 0;
 	voss_ad.offset_b = 0;
+
+	voss_ad_last_delay = 0;
 }
 
 void
@@ -221,12 +227,12 @@ voss_ad_getput_sample(double sample)
 		phase = voss_add_decode_offset(
 		  voss_ad.sum_cos_b, voss_ad.sum_sin_b);
 
-		voss_ad_last = (uint32_t)(phase * (double)(voss_ad.len_b) / (2.0 * M_PI)) - (voss_ad.len_a / 2);
-		if (voss_ad_last > voss_ad.len_b)
-			voss_ad_last = voss_ad.len_b;
+		voss_ad_last_delay = (uint32_t)(phase * (double)(voss_ad.len_b) / (2.0 * M_PI)) - (voss_ad.len_a / 2);
+		if (voss_ad_last_delay > voss_ad.len_b)
+			voss_ad_last_delay = voss_ad.len_b;
 	}
 	voss_ad.offset_a = xa;
 	voss_ad.offset_b = xb;
 
-	return (retval);
+	return (retval * (1LL << voss_ad_output_signal));
 }

@@ -92,6 +92,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
 		struct virtual_oss_recording_delay rec_delay;
+		struct virtual_oss_audio_delay_locator ad_locator;
 	}     data;
 
 	vprofile_t *pvp;
@@ -392,6 +393,40 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		}
 		data.rec_delay.delay = pvp->rec_delay /
 		    (pvp->channels * (pvp->bits / 8));
+		break;
+
+	case VIRTUAL_OSS_SET_AUDIO_DELAY_LOCATOR:
+		if (data.ad_locator.channel_output < 0 ||
+		    data.ad_locator.channel_output >= (int)voss_mix_channels) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		if (data.ad_locator.channel_input < 0 ||
+		    data.ad_locator.channel_input >= (int)voss_mix_channels) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		if (data.ad_locator.signal_output_level < 0 ||
+		    data.ad_locator.signal_output_level >= 64) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		voss_ad_enabled = (data.ad_locator.locator_enabled != 0);
+		voss_ad_output_signal = data.ad_locator.signal_output_level;
+		voss_ad_output_channel = data.ad_locator.channel_output;
+		voss_ad_input_channel = data.ad_locator.channel_input;
+		break;
+
+	case VIRTUAL_OSS_GET_AUDIO_DELAY_LOCATOR:
+		data.ad_locator.locator_enabled = voss_ad_enabled;
+		data.ad_locator.signal_output_level = voss_ad_output_signal;
+		data.ad_locator.channel_output = voss_ad_output_channel;
+		data.ad_locator.channel_input = voss_ad_input_channel;
+		data.ad_locator.signal_input_delay = voss_ad_last_delay;
+		break;
+
+	case VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR:
+		voss_ad_reset();
 		break;
 
 	default:

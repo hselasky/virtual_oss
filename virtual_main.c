@@ -1304,6 +1304,9 @@ main(int argc, char **argv)
 	else
 		voss_max_channels = voss_dsp_channels;
 
+	/* setup audio delay unit */
+	voss_ad_init(voss_dsp_sample_rate);
+
 	/* Create CTL device */
 
 	if (voss_ctl_device != NULL) {

@@ -535,6 +535,16 @@ virtual_oss_process(void *arg)
 
 			atomic_wakeup();
 
+			/* Run audio delay locator */
+			if (voss_ad_enabled != 0) {
+				y = (voss_dsp_samples * voss_mix_channels);
+				for (x = 0; x != y; x += voss_mix_channels) {
+					buffer_temp[x + voss_ad_output_channel] +=
+						voss_ad_getput_sample(buffer_data
+						    [x + voss_ad_input_channel]);
+				}
+			}
+
 			format_remix(buffer_temp,
 			    voss_mix_channels,
 			    voss_dsp_channels,
