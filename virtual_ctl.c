@@ -372,7 +372,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		break;
 
 	case VIRTUAL_OSS_SET_RECORDING:
-		voss_is_recording = data.val;
+		voss_is_recording = data.val ? 1 : 0;
 		break;
 
 	case VIRTUAL_OSS_GET_RECORDING:
