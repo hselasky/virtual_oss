@@ -341,6 +341,66 @@ virtual_oss_process(void *arg)
 				vblock_insert(pvb, &pvc->tx_free);
 			}
 
+			/*
+			 * -- 2.2 -- Load output samples from all loopback
+			 * devices
+			 */
+
+			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
+
+				pvb = vblock_peek(&pvc->tx_ready);
+
+				if (pvb == NULL || pvc->tx_enabled == 0)
+					continue;
+
+				format_import(pvc->format, pvb->buf_start, pvb->buf_size, buffer_data);
+
+				format_maximum(buffer_data, pvc->profile->tx_peak_value,
+				    pvc->profile->channels, samples);
+
+				dst_chans = pvc->profile->channels;
+
+				for (x = 0; x != dst_chans; x++) {
+					src = pvc->profile->tx_dst[x];
+					shift = pvc->profile->tx_shift[x];
+
+					if (pvc->profile->tx_mute[x] || src >= src_chans) {
+						continue;
+					} else {
+						if (pvc->profile->tx_pol[x]) {
+							if (shift < 0) {
+								shift = -shift;
+								for (y = 0; y != samples; y++) {
+									buffer_temp[(y * src_chans) + src] +=
+									    -(buffer_data[(y * dst_chans) + x] >> shift);
+								}
+							} else {
+								for (y = 0; y != samples; y++) {
+									buffer_temp[(y * src_chans) + src] +=
+									    -(buffer_data[(y * dst_chans) + x] << shift);
+								}
+							}
+						} else {
+							if (shift < 0) {
+								shift = -shift;
+								for (y = 0; y != samples; y++) {
+									buffer_temp[(y * src_chans) + src] +=
+									    (buffer_data[(y * dst_chans) + x] >> shift);
+								}
+							} else {
+								for (y = 0; y != samples; y++) {
+									buffer_temp[(y * src_chans) + src] +=
+									    (buffer_data[(y * dst_chans) + x] << shift);
+								}
+							}
+						}
+					}
+				}
+
+				vblock_remove(pvb, &pvc->tx_ready);
+				vblock_insert(pvb, &pvc->tx_free);
+			}
+
 			/* -- 3 -- Check for input monitoring */
 
 			TAILQ_FOREACH(pvm, &virtual_monitor_input, entry) {
@@ -467,13 +527,6 @@ virtual_oss_process(void *arg)
 
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
-				/* dump any written data */
-
-				pvb = vblock_peek(&pvc->tx_ready);
-				if (pvb != NULL) {
-					vblock_remove(pvb, &pvc->tx_ready);
-					vblock_insert(pvb, &pvc->tx_free);
-				}
 				dst_chans = pvc->profile->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
