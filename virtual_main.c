@@ -619,12 +619,18 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 	case FIONBIO:
 		break;
 	case _IOWR('P', 4, int):
+		pvc->blocksize = data.val;
+		/* FALLTHROUGH */
 	case SNDCTL_DSP_GETBLKSIZE:
-		data.val = pvc->profile->bufsize;
+		if (pvc->blocksize == 0)
+			data.val = pvc->profile->bufsize;
+		else
+			data.val = pvc->blocksize;
 		break;
 	case SNDCTL_DSP_SETFRAGMENT:
 		break;
 	case SNDCTL_DSP_SETBLKSIZE:
+		pvc->blocksize = data.val;
 		break;
 	case SNDCTL_DSP_RESET:
 		break;
@@ -849,7 +855,9 @@ vmonitor_head_t virtual_monitor_output;
 uint32_t voss_max_channels;
 uint32_t voss_mix_channels;
 uint32_t voss_dsp_samples;
-uint32_t voss_dsp_channels;
+uint32_t voss_dsp_rx_channels;
+uint32_t voss_dsp_tx_channels;
+uint32_t voss_dsp_max_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
 uint32_t voss_dsp_fmt;
@@ -1103,10 +1111,10 @@ main(int argc, char **argv)
 			    profile.channels == 0 || samples == 0)
 				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
 
-			if (voss_dsp_channels != 0 && c == 'f')
+			if (voss_dsp_max_channels != 0 && c == 'f')
 				errx(EX_USAGE, "The -f argument may only be used once");
 
-			voss_dsp_channels = profile.channels;
+			voss_dsp_max_channels = profile.channels;
 			voss_dsp_sample_rate = profile.rate;
 			voss_dsp_bits = profile.bits;
 			switch (voss_dsp_bits) {
@@ -1297,12 +1305,12 @@ main(int argc, char **argv)
 
 	/* use DSP channels as default */
 	if (voss_mix_channels == 0)
-		voss_mix_channels = voss_dsp_channels;
+		voss_mix_channels = voss_dsp_max_channels;
 
-	if (voss_mix_channels > voss_dsp_channels)
+	if (voss_mix_channels > voss_dsp_max_channels)
 		voss_max_channels = voss_mix_channels;
 	else
-		voss_max_channels = voss_dsp_channels;
+		voss_max_channels = voss_dsp_max_channels;
 
 	/* setup audio delay unit */
 	voss_ad_init(voss_dsp_sample_rate);

@@ -53,7 +53,9 @@ virtual_oss_process(void *arg)
 	int len;
 	int samples;
 	int shift;
-	int buffer_dsp_size;
+	int buffer_dsp_max_size;
+	int buffer_dsp_rx_size;
+	int buffer_dsp_tx_size;
 	int blocks;
 	int x;
 	int y;
@@ -66,12 +68,12 @@ virtual_oss_process(void *arg)
 	int64_t fmt_max;
 	uint8_t fmt_limit[VMAX_CHAN];
 
-	buffer_dsp_size = voss_dsp_samples *
-	    voss_dsp_channels * (voss_dsp_bits / 8);
+	buffer_dsp_max_size = voss_dsp_samples *
+	    voss_dsp_max_channels * (voss_dsp_bits / 8);
 
 	afmt = voss_dsp_fmt;
 
-	buffer_dsp = malloc(buffer_dsp_size);
+	buffer_dsp = malloc(buffer_dsp_max_size);
 	buffer_temp = malloc(voss_dsp_samples * voss_max_channels * 8);
 	buffer_monitor = malloc(voss_dsp_samples * voss_max_channels * 8);
 	buffer_data = malloc(voss_dsp_samples * voss_max_channels * 8);
@@ -126,18 +128,26 @@ virtual_oss_process(void *arg)
 			warn("Could not set FMT=0x%08x", blocks);
 			continue;
 		}
-		blocks = voss_dsp_channels;
+		blocks = voss_dsp_max_channels;
 		len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
-		if (len < 0) {
-			warn("Could not set CHANNELS=%d", blocks);
+		if (len < 0 || (unsigned)blocks > voss_dsp_max_channels) {
+			warn("Could not set TX CHANNELS=%d/%d", blocks, (int)voss_dsp_max_channels);
 			continue;
 		}
-		blocks = voss_dsp_channels;
+		voss_dsp_tx_channels = blocks;
+		buffer_dsp_tx_size = voss_dsp_samples *
+		    voss_dsp_tx_channels * (voss_dsp_bits / 8);
+
+		blocks = voss_dsp_max_channels;
 		len = ioctl(fd_rx, SOUND_PCM_READ_CHANNELS, &blocks);
-		if (len < 0) {
-			warn("Could not set CHANNELS=%d", blocks);
+		if (len < 0 || (unsigned)blocks > voss_dsp_max_channels) {
+			warn("Could not set RX CHANNELS=%d/%d", blocks, (int)voss_dsp_max_channels);
 			continue;
 		}
+		voss_dsp_rx_channels = blocks;
+		buffer_dsp_rx_size = voss_dsp_samples *
+		    voss_dsp_rx_channels * (voss_dsp_bits / 8);
+
 		blocks = voss_dsp_sample_rate;
 		len = ioctl(fd_rx, SNDCTL_DSP_SPEED, &blocks);
 		if (len < 0) {
@@ -155,9 +165,9 @@ virtual_oss_process(void *arg)
 			off = 0;
 			len = 0;
 
-			while (off < (int)buffer_dsp_size) {
+			while (off < (int)buffer_dsp_rx_size) {
 				len = read(fd_rx, buffer_dsp + off,
-				    buffer_dsp_size - off);
+				    buffer_dsp_rx_size - off);
 				if (len <= 0)
 					break;
 				off += len;
@@ -166,15 +176,15 @@ virtual_oss_process(void *arg)
 				break;
 
 			format_import(afmt, buffer_dsp,
-			    buffer_dsp_size, buffer_data);
+			    buffer_dsp_rx_size, buffer_data);
 
 			/* Compute master input peak values */
 
 			format_maximum(buffer_data, voss_input_peak,
-			    voss_dsp_channels, voss_dsp_samples);
+			    voss_dsp_rx_channels, voss_dsp_samples);
 
 			format_remix(buffer_data,
-			    voss_dsp_channels,
+			    voss_dsp_rx_channels,
 			    voss_mix_channels,
 			    voss_dsp_samples);
 
@@ -601,13 +611,13 @@ virtual_oss_process(void *arg)
 
 			format_remix(buffer_temp,
 			    voss_mix_channels,
-			    voss_dsp_channels,
+			    voss_dsp_tx_channels,
 			    voss_dsp_samples);
 
 			/* Compute master output peak values */
 
 			format_maximum(buffer_temp, voss_output_peak,
-			    voss_dsp_channels, voss_dsp_samples);
+			    voss_dsp_tx_channels, voss_dsp_samples);
 
 			/* Update limiter */
 			fmt_max = format_max(afmt);
@@ -622,7 +632,7 @@ virtual_oss_process(void *arg)
 			/* Export and transmit resulting audio */
 
 			format_export(afmt, buffer_temp, buffer_dsp,
-			    buffer_dsp_size, fmt_limit, voss_dsp_channels);
+			    buffer_dsp_tx_size, fmt_limit, voss_dsp_tx_channels);
 
 			atomic_unlock();
 
@@ -630,7 +640,7 @@ virtual_oss_process(void *arg)
 
 			ioctl(fd_tx, SNDCTL_DSP_GETODELAY, &blocks);
 
-			blocks /= (int)buffer_dsp_size;
+			blocks /= (int)buffer_dsp_tx_size;
 
 			/*
 			 * Simple fix for jitter: Repeat data when too
@@ -646,9 +656,9 @@ virtual_oss_process(void *arg)
 
 			while (blocks--) {
 				off = 0;
-				while (off < (int)buffer_dsp_size) {
+				while (off < (int)buffer_dsp_tx_size) {
 					len = write(fd_tx, buffer_dsp + off,
-					    (buffer_dsp_size - off));
+					    (buffer_dsp_tx_size - off));
 					if (len <= 0)
 						break;
 					off += len;

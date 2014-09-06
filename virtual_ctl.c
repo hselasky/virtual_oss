@@ -362,7 +362,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_INPUT_PEAK:
 		chan = data.master_peak.channel;
 		if (chan < 0 ||
-		    chan >= (int)voss_dsp_channels) {
+		    chan >= (int)voss_dsp_max_channels) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
