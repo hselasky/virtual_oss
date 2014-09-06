@@ -129,9 +129,15 @@ virtual_oss_process(void *arg)
 			continue;
 		}
 		blocks = voss_dsp_max_channels;
-		len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
-		if (len < 0 || (unsigned)blocks > voss_dsp_max_channels) {
-			warn("Could not set TX CHANNELS=%d/%d", blocks, (int)voss_dsp_max_channels);
+		do {
+			len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
+		} while (len < 0 && --blocks > 0);
+
+		len = ioctl(fd_tx, SOUND_PCM_READ_CHANNELS, &blocks);
+		if (len < 0 || (unsigned)blocks == 0 ||
+		    (unsigned)blocks > voss_dsp_max_channels) {
+			warn("Could not set TX CHANNELS=%d/%d",
+			    blocks, (int)voss_dsp_max_channels);
 			continue;
 		}
 		voss_dsp_tx_channels = blocks;
@@ -139,9 +145,15 @@ virtual_oss_process(void *arg)
 		    voss_dsp_tx_channels * (voss_dsp_bits / 8);
 
 		blocks = voss_dsp_max_channels;
+		do {
+			len = ioctl(fd_rx, SOUND_PCM_WRITE_CHANNELS, &blocks);
+		} while (len < 0 && --blocks > 0);
+
 		len = ioctl(fd_rx, SOUND_PCM_READ_CHANNELS, &blocks);
-		if (len < 0 || (unsigned)blocks > voss_dsp_max_channels) {
-			warn("Could not set RX CHANNELS=%d/%d", blocks, (int)voss_dsp_max_channels);
+		if (len < 0 || (unsigned)blocks == 0 ||
+		    (unsigned)blocks > voss_dsp_max_channels) {
+			warn("Could not set RX CHANNELS=%d/%d",
+			    blocks, (int)voss_dsp_max_channels);
 			continue;
 		}
 		voss_dsp_rx_channels = blocks;
