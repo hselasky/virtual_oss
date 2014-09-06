@@ -133,7 +133,7 @@ virtual_oss_process(void *arg)
 			continue;
 		}
 		blocks = voss_dsp_channels;
-		len = ioctl(fd_rx, SOUND_PCM_WRITE_CHANNELS, &blocks);
+		len = ioctl(fd_rx, SOUND_PCM_READ_CHANNELS, &blocks);
 		if (len < 0) {
 			warn("Could not set CHANNELS=%d", blocks);
 			continue;
