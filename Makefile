@@ -28,7 +28,7 @@
 
 .PATH: .
 
-VERSION=1.0.3
+VERSION=1.0.4
 PROG=virtual_oss
 MAN=
 PACKAGE=${PROG}-${VERSION}
