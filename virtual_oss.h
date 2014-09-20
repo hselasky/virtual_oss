@@ -29,7 +29,7 @@
 #include <sys/ioccom.h>
 
 #define	VIRTUAL_OSS_NAME_MAX	32
-#define	VIRTUAL_OSS_VERSION 0x00010004
+#define	VIRTUAL_OSS_VERSION 0x00010005
 #define	VIRTUAL_OSS_LIMITER_MAX	64	/* exclusive */
 
 #define	VIRTUAL_OSS_GET_VERSION		_IOR('O', 0, int)
