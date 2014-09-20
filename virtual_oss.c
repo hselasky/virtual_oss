@@ -57,6 +57,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
 	int blocks;
+	int volume;
 	int x;
 	int y;
 
@@ -103,7 +104,6 @@ virtual_oss_process(void *arg)
 			sleep(1);
 			continue;
 		}
-
 		blocks = 0;
 		len = ioctl(fd_rx, FIONBIO, &blocks);
 		if (len < 0) {
@@ -226,8 +226,7 @@ virtual_oss_process(void *arg)
 					src = pvc->profile->rx_src[x];
 					shift = pvc->profile->rx_shift[x];
 
-					if (pvc->profile->rx_mute[x] ||
-					    src >= src_chans) {
+					if (pvc->profile->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
 							buffer_temp[(y * dst_chans) + x] = 0;
 						}
@@ -298,11 +297,10 @@ virtual_oss_process(void *arg)
 				y = (voss_dsp_samples * voss_mix_channels);
 				for (x = 0; x != y; x += voss_mix_channels) {
 					buffer_temp[x + voss_ad_output_channel] +=
-						voss_ad_getput_sample(buffer_data
-						    [x + voss_ad_input_channel]);
+					    voss_ad_getput_sample(buffer_data
+					    [x + voss_ad_input_channel]);
 				}
 			}
-
 			/*
 			 * -- 2.1 -- Load output samples from all client
 			 * devices
@@ -324,7 +322,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->tx_dst[x];
-					shift = pvc->profile->tx_shift[x];
+					shift = pvc->profile->tx_shift[x] - 7;
+					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
@@ -334,12 +333,14 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -(buffer_data[(y * dst_chans) + x] >> shift);
+									    -((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -(buffer_data[(y * dst_chans) + x] << shift);
+									    -((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) << shift);
 								}
 							}
 						} else {
@@ -347,12 +348,14 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    (buffer_data[(y * dst_chans) + x] >> shift);
+									    ((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    (buffer_data[(y * dst_chans) + x] << shift);
+									    ((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) << shift);
 								}
 							}
 						}
@@ -384,7 +387,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->tx_dst[x];
-					shift = pvc->profile->tx_shift[x];
+					shift = pvc->profile->tx_shift[x] - 7;
+					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
@@ -394,12 +398,14 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -(buffer_data[(y * dst_chans) + x] >> shift);
+									    -((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -(buffer_data[(y * dst_chans) + x] << shift);
+									    -((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) << shift);
 								}
 							}
 						} else {
@@ -407,12 +413,14 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    (buffer_data[(y * dst_chans) + x] >> shift);
+									    ((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    (buffer_data[(y * dst_chans) + x] << shift);
+									    ((buffer_data[(y * dst_chans) + x] *
+									    (int64_t)volume) << shift);
 								}
 							}
 						}

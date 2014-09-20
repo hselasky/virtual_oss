@@ -35,33 +35,25 @@ struct virtual_profile;
 {
 #endif
 
-typedef TAILQ_ENTRY(virtual_profile)
-vprofile_entry_t;
-typedef TAILQ_HEAD(, virtual_profile)
-vprofile_head_t;
+typedef TAILQ_ENTRY(virtual_profile) vprofile_entry_t;
+typedef TAILQ_HEAD(, virtual_profile) vprofile_head_t;
 typedef struct virtual_profile vprofile_t;
 
 struct virtual_block;
 
-typedef TAILQ_ENTRY(virtual_block)
-vblock_entry_t;
-typedef TAILQ_HEAD(, virtual_block)
-vblock_head_t;
+typedef TAILQ_ENTRY(virtual_block) vblock_entry_t;
+typedef TAILQ_HEAD(, virtual_block) vblock_head_t;
 typedef struct virtual_block vblock_t;
 
 struct virtual_client;
 
-typedef TAILQ_ENTRY(virtual_client)
-vclient_entry_t;
-typedef TAILQ_HEAD(, virtual_client)
-vclient_head_t;
+typedef TAILQ_ENTRY(virtual_client) vclient_entry_t;
+typedef TAILQ_HEAD(, virtual_client) vclient_head_t;
 typedef struct virtual_client vclient_t;
 
 struct virtual_monitor;
-typedef TAILQ_ENTRY(virtual_monitor)
-vmonitor_entry_t;
-typedef TAILQ_HEAD(, virtual_monitor)
-vmonitor_head_t;
+typedef TAILQ_ENTRY(virtual_monitor) vmonitor_entry_t;
+typedef TAILQ_HEAD(, virtual_monitor) vmonitor_head_t;
 typedef struct virtual_monitor vmonitor_t;
 
 #if 0
@@ -113,6 +105,7 @@ struct virtual_client {
 	int	rx_enabled;
 	int	tx_enabled;
 	int	blocksize;
+	int	tx_volume;
 	uint32_t rec_delay;
 };
 

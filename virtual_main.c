@@ -223,6 +223,8 @@ vclient_alloc(uint32_t bufsize)
 
 	memset(pvc, 0, sizeof(*pvc));
 
+	pvc->tx_volume = 128;
+
 	vblock_init(&pvc->rx_ready);
 	vblock_init(&pvc->rx_free);
 	vblock_init(&pvc->tx_ready);
@@ -553,6 +555,7 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 
 	int len;
 	int error;
+	int temp;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
 	if (pvc == NULL)
@@ -590,7 +593,8 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 		break;
 	case SNDCTL_CARDINFO:
 		memset(&data.card_info, 0, sizeof(data.card_info));
-		strlcpy(data.card_info.shortname, pvc->profile->name, sizeof(data.card_info.shortname));
+		strlcpy(data.card_info.shortname, pvc->profile->name,
+		    sizeof(data.card_info.shortname));
 		break;
 	case SNDCTL_AUDIOINFO:
 	case SNDCTL_AUDIOINFO_EX:
@@ -740,8 +744,14 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_SETDUPLEX:
 		break;
 	case SNDCTL_DSP_GETRECVOL:
+		data.val = 128 | (128 << 8);
+		break;
 	case SNDCTL_DSP_GETPLAYVOL:
-		data.val = 255;
+		data.val = (pvc->tx_volume & 0x00FF) |
+		    ((pvc->tx_volume << 8) & 0xFF00);
+		break;
+	case SNDCTL_DSP_SETPLAYVOL:
+		pvc->tx_volume = (data.val & 0xFF);
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
