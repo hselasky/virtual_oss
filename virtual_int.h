@@ -29,6 +29,10 @@
 #define	VMAX_CHAN 64
 #define	VMAX_FRAGS 16
 
+#define	VTYPE_OSS_DAT 0
+#define	VTYPE_WAV_HDR 1
+#define	VTYPE_WAV_DAT 2
+
 struct virtual_profile;
 
 #if 0
@@ -64,7 +68,8 @@ struct cuse_methods;
 
 struct virtual_profile {
 	vprofile_entry_t entry;
-	const char *name;
+	const char *oss_name;
+	const char *wav_name;
 	vclient_head_t *pvc_head;
 	int64_t	rx_peak_value[VMAX_CHAN];
 	int64_t	tx_peak_value[VMAX_CHAN];
@@ -106,6 +111,7 @@ struct virtual_client {
 	int	tx_enabled;
 	int	blocksize;
 	int	tx_volume;
+	int	type;		/* VTYPE_XXX */
 	uint32_t rec_delay;
 };
 

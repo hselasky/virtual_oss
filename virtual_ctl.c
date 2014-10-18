@@ -36,10 +36,10 @@
 
 #include "virtual_oss.h"
 
-uint8_t voss_output_group[VMAX_CHAN];
-uint8_t voss_output_limiter[VMAX_CHAN];
-int64_t voss_output_peak[VMAX_CHAN];
-int64_t voss_input_peak[VMAX_CHAN];
+uint8_t	voss_output_group[VMAX_CHAN];
+uint8_t	voss_output_limiter[VMAX_CHAN];
+int64_t	voss_output_peak[VMAX_CHAN];
+int64_t	voss_input_peak[VMAX_CHAN];
 
 static int
 vctl_open(struct cuse_dev *pdev, int fflags)
@@ -147,7 +147,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		strlcpy(data.io_info.name, pvp->name, sizeof(data.io_info.name));
+		strlcpy(data.io_info.name, pvp->oss_name, sizeof(data.io_info.name));
 		chan = data.io_info.channel;
 		data.io_info.rx_amp = pvp->rx_shift[chan];
 		data.io_info.tx_amp = pvp->tx_shift[chan];
@@ -183,7 +183,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvp->tx_mute[chan] = data.io_info.tx_mute ? 1 : 0;
 		pvp->rx_pol[chan] = data.io_info.rx_pol ? 1 : 0;
 		pvp->tx_pol[chan] = data.io_info.tx_pol ? 1 : 0;
-		pvp->rec_delay = data.io_info.rx_delay * 
+		pvp->rec_delay = data.io_info.rx_delay *
 		    (pvp->channels * (pvp->bits / 8));
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_INFO:
@@ -252,7 +252,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		strlcpy(data.io_peak.name, pvp->name, sizeof(data.io_peak.name));
+		strlcpy(data.io_peak.name, pvp->oss_name, sizeof(data.io_peak.name));
 		chan = data.io_peak.channel;
 		data.io_peak.rx_peak_value = pvp->rx_peak_value[chan];
 		pvp->rx_peak_value[chan] = 0;
@@ -297,7 +297,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_SET_OUTPUT_CHN_GRP:
 		if (data.out_chg.channel < 0 ||
 		    data.out_chg.channel >= (int)voss_max_channels ||
-		    data.out_chg.group < 0 || 
+		    data.out_chg.group < 0 ||
 		    data.out_chg.group >= VMAX_CHAN) {
 			error = CUSE_ERR_INVALID;
 			break;

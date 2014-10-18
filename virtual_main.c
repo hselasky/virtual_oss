@@ -280,7 +280,7 @@ vclient_get_fmts(vclient_t *pvc)
 }
 
 static int
-vclient_open(struct cuse_dev *pdev, int fflags)
+vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 {
 	vclient_t *pvc;
 	vprofile_t *pvp;
@@ -297,6 +297,8 @@ vclient_open(struct cuse_dev *pdev, int fflags)
 	pvc->format = vclient_get_fmts(pvc) &
 	    (AFMT_S8 | AFMT_S16_LE | AFMT_S24_LE | AFMT_S32_LE);
 
+	pvc->type = type;
+
 	cuse_dev_set_per_file_handle(pdev, pvc);
 
 	atomic_lock();
@@ -304,6 +306,18 @@ vclient_open(struct cuse_dev *pdev, int fflags)
 	atomic_unlock();
 
 	return (0);
+}
+
+static int
+vclient_open_wav(struct cuse_dev *pdev, int fflags)
+{
+	vclient_open_sub(pdev, fflags, VTYPE_WAV_HDR);
+}
+
+static int
+vclient_open_oss(struct cuse_dev *pdev, int fflags)
+{
+	vclient_open_sub(pdev, fflags, VTYPE_OSS_DAT);
 }
 
 static int
@@ -365,6 +379,117 @@ vclient_read_silence_locked(struct cuse_dev *pdev, void *peer_ptr, int len, vcli
 }
 
 static int
+vclient_generate_wav_header_locked(vclient_t *pvc)
+{
+	vblock_t *pvb;
+	uint8_t *ptr;
+	uint32_t len;
+
+	pvb = vblock_peek(&pvc->rx_free);
+	if (pvb == NULL)
+		return (CUSE_ERR_NO_MEMORY);
+
+	ptr = pvb->buf_start;
+	len = pvb->buf_size;
+	if (len < 44)
+		return (CUSE_ERR_INVALID);
+
+	vblock_remove(pvb, &pvc->rx_free);
+	vblock_insert(pvb, &pvc->rx_ready);
+
+	/* clear block */
+	memset(ptr, 0, len);
+
+	/* fill out data header */
+	ptr[len - 8] = 'd';
+	ptr[len - 7] = 'a';
+	ptr[len - 6] = 't';
+	ptr[len - 5] = 'a';
+
+	/* magic for unspecified length */
+	ptr[len - 4] = 0x00;
+	ptr[len - 3] = 0xF0;
+	ptr[len - 2] = 0xFF;
+	ptr[len - 1] = 0x7F;
+
+	/* fill out header */
+	*ptr++ = 'R';
+	*ptr++ = 'I';
+	*ptr++ = 'F';
+	*ptr++ = 'F';
+
+	/* total chunk size - unknown */
+
+	*ptr++ = 0;
+	*ptr++ = 0;
+	*ptr++ = 0;
+	*ptr++ = 0;
+
+	*ptr++ = 'W';
+	*ptr++ = 'A';
+	*ptr++ = 'V';
+	*ptr++ = 'E';
+	*ptr++ = 'f';
+	*ptr++ = 'm';
+	*ptr++ = 't';
+	*ptr++ = ' ';
+
+	/* make sure header fits in PCM block */
+	len -= 28;
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+	*ptr++ = len >> 16;
+	*ptr++ = len >> 24;
+
+	/* audioformat = PCM */
+
+	*ptr++ = 0x01;
+	*ptr++ = 0x00;
+
+	/* number of channels */
+
+	len = pvc->profile->channels;
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+
+	/* sample rate */
+
+	len = pvc->profile->rate;
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+	*ptr++ = len >> 16;
+	*ptr++ = len >> 24;
+
+	/* byte rate */
+
+	len = pvc->profile->rate * pvc->profile->channels * (pvc->profile->bits / 8);
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+	*ptr++ = len >> 16;
+	*ptr++ = len >> 24;
+
+	/* block align */
+
+	len = pvc->profile->channels * (pvc->profile->bits / 8);
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+
+	/* bits per sample */
+
+	len = pvc->profile->bits;
+
+	*ptr++ = len;
+	*ptr++ = len >> 8;
+
+	return (0);
+}
+
+static int
 vclient_read(struct cuse_dev *pdev, int fflags,
     void *peer_ptr, int len)
 {
@@ -387,6 +512,15 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	}
 	pvc->rx_enabled = 1;
 
+	if (pvc->type == VTYPE_WAV_HDR) {
+		retval = vclient_generate_wav_header_locked(pvc);
+		if (retval != 0) {
+			atomic_unlock();
+			return (retval);
+		}
+		/* only write header once */
+		pvc->type = VTYPE_WAV_DAT;
+	}
 	retval = vclient_read_silence_locked(pdev, peer_ptr, len, pvc);
 	if (retval != 0) {
 		atomic_unlock();
@@ -448,7 +582,7 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 }
 
 static int
-vclient_write(struct cuse_dev *pdev, int fflags,
+vclient_write_oss(struct cuse_dev *pdev, int fflags,
     const void *peer_ptr, int len)
 {
 	vclient_t *pvc;
@@ -534,7 +668,14 @@ vclient_write(struct cuse_dev *pdev, int fflags,
 }
 
 static int
-vclient_ioctl(struct cuse_dev *pdev, int fflags,
+vclient_write_wav(struct cuse_dev *pdev, int fflags,
+    const void *peer_ptr, int len)
+{
+	return (CUSE_ERR_INVALID);
+}
+
+static int
+vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
     unsigned long cmd, void *peer_data)
 {
 	union {
@@ -593,14 +734,15 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 		break;
 	case SNDCTL_CARDINFO:
 		memset(&data.card_info, 0, sizeof(data.card_info));
-		strlcpy(data.card_info.shortname, pvc->profile->name,
+		strlcpy(data.card_info.shortname, pvc->profile->oss_name,
 		    sizeof(data.card_info.shortname));
 		break;
 	case SNDCTL_AUDIOINFO:
 	case SNDCTL_AUDIOINFO_EX:
 	case SNDCTL_ENGINEINFO:
 		memset(&data.audioinfo, 0, sizeof(data.audioinfo));
-		strlcpy(data.audioinfo.name, pvc->profile->name, sizeof(data.audioinfo.name));
+		strlcpy(data.audioinfo.name, pvc->profile->oss_name,
+		    sizeof(data.audioinfo.name));
 		data.audioinfo.caps = DSP_CAP_INPUT | DSP_CAP_OUTPUT;
 		data.audioinfo.iformats = vclient_get_fmts(pvc);
 		data.audioinfo.oformats = vclient_get_fmts(pvc);
@@ -819,6 +961,64 @@ vclient_ioctl(struct cuse_dev *pdev, int fflags,
 }
 
 static int
+vclient_ioctl_wav(struct cuse_dev *pdev, int fflags,
+    unsigned long cmd, void *peer_data)
+{
+	union {
+		int	val;
+	}     data;
+
+	vclient_t *pvc;
+	vblock_t *pvb;
+
+	int len;
+	int error;
+
+	pvc = cuse_dev_get_per_file_handle(pdev);
+	if (pvc == NULL)
+		return (CUSE_ERR_INVALID);
+
+	len = IOCPARM_LEN(cmd);
+
+	if (len < 0 || len > (int)sizeof(data))
+		return (CUSE_ERR_INVALID);
+
+	if (cmd & IOC_IN) {
+		error = cuse_copy_in(peer_data, &data, len);
+		if (error)
+			return (error);
+	} else {
+		error = 0;
+	}
+
+	atomic_lock();
+
+	switch (cmd) {
+	case FIONREAD:
+		pvb = vblock_peek(&pvc->rx_ready);
+		if (pvb != NULL)
+			data.val = pvb->buf_size - pvb->buf_pos;
+		else
+			data.val = 0;
+		break;
+	case FIOASYNC:
+	case SNDCTL_DSP_NONBLOCK:
+	case FIONBIO:
+		break;
+	default:
+		error = CUSE_ERR_INVALID;
+		break;
+	}
+	atomic_unlock();
+
+	if (error == 0) {
+		if (cmd & IOC_OUT)
+			error = cuse_copy_out(&data, peer_data, len);
+	}
+	return (error);
+}
+
+static int
 vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 {
 	vclient_t *pvc;
@@ -844,12 +1044,21 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 	return (retval);
 }
 
-static const struct cuse_methods vclient_methods = {
-	.cm_open = vclient_open,
+static const struct cuse_methods vclient_oss_methods = {
+	.cm_open = vclient_open_oss,
 	.cm_close = vclient_close,
 	.cm_read = vclient_read,
-	.cm_write = vclient_write,
-	.cm_ioctl = vclient_ioctl,
+	.cm_write = vclient_write_oss,
+	.cm_ioctl = vclient_ioctl_oss,
+	.cm_poll = vclient_poll,
+};
+
+static const struct cuse_methods vclient_wav_methods = {
+	.cm_open = vclient_open_wav,
+	.cm_close = vclient_close,
+	.cm_read = vclient_read,
+	.cm_write = vclient_write_wav,
+	.cm_ioctl = vclient_ioctl_wav,
 	.cm_poll = vclient_poll,
 };
 
@@ -887,9 +1096,9 @@ usage(void)
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
 	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
 	    "\t" "-P /dev/dsp3 -R /dev/dsp1 \\\n"
-	    "\t" "-c 1 -m 0,0 -d vdsp.0 \\\n"
-	    "\t" "-c 2 -m 0,0,1,1 -d vdsp.1 \\\n"
-	    "\t" "-c 2 -m 0,0,1,1 -l vdsp.loopback \\\n"
+	    "\t" "-c 1 -m 0,0 [-w wav.0] -d vdsp.0 \\\n"
+	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
+	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
 	    "\t" "-s <samples> \\\n"
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
@@ -915,7 +1124,7 @@ usage(void)
 }
 
 static void
-dup_profile(const vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
+dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 {
 	vprofile_t *ptr;
 	struct cuse_dev *pdev;
@@ -945,11 +1154,20 @@ dup_profile(const vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 		ptr->rx_pol[x] = pol;
 	}
 
-	pdev = cuse_dev_create(&vclient_methods, ptr, NULL,
-	    0, 0, voss_dsp_perm, ptr->name);
-	if (pdev == NULL)
-		errx(EX_USAGE, "Could not create '/dev/%s'", ptr->name);
-
+	/* create DSP device */
+	if (ptr->oss_name != NULL && ptr->oss_name[0] != 0) {
+		pdev = cuse_dev_create(&vclient_oss_methods, ptr, NULL,
+		    0, 0, voss_dsp_perm, ptr->oss_name);
+		if (pdev == NULL)
+			errx(EX_USAGE, "DSP: Could not create '/dev/%s'", ptr->oss_name);
+	}
+	/* create WAV device */
+	if (ptr->wav_name != NULL && ptr->wav_name[0] != 0) {
+		pdev = cuse_dev_create(&vclient_wav_methods, ptr, NULL,
+		    0, 0, voss_dsp_perm, ptr->wav_name);
+		if (pdev == NULL)
+			errx(EX_USAGE, "WAV: Could not create '/dev/%s'", ptr->wav_name);
+	}
 	atomic_lock();
 	if (ptr->pvc_head == &virtual_client_head) {
 		TAILQ_INSERT_TAIL(&virtual_profile_client_head, ptr, entry);
@@ -959,6 +1177,10 @@ dup_profile(const vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 	atomic_unlock();
 
 	voss_dups++;
+
+	/* need new names next time */
+	pvp->oss_name = NULL;
+	pvp->wav_name = NULL;
 }
 
 static void
@@ -991,7 +1213,7 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:";
+	const char *optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:";
 	struct virtual_profile profile;
 	struct rtprio rtp;
 
@@ -1150,8 +1372,11 @@ main(int argc, char **argv)
 			if (c == 'f' || c == 'P')
 				voss_dsp_tx_device = optarg;
 			break;
+		case 'w':
+			profile.wav_name = optarg;
+			break;
 		case 'd':
-			profile.name = optarg;
+			profile.oss_name = optarg;
 			profile.pvc_head = &virtual_client_head;
 
 			if (profile.bits == 0 || profile.rate == 0 ||
@@ -1166,7 +1391,7 @@ main(int argc, char **argv)
 			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
 		case 'l':
-			profile.name = optarg;
+			profile.oss_name = optarg;
 			profile.pvc_head = &virtual_loopback_head;
 
 			if (profile.bits == 0 || profile.rate == 0 ||

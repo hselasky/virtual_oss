@@ -275,7 +275,8 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != VMAX_CHAN; x++)
 					fmt_limit[x] = pvc->profile->limiter;
 
-				if (pvb == NULL || pvc->rx_enabled == 0 || voss_is_recording == 0)
+				if (pvb == NULL || pvc->rx_enabled == 0 ||
+				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
 					continue;
 
 				format_export(pvc->format, buffer_temp,
@@ -616,7 +617,8 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != VMAX_CHAN; x++)
 					fmt_limit[x] = pvc->profile->limiter;
 
-				if (pvb == NULL || pvc->rx_enabled == 0 || voss_is_recording == 0)
+				if (pvb == NULL || pvc->rx_enabled == 0 ||
+				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
