@@ -802,10 +802,11 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 				data.val = 1;
 			else
 				data.val = pvc->profile->channels;
-		} else if (data.val == 1) {
-			pvc->mono = 1;
 		} else if (pvc->profile->channels == data.val) {
-			pvc->mono = 0;
+			if (data.val == 1) 
+				pvc->mono = 1;
+			else
+				pvc->mono = 0;
 		} else {
 			error = CUSE_ERR_INVALID;
 		}
