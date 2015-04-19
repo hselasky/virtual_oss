@@ -153,7 +153,7 @@ vblock_move(vblock_head_t *from, vblock_head_t *to)
 }
 
 static int
-vblock_count_bytes(vblock_head_t *phead, int is_tx)
+vblock_count_bytes(vblock_head_t *phead, vclient_t *pvc, int is_tx)
 {
 	vblock_t *pvb;
 	int retval = 0;
@@ -162,7 +162,7 @@ vblock_count_bytes(vblock_head_t *phead, int is_tx)
 		if (is_tx)
 			retval += pvb->buf_pos;
 		else
-			retval += pvb->buf_size - pvb->buf_pos;
+			retval += vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 	}
 	return (retval);
 }
@@ -171,6 +171,15 @@ vblock_t *
 vblock_peek(vblock_head_t *phead)
 {
 	return (TAILQ_FIRST(phead));
+}
+
+uint32_t
+vblock_buf_size(vblock_t *pvb, vclient_t *pvc)
+{
+	if (pvc->profile->channels != pvc->channels)
+		return ((pvb->buf_size / pvc->profile->channels) * pvc->channels);
+	else
+		return (pvb->buf_size);
 }
 
 vmonitor_t *
@@ -288,12 +297,15 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 	pvp = cuse_dev_get_priv0(pdev);
 
 	pvc = vclient_alloc(pvp->bufsize);
-
 	if (pvc == NULL)
 		return (CUSE_ERR_NO_MEMORY);
 
 	pvc->profile = pvp;
 
+	/* set default number of channels */
+	pvc->channels = pvp->channels;
+
+	/* set default formats */
 	pvc->format = vclient_get_fmts(pvc) &
 	    (AFMT_S8 | AFMT_S16_LE | AFMT_S24_LE | AFMT_S32_LE);
 
@@ -390,7 +402,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 		return (CUSE_ERR_NO_MEMORY);
 
 	ptr = pvb->buf_start;
-	len = pvb->buf_size;
+	len = vblock_buf_size(pvb, pvc);
 	if (len < 44)
 		return (CUSE_ERR_INVALID);
 
@@ -449,7 +461,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* number of channels */
 
-	len = pvc->profile->channels;
+	len = pvc->channels;
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -465,7 +477,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* byte rate */
 
-	len = pvc->profile->rate * pvc->profile->channels * (pvc->profile->bits / 8);
+	len = pvc->profile->rate * pvc->channels * (pvc->profile->bits / 8);
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -474,7 +486,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* block align */
 
-	len = pvc->profile->channels * (pvc->profile->bits / 8);
+	len = pvc->channels * (pvc->profile->bits / 8);
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -543,7 +555,7 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 			}
 			continue;
 		}
-		delta = pvb->buf_size - pvb->buf_pos;
+		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		if (delta == 0) {
 			vblock_remove(pvb, &pvc->rx_ready);
 			vblock_insert(pvb, &pvc->rx_free);
@@ -570,7 +582,7 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 		retval += delta;
 		len -= delta;
 
-		delta = pvb->buf_size - pvb->buf_pos;
+		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		if (delta == 0) {
 			vblock_remove(pvb, &pvc->rx_ready);
 			vblock_insert(pvb, &pvc->rx_free);
@@ -629,7 +641,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			}
 			continue;
 		}
-		delta = pvb->buf_size - pvb->buf_pos;
+		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		if (delta == 0) {
 			vblock_remove(pvb, &pvc->tx_free);
 			vblock_insert(pvb, &pvc->tx_ready);
@@ -656,7 +668,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 		retval += delta;
 		len -= delta;
 
-		delta = pvb->buf_size - pvb->buf_pos;
+		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		if (delta == 0) {
 			vblock_remove(pvb, &pvc->tx_free);
 			vblock_insert(pvb, &pvc->tx_ready);
@@ -756,7 +768,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	case FIONREAD:
 		pvb = vblock_peek(&pvc->rx_ready);
 		if (pvb != NULL)
-			data.val = pvb->buf_size - pvb->buf_pos;
+			data.val = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		else
 			data.val = 0;
 		break;
@@ -789,7 +801,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.val = (int)pvc->profile->rate;
 		break;
 	case SNDCTL_DSP_STEREO:
-		pvc->mono = (data.val == 0);
+		data.val = (pvc->channels == 1);
 		break;
 	case SOUND_PCM_WRITE_CHANNELS:
 		if (data.val < 0) {
@@ -798,24 +810,24 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 			break;
 		}
 		if (data.val == 0) {
-			if (pvc->mono != 0)
-				data.val = 1;
-			else
-				data.val = pvc->profile->channels;
-		} else if (pvc->profile->channels == data.val) {
-			if (data.val == 1) 
-				pvc->mono = 1;
-			else
-				pvc->mono = 0;
+			data.val = pvc->channels;
+		} else if (pvc->profile->channels >= data.val) {
+			if (pvc->channels == data.val)
+				break;
+			pvc->channels = data.val;
+
+			/* reset all the RX buffers */
+			vblock_move(&pvc->rx_free, &pvc->rx_ready);
+			vblock_move(&pvc->rx_ready, &pvc->rx_free);
+			/* reset all the TX buffers */
+			vblock_move(&pvc->tx_free, &pvc->tx_ready);
+			vblock_move(&pvc->tx_ready, &pvc->tx_free);
 		} else {
 			error = CUSE_ERR_INVALID;
 		}
 		break;
 	case SOUND_PCM_READ_CHANNELS:
-		if (pvc->mono != 0)
-			data.val = 1;
-		else
-			data.val = pvc->profile->channels;
+		data.val = pvc->channels;
 		break;
 	case AIOGFMT:
 	case SNDCTL_DSP_GETFMTS:
@@ -836,14 +848,14 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		break;
 	case SNDCTL_DSP_GETISPACE:
 		data.buf_info.bytes =
-		    vblock_count_bytes(&pvc->rx_ready, 0);
+		    vblock_count_bytes(&pvc->rx_ready, pvc, 0);
 		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
 		data.buf_info.fragstotal = VMAX_FRAGS;
 		data.buf_info.fragsize = pvc->profile->bufsize;
 		break;
 	case SNDCTL_DSP_GETOSPACE:
 		data.buf_info.bytes =
-		    vblock_count_bytes(&pvc->tx_free, 0);
+		    vblock_count_bytes(&pvc->tx_free, pvc, 0);
 		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
 		data.buf_info.fragstotal = VMAX_FRAGS;
 		data.buf_info.fragsize = pvc->profile->bufsize;
@@ -879,8 +891,8 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 			data.val |= PCM_ENABLE_OUTPUT;
 		break;
 	case SNDCTL_DSP_GETODELAY:
-		data.val = vblock_count_bytes(&pvc->tx_ready, 0) +
-		    vblock_count_bytes(&pvc->tx_free, 1);
+		data.val = vblock_count_bytes(&pvc->tx_ready, pvc, 0) +
+		    vblock_count_bytes(&pvc->tx_free, pvc, 1);
 		break;
 	case SNDCTL_DSP_POST:
 		break;
@@ -900,15 +912,15 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
 		data.oss_count.samples = ((16 *
 		    pvc->profile->bufsize) / pvc->profile->bits);
-		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->tx_ready, 0) +
-		    vblock_count_bytes(&pvc->tx_free, 1))) / pvc->profile->bits;
+		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->tx_ready, pvc, 0) +
+		    vblock_count_bytes(&pvc->tx_free, pvc, 1))) / pvc->profile->bits;
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
 		data.oss_count.samples = ((16 *
 		    pvc->profile->bufsize) / pvc->profile->bits);
-		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->rx_ready, 0) +
-		    vblock_count_bytes(&pvc->rx_free, 0)) / pvc->profile->bits);
+		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->rx_ready, pvc, 0) +
+		    vblock_count_bytes(&pvc->rx_free, pvc, 0)) / pvc->profile->bits);
 		break;
 	case SNDCTL_DSP_HALT_OUTPUT:
 		pvc->tx_enabled = 0;
@@ -998,7 +1010,7 @@ vclient_ioctl_wav(struct cuse_dev *pdev, int fflags,
 	case FIONREAD:
 		pvb = vblock_peek(&pvc->rx_ready);
 		if (pvb != NULL)
-			data.val = pvb->buf_size - pvb->buf_pos;
+			data.val = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 		else
 			data.val = 0;
 		break;

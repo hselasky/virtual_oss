@@ -105,7 +105,7 @@ struct virtual_client {
 	struct virtual_profile *profile;
 	int	rx_busy;
 	int	tx_busy;
-	int	mono;
+	int	channels;
 	int	format;
 	int	rx_enabled;
 	int	tx_enabled;
@@ -162,6 +162,8 @@ extern void atomic_wakeup(void);
 extern vblock_t *vblock_peek(vblock_head_t *);
 extern void vblock_insert(vblock_t *, vblock_head_t *);
 extern void vblock_remove(vblock_t *, vblock_head_t *);
+extern uint32_t vblock_buf_size(vblock_t *, vclient_t *);
+
 extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);

@@ -58,6 +58,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_tx_size;
 	int blocks;
 	int volume;
+	int x_off;
 	int x;
 	int y;
 
@@ -216,7 +217,7 @@ virtual_oss_process(void *arg)
 
 			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
 
-				dst_chans = pvc->profile->channels;
+				dst_chans = pvc->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
 				if (dst_chans > src_chans)
@@ -262,7 +263,7 @@ virtual_oss_process(void *arg)
 				}
 
 				format_maximum(buffer_temp, pvc->profile->rx_peak_value,
-				    pvc->profile->channels, samples);
+				    pvc->channels, samples);
 
 				/* Update limiter */
 				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
@@ -280,8 +281,8 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_temp,
-				    pvb->buf_start, pvb->buf_size,
-				    fmt_limit, pvc->profile->channels);
+				    pvb->buf_start, vblock_buf_size(pvb, pvc),
+				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
 				vblock_insert(pvb, &pvc->rx_ready);
@@ -314,14 +315,15 @@ virtual_oss_process(void *arg)
 				if (pvb == NULL || pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start, pvb->buf_size, buffer_data);
+				format_import(pvc->format, pvb->buf_start,
+				    vblock_buf_size(pvb, pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
-				    pvc->profile->channels, samples);
+				    pvc->channels, samples);
 
-				dst_chans = pvc->profile->channels;
+				dst_chans = pvc->channels;
 
-				for (x = 0; x != dst_chans; x++) {
+				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
 					shift = pvc->profile->tx_shift[x] - 7;
 					volume = pvc->tx_volume;
@@ -329,18 +331,21 @@ virtual_oss_process(void *arg)
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
+						if (x_off >= pvc->channels)
+							x_off -= pvc->channels;
+
 						if (pvc->profile->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x] *
+									    -((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x] *
+									    -((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) << shift);
 								}
 							}
@@ -349,13 +354,13 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x] *
+									    ((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x] *
+									    ((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) << shift);
 								}
 							}
@@ -379,14 +384,14 @@ virtual_oss_process(void *arg)
 				if (pvb == NULL || pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start, pvb->buf_size, buffer_data);
+				format_import(pvc->format, pvb->buf_start, vblock_buf_size(pvb, pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
-				    pvc->profile->channels, samples);
+				    pvc->channels, samples);
 
-				dst_chans = pvc->profile->channels;
+				dst_chans = pvc->channels;
 
-				for (x = 0; x != dst_chans; x++) {
+				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
 					shift = pvc->profile->tx_shift[x] - 7;
 					volume = pvc->tx_volume;
@@ -394,18 +399,21 @@ virtual_oss_process(void *arg)
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
+						if (x_off >= pvc->channels)
+							x_off -= pvc->channels;
+
 						if (pvc->profile->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x] *
+									    -((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x] *
+									    -((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) << shift);
 								}
 							}
@@ -414,13 +422,13 @@ virtual_oss_process(void *arg)
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x] *
+									    ((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) >> shift);
 								}
 							} else {
 								for (y = 0; y != samples; y++) {
 									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x] *
+									    ((buffer_data[(y * dst_chans) + x_off] *
 									    (int64_t)volume) << shift);
 								}
 							}
@@ -558,7 +566,7 @@ virtual_oss_process(void *arg)
 
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
-				dst_chans = pvc->profile->channels;
+				dst_chans = pvc->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
 				if (dst_chans > src_chans)
@@ -604,7 +612,7 @@ virtual_oss_process(void *arg)
 				}
 
 				format_maximum(buffer_monitor, pvc->profile->rx_peak_value,
-				    pvc->profile->channels, samples);
+				    pvc->channels, samples);
 
 				/* Update limiter */
 				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
@@ -622,8 +630,8 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
-				    pvb->buf_start, pvb->buf_size,
-				    fmt_limit, pvc->profile->channels);
+				    pvb->buf_start, vblock_buf_size(pvb, pvc),
+				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
 				vblock_insert(pvb, &pvc->rx_ready);
