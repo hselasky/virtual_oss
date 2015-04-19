@@ -113,6 +113,7 @@ struct virtual_client {
 	int	tx_volume;
 	int	type;		/* VTYPE_XXX */
 	uint32_t rec_delay;
+	uint32_t noise_rem;
 };
 
 struct virtual_monitor {
@@ -163,6 +164,8 @@ extern vblock_t *vblock_peek(vblock_head_t *);
 extern void vblock_insert(vblock_t *, vblock_head_t *);
 extern void vblock_remove(vblock_t *, vblock_head_t *);
 extern uint32_t vblock_buf_size(vblock_t *, vclient_t *);
+
+extern int64_t vclient_noise(vclient_t *, int64_t, int8_t);
 
 extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 

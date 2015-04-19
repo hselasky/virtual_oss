@@ -210,6 +210,36 @@ vmonitor_alloc(int *pid, vmonitor_head_t *phead)
 	return (pvm);
 }
 
+int64_t
+vclient_noise(vclient_t *pvc, int64_t volume, int8_t shift)
+{
+	const uint32_t prime = 0xFFFF1DU;
+	int64_t temp;
+
+	/* compute next noise sample */
+	temp = pvc->noise_rem;
+	if (temp & 1)
+		temp += prime;
+	temp /= 2;
+	pvc->noise_rem = temp;
+
+	/* unsigned to signed conversion */
+	temp ^= 0x800000ULL;
+	if (temp & 0x800000U)
+		temp |= -0x800000ULL;
+
+	/* properly amplify */
+	temp *= volume;
+
+	/* properly shift noise */
+	if (shift > (23 + 7))
+		temp <<= (shift - (23 + 7));
+	else
+		temp >>= ((23 + 7) - shift);
+
+	return (temp);
+}
+
 static void
 vclient_free(vclient_t *pvc)
 {
@@ -233,6 +263,7 @@ vclient_alloc(uint32_t bufsize)
 	memset(pvc, 0, sizeof(*pvc));
 
 	pvc->tx_volume = 128;
+	pvc->noise_rem = 1;
 
 	vblock_init(&pvc->rx_ready);
 	vblock_init(&pvc->rx_free);

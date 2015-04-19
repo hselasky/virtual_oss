@@ -53,6 +53,7 @@ virtual_oss_process(void *arg)
 	int len;
 	int samples;
 	int shift;
+	int shift_orig;
 	int buffer_dsp_max_size;
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
@@ -326,6 +327,7 @@ virtual_oss_process(void *arg)
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
 					shift = pvc->profile->tx_shift[x] - 7;
+					shift_orig = pvc->profile->tx_shift[x];
 					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
@@ -365,6 +367,10 @@ virtual_oss_process(void *arg)
 								}
 							}
 						}
+						if (shift_orig > 0) {
+							buffer_temp[(y * src_chans) + src] +=
+							    vclient_noise(pvc, volume, shift_orig);
+						}
 					}
 				}
 
@@ -394,6 +400,7 @@ virtual_oss_process(void *arg)
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
 					shift = pvc->profile->tx_shift[x] - 7;
+					shift_orig = pvc->profile->tx_shift[x];
 					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
@@ -432,6 +439,10 @@ virtual_oss_process(void *arg)
 									    (int64_t)volume) << shift);
 								}
 							}
+						}
+						if (shift_orig > 0) {
+							buffer_temp[(y * src_chans) + src] +=
+							    vclient_noise(pvc, volume, shift_orig);
 						}
 					}
 				}
