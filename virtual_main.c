@@ -522,6 +522,9 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 		/* don't shift output */
 		memset(plimit, 0, sizeof(plimit));
 
+		/* make sure we don't touch the source buffer */
+		src = alloca(delta_out);
+
 		/* export resulting samples into buffer */
 		format_export(pvc->format, pvr->scratch_in_buf,
 		    src, delta_out, plimit, pvc->channels);
