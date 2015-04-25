@@ -156,7 +156,7 @@ static int
 vblock_count_bytes(vblock_head_t *phead, vclient_t *pvc, int is_tx)
 {
 	vblock_t *pvb;
-	int retval = 0;
+	int64_t retval = 0;
 
 	TAILQ_FOREACH(pvb, phead, entry) {
 		if (is_tx)
@@ -164,6 +164,9 @@ vblock_count_bytes(vblock_head_t *phead, vclient_t *pvc, int is_tx)
 		else
 			retval += vblock_buf_size(pvb, pvc) - pvb->buf_pos;
 	}
+	retval = (retval * (int64_t)pvc->sample_rate) /
+	    (int64_t)voss_dsp_sample_rate;
+	
 	return (retval);
 }
 
@@ -241,8 +244,61 @@ vclient_noise(vclient_t *pvc, int64_t volume, int8_t shift)
 }
 
 static void
+vresample_free(vresample_t *pvr)
+{
+	if (pvr->state != NULL)
+		src_delete(pvr->state);
+	free(pvr->data.data_in);
+	free(pvr->data.data_out);
+	free(pvr->scratch_in_buf);
+	free(pvr->scratch_out_buf);
+	memset(pvr, 0, sizeof(*pvr));
+}
+
+static int
+vresample_setup(vclient_t *pvc, vresample_t *pvr)
+{
+	if (pvc->channels != pvr->channels) {
+		int code = 0;
+		if (pvr->state != NULL)
+			src_delete(pvr->state);
+		pvr->state = src_new (SRC_SINC_BEST_QUALITY, pvc->channels, &code);
+		if (pvr->state == NULL)
+			goto error;
+		free(pvr->data.data_in);
+		pvr->data.data_in = malloc(sizeof(float) *
+		    voss_dsp_samples * pvc->channels);
+		if (pvr->data.data_in == NULL)
+			goto error;
+		free(pvr->data.data_out);
+		pvr->data.data_out = malloc(sizeof(float) *
+		    voss_dsp_samples * pvc->channels);
+		if (pvr->data.data_out == NULL)
+			goto error;
+		free(pvr->scratch_in_buf);
+		pvr->scratch_in_buf = malloc(sizeof(int64_t) *
+		    voss_dsp_samples * pvc->channels);
+		if (pvr->scratch_in_buf == NULL)
+			goto error;
+		free(pvr->scratch_out_buf);
+		pvr->scratch_out_buf = malloc(sizeof(int64_t) *
+		    voss_dsp_samples * pvc->channels);
+		if (pvr->scratch_out_buf == NULL)
+			goto error;
+		pvr->channels = pvc->channels;
+		pvr->in_offset = 0;
+	}
+	return (0);
+error:
+	return (CUSE_ERR_NO_MEMORY);
+}
+
+static void
 vclient_free(vclient_t *pvc)
 {
+	vresample_free(&pvc->rx_resample);
+	vresample_free(&pvc->tx_resample);
+
 	vblock_free(&pvc->rx_ready);
 	vblock_free(&pvc->rx_free);
 	vblock_free(&pvc->tx_ready);
@@ -264,6 +320,7 @@ vclient_alloc(uint32_t bufsize)
 
 	pvc->tx_volume = 128;
 	pvc->noise_rem = 1;
+	pvc->sample_rate = voss_dsp_sample_rate;
 
 	vblock_init(&pvc->rx_ready);
 	vblock_init(&pvc->rx_free);
@@ -288,14 +345,14 @@ vclient_get_fmts(vclient_t *pvc)
 
 	switch (pvc->profile->bits) {
 	case 16:
-		retval = AFMT_FULLDUPLEX
+		retval = 0
 		    | AFMT_S16_BE
 		    | AFMT_S16_LE
 		    | AFMT_U16_BE
 		    | AFMT_U16_LE;
 		break;
 	case 24:
-		retval = AFMT_FULLDUPLEX
+		retval = 0
 		    | AFMT_S24_BE
 		    | AFMT_S24_LE
 		    | AFMT_U24_BE
@@ -303,20 +360,31 @@ vclient_get_fmts(vclient_t *pvc)
 		break;
 
 	case 32:
-		retval = AFMT_FULLDUPLEX
+		retval = 0
 		    | AFMT_S32_BE
 		    | AFMT_S32_LE
 		    | AFMT_U32_BE
 		    | AFMT_U32_LE;
 		break;
 	default:
-		retval =
-		    AFMT_FULLDUPLEX
+		retval = 0
 		    | AFMT_U8
 		    | AFMT_S8;
 		break;
 	}
 	return (retval);
+}
+
+static uint32_t
+vclient_scale(vclient_t *pvc, uint32_t bufsize)
+{
+	uint32_t mul = pvc->channels * (pvc->profile->bits / 8);
+	/* scale bytes according to sample rate */
+	bufsize = ((uint64_t)bufsize * (uint64_t)pvc->sample_rate) /
+	    (uint64_t)voss_dsp_sample_rate;
+	/* make sure buffer size is valid */
+	bufsize -= bufsize % mul;
+	return (bufsize);
 }
 
 static int
@@ -382,41 +450,126 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 }
 
 static int
+vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
+    int *pin_len, int *pout_len)
+{
+	int error;
+	int delta_out;
+	int delta_in;
+
+	delta_out = *pout_len;
+	delta_in = *pin_len;
+
+	if (pvc->sample_rate == voss_dsp_sample_rate) {
+		/* compute smallest transferrable amount */
+		if (delta_out > delta_in)
+			delta_out = delta_in;
+		else
+			delta_in = delta_out;
+	} else {
+		vresample_t *pvr = &pvc->tx_resample;
+		uint8_t plimit[pvc->channels];
+		int fmtbytes = (pvc->profile->bits / 8);
+		int frame_size = pvc->channels * fmtbytes;
+		int max_in;
+		int x;
+		int y;
+		int z;
+
+		if (vresample_setup(pvc, pvr) != 0)
+			return (CUSE_ERR_NO_MEMORY);
+
+		max_in = (voss_dsp_samples - pvr->in_offset) * frame_size;
+		if (delta_in > max_in)
+			delta_in = max_in;
+
+		if ((delta_in % frame_size) || (delta_out % frame_size))
+			return (CUSE_ERR_INVALID);
+
+		/* import samples */
+		format_import(pvc->format, src, delta_in,
+		    pvr->scratch_out_buf + pvr->in_offset * pvc->channels);
+		pvr->in_offset += delta_in / frame_size;
+
+		/* compute total number of samples */
+		y = pvr->in_offset * pvc->channels;
+		for (x = 0; x != y; x++)
+			pvr->data.data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
+
+		/* setup parameters for transform */
+		pvr->data.input_frames = pvr->in_offset;
+		pvr->data.output_frames = delta_out / frame_size;
+		pvr->data.src_ratio = (float)pvc->sample_rate / (float)voss_dsp_sample_rate;
+
+		if (src_process(pvr->state, &pvr->data))
+			return (CUSE_ERR_INVALID);
+
+		/* compute total number of output samples */
+		y = pvr->data.output_frames_gen * pvc->channels;
+		for (x = 0; x != y; x++)
+			pvr->scratch_in_buf[x] = pvr->data.data_out[x] * (8.0 * 0x10000000);
+
+		/* compute total number of output bytes */
+		delta_out = y * fmtbytes;
+
+		/* put remaining input data at the beginning */
+		pvr->in_offset -= pvr->data.input_frames_used;
+		y = pvr->in_offset * pvc->channels;
+		z = pvr->data.input_frames_used * pvc->channels;
+		for (x = 0; x != y; x++)
+			pvr->scratch_out_buf[x] = pvr->scratch_out_buf[z + x];
+
+		/* don't shift output */
+		memset(plimit, 0, sizeof(plimit));
+
+		/* export resulting samples into buffer */
+		format_export(pvc->format, pvr->scratch_in_buf,
+		    src, delta_out, plimit, pvc->channels);
+	}
+	pvc->rx_busy = 1;
+	atomic_unlock();
+	error = cuse_copy_out(src, peer_ptr, delta_out);
+	atomic_lock();
+	pvc->rx_busy = 0;
+
+	*pout_len = delta_out;
+	*pin_len = delta_in;
+	
+	return (error);
+}
+
+static int
 vclient_read_silence_locked(struct cuse_dev *pdev, void *peer_ptr, int len, vclient_t *pvc)
 {
-	int delta;
+	int delta_in;
+	int delta_out;
 	int sample_size;
 	int retval = 0;
 	int error;
-	uint8_t buffer[pvc->profile->bufsize];
+	uint8_t buffer[pvc->profile->bufsize] __aligned(4);
 
 	while (len > 0) {
-		delta = pvc->profile->rec_delay - pvc->rec_delay;
-		if (delta > sizeof(buffer))
-			delta = sizeof(buffer);
-		if (delta > len)
-			delta = len;
-		if (delta < 1)
+		delta_in = pvc->profile->rec_delay - pvc->rec_delay;
+		if (delta_in > sizeof(buffer))
+			delta_in = sizeof(buffer);
+		if (delta_in < 1)
 			break;
 
-		format_silence(pvc->format, buffer, delta);
+		delta_out = len;
 
-		pvc->rx_busy = 1;
-		atomic_unlock();
+		/* fill buffer with silence */
+		format_silence(pvc->format, buffer, delta_in);
 
-		error = cuse_copy_out(buffer, peer_ptr, delta);
-
-		atomic_lock();
-		pvc->rx_busy = 0;
-
+		error = vclient_read_copy_out(pvc, buffer,
+		    peer_ptr, &delta_in, &delta_out);
 		if (error != 0) {
 			retval = error;
 			break;
 		}
-		peer_ptr = (uint8_t *)peer_ptr + delta;
-		len -= delta;
-		pvc->rec_delay += delta;
-		retval += delta;
+		peer_ptr = (uint8_t *)peer_ptr + delta_out;
+		len -= delta_out;
+		retval += delta_out;
+		pvc->rec_delay += delta_in;
 	}
 	return (retval);
 }
@@ -499,7 +652,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* sample rate */
 
-	len = pvc->profile->rate;
+	len = pvc->sample_rate;
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -508,7 +661,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* byte rate */
 
-	len = pvc->profile->rate * pvc->channels * (pvc->profile->bits / 8);
+	len = pvc->sample_rate * pvc->channels * (pvc->profile->bits / 8);
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -539,7 +692,8 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	vclient_t *pvc;
 	vblock_t *pvb;
 
-	int delta;
+	int delta_in;
+	int delta_out;
 	int error;
 	int retval;
 
@@ -586,38 +740,25 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 			}
 			continue;
 		}
-		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
-		if (delta == 0) {
+		delta_in = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
+		if (delta_in == 0) {
 			vblock_remove(pvb, &pvc->rx_ready);
 			vblock_insert(pvb, &pvc->rx_free);
 			continue;
 		}
-		if (delta > len)
-			delta = len;
+		delta_out = len;
 
-		pvc->rx_busy = 1;
-		atomic_unlock();
-
-		error = cuse_copy_out(pvb->buf_start + pvb->buf_pos,
-		    peer_ptr, delta);
-
-		atomic_lock();
-		pvc->rx_busy = 0;
-
+		error = vclient_read_copy_out(pvc,
+		    pvb->buf_start + pvb->buf_pos,
+		    peer_ptr, &delta_in, &delta_out);
 		if (error != 0) {
 			retval = error;
 			break;
 		}
-		pvb->buf_pos += delta;
-		peer_ptr = ((uint8_t *)peer_ptr) + delta;
-		retval += delta;
-		len -= delta;
-
-		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
-		if (delta == 0) {
-			vblock_remove(pvb, &pvc->rx_ready);
-			vblock_insert(pvb, &pvc->rx_free);
-		}
+		peer_ptr = ((uint8_t *)peer_ptr) + delta_out;
+		retval += delta_out;
+		len -= delta_out;
+		pvb->buf_pos += delta_in;
 	}
 	atomic_unlock();
 
@@ -678,31 +819,114 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			vblock_insert(pvb, &pvc->tx_ready);
 			continue;
 		}
-		if (delta > len)
-			delta = len;
 
-		pvc->tx_busy = 1;
-		atomic_unlock();
+		if (pvc->sample_rate == voss_dsp_sample_rate) {
+			if (delta > len)
+				delta = len;
+			pvc->tx_busy = 1;
+			atomic_unlock();
+			error = cuse_copy_in(peer_ptr,
+			    pvb->buf_start + pvb->buf_pos, delta);
+			atomic_lock();
+			pvc->tx_busy = 0;
 
-		error = cuse_copy_in(peer_ptr,
-		    pvb->buf_start + pvb->buf_pos, delta);
+			if (error != 0) {
+				retval = error;
+				break;
+			}
 
-		atomic_lock();
-		pvc->tx_busy = 0;
+			/* update local buffer position */
+			pvb->buf_pos += delta;
 
-		if (error != 0) {
-			retval = error;
-			break;
-		}
-		pvb->buf_pos += delta;
-		peer_ptr = ((const uint8_t *)peer_ptr) + delta;
-		retval += delta;
-		len -= delta;
+			/* update remote buffer position */
+			peer_ptr = ((const uint8_t *)peer_ptr) + delta;
+			retval += delta;
+			len -= delta;
+		} else {
+		  	vresample_t *pvr = &pvc->rx_resample;
+			uint8_t plimit[pvc->channels];
+			int fmtbytes = (pvc->profile->bits / 8);
+			int frame_size = pvc->channels * fmtbytes;
+			int max_in;
+			int x;
+			int y;
+			int z;
 
-		delta = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
-		if (delta == 0) {
-			vblock_remove(pvb, &pvc->tx_free);
-			vblock_insert(pvb, &pvc->tx_ready);
+			if (vresample_setup(pvc, pvr) != 0) {
+				retval = CUSE_ERR_NO_MEMORY;
+				break;
+			}
+
+			max_in = (voss_dsp_samples - pvr->in_offset) * frame_size;
+			if (max_in > len)
+				max_in = len;
+
+			if ((max_in % frame_size) || (delta % frame_size)) {
+				retval = CUSE_ERR_INVALID;
+				break;
+			}
+
+			pvc->tx_busy = 1;
+			atomic_unlock();
+			error = cuse_copy_in(peer_ptr, pvr->scratch_in_buf, max_in);
+			atomic_lock();
+			pvc->tx_busy = 0;
+
+			if (error != 0) {
+				retval = error;
+				break;
+			}
+
+			/* update remote buffer position */
+			peer_ptr = ((const uint8_t *)peer_ptr) + max_in;
+			retval += max_in;
+			len -= max_in;
+
+			/* import samples */
+			format_import(pvc->format, (void *)pvr->scratch_in_buf, max_in,
+			    pvr->scratch_out_buf + pvr->in_offset * pvc->channels);
+			pvr->in_offset += max_in / frame_size;
+
+			/* compute total number of samples */
+			y = pvr->in_offset * pvc->channels;
+			for (x = 0; x != y; x++)
+				pvr->data.data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
+
+			/* setup parameters for transform */
+			pvr->data.input_frames = pvr->in_offset;
+			pvr->data.output_frames = delta / frame_size;
+			pvr->data.src_ratio = (float)voss_dsp_sample_rate / (float)pvc->sample_rate;
+
+			if (src_process(pvr->state, &pvr->data)) {
+				retval = CUSE_ERR_INVALID;
+				break;
+			}
+
+			/* compute total number of output samples */
+			y = pvr->data.output_frames_gen * pvc->channels;
+			for (x = 0; x != y; x++)
+				pvr->scratch_in_buf[x] = pvr->data.data_out[x] * (8.0 * 0x10000000);
+
+			/* compute total number of output bytes */
+			delta = y * fmtbytes;
+
+			/* put remaining input data at the beginning */
+			pvr->in_offset -= pvr->data.input_frames_used;
+			y = pvr->in_offset * pvc->channels;
+			z = pvr->data.input_frames_used * pvc->channels;
+			for (x = 0; x != y; x++)
+				pvr->scratch_out_buf[x] = pvr->scratch_out_buf[z + x];
+
+			/* don't shift output */
+			memset(plimit, 0, sizeof(plimit));
+
+			/* export resulting samples into buffer */
+			format_export(pvc->format, pvr->scratch_in_buf,
+			    pvb->buf_start + pvb->buf_pos, delta,
+			    plimit, pvc->channels);
+
+			/* update buffer position */
+			pvb->buf_pos += delta;
 		}
 	}
 	atomic_unlock();
@@ -715,6 +939,25 @@ vclient_write_wav(struct cuse_dev *pdev, int fflags,
     const void *peer_ptr, int len)
 {
 	return (CUSE_ERR_INVALID);
+}
+
+static void
+vclient_set_channels(vclient_t *pvc, int channels)
+{
+	if (channels < 0 || channels > pvc->profile->channels)
+		return;
+  
+	pvc->channels = channels;
+
+	/* reset all the RX buffers */
+	vblock_move(&pvc->rx_free, &pvc->rx_ready);
+	vblock_move(&pvc->rx_ready, &pvc->rx_free);
+	/* reset all the TX buffers */
+	vblock_move(&pvc->tx_free, &pvc->tx_ready);
+	vblock_move(&pvc->tx_ready, &pvc->tx_free);
+	/* reset resampler */
+	vresample_free(&pvc->rx_resample);
+	vresample_free(&pvc->tx_resample);
 }
 
 static int
@@ -790,18 +1033,46 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.audioinfo.iformats = vclient_get_fmts(pvc);
 		data.audioinfo.oformats = vclient_get_fmts(pvc);
 		data.audioinfo.enabled = 1;
-		data.audioinfo.min_rate = (int)pvc->profile->rate;
-		data.audioinfo.max_rate = (int)pvc->profile->rate;
+		data.audioinfo.min_rate = (int)8000;
+		data.audioinfo.max_rate = (int)voss_dsp_sample_rate;
+		/* range check */
+		if (voss_libsamplerate_enable == 0 ||
+		    data.audioinfo.min_rate > data.audioinfo.max_rate)
+			data.audioinfo.min_rate = data.audioinfo.max_rate;
 		data.audioinfo.nrates = 1;
-		data.audioinfo.rates[0] = (int)pvc->profile->rate;
+		data.audioinfo.rates[0] = (int)voss_dsp_sample_rate;
+		if (voss_libsamplerate_enable != 0 &&
+		    96000 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 96000;
+		if (voss_libsamplerate_enable != 0 &&
+		    48000 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 48000;
+		if (voss_libsamplerate_enable != 0 &&
+		    44100 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 44100;
+		if (voss_libsamplerate_enable != 0 &&
+		    24000 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 24000;
+		if (voss_libsamplerate_enable != 0 &&
+		    16000 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 16000;
+		if (voss_libsamplerate_enable != 0 &&
+		    8000 < voss_dsp_sample_rate)
+			data.audioinfo.rates[data.audioinfo.nrates++] = 8000;
 		data.audioinfo.latency = -1;
 		break;
 	case FIONREAD:
 		pvb = vblock_peek(&pvc->rx_ready);
-		if (pvb != NULL)
-			data.val = vblock_buf_size(pvb, pvc) - pvb->buf_pos;
-		else
+		if (pvb != NULL) {
+			/* compute number of bytes waiting */
+			data.val = (vblock_buf_size(pvb, pvc) - pvb->buf_pos) +
+			    pvc->tx_resample.in_offset * pvc->channels *
+			    (pvc->profile->bits / 8);
+			/* scale bytes according to sample rate */
+			data.val = vclient_scale(pvc, data.val);
+		} else {
 			data.val = 0;
+		}
 		break;
 	case FIOASYNC:
 	case SNDCTL_DSP_NONBLOCK:
@@ -812,7 +1083,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		/* FALLTHROUGH */
 	case SNDCTL_DSP_GETBLKSIZE:
 		if (pvc->blocksize == 0)
-			data.val = pvc->profile->bufsize;
+			data.val = vclient_scale(pvc, pvc->profile->bufsize);
 		else
 			data.val = pvc->blocksize;
 		break;
@@ -826,13 +1097,23 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_SYNC:
 		break;
 	case SNDCTL_DSP_SPEED:
-		data.val = (int)pvc->profile->rate;
+		if (data.val >= 8000 &&
+		    data.val <= (int)voss_dsp_sample_rate &&
+		    voss_libsamplerate_enable != 0)
+			pvc->sample_rate = data.val;
+		/* return current speed */
+		data.val = (int)pvc->sample_rate;
 		break;
 	case SOUND_PCM_READ_RATE:
-		data.val = (int)pvc->profile->rate;
+		data.val = (int)pvc->sample_rate;
 		break;
 	case SNDCTL_DSP_STEREO:
-		data.val = (pvc->channels == 1);
+		if (data.val != 0) {
+			vclient_set_channels(pvc, 2);
+		} else {
+			vclient_set_channels(pvc, 1);
+		}
+		data.val = (pvc->channels == 2);
 		break;
 	case SOUND_PCM_WRITE_CHANNELS:
 		if (data.val < 0) {
@@ -845,14 +1126,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		} else if (pvc->profile->channels >= data.val) {
 			if (pvc->channels == data.val)
 				break;
-			pvc->channels = data.val;
-
-			/* reset all the RX buffers */
-			vblock_move(&pvc->rx_free, &pvc->rx_ready);
-			vblock_move(&pvc->rx_ready, &pvc->rx_free);
-			/* reset all the TX buffers */
-			vblock_move(&pvc->tx_free, &pvc->tx_ready);
-			vblock_move(&pvc->tx_ready, &pvc->tx_free);
+			vclient_set_channels(pvc, data.val);
 		} else {
 			error = CUSE_ERR_INVALID;
 		}
@@ -862,7 +1136,8 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		break;
 	case AIOGFMT:
 	case SNDCTL_DSP_GETFMTS:
-		data.val = vclient_get_fmts(pvc);
+		data.val = vclient_get_fmts(pvc) |
+		    (pvc->profile->channels > 1 ? AFMT_STEREO : 0) | AFMT_FULLDUPLEX;
 		break;
 	case AIOSFMT:
 	case SNDCTL_DSP_SETFMT:
@@ -880,16 +1155,16 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_GETISPACE:
 		data.buf_info.bytes =
 		    vblock_count_bytes(&pvc->rx_ready, pvc, 0);
-		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
+		data.buf_info.fragsize = vclient_scale(pvc, pvc->profile->bufsize);
+		data.buf_info.fragments = data.buf_info.bytes / data.buf_info.fragsize;
 		data.buf_info.fragstotal = VMAX_FRAGS;
-		data.buf_info.fragsize = pvc->profile->bufsize;
 		break;
 	case SNDCTL_DSP_GETOSPACE:
 		data.buf_info.bytes =
 		    vblock_count_bytes(&pvc->tx_free, pvc, 0);
-		data.buf_info.fragments = data.buf_info.bytes / pvc->profile->bufsize;
+		data.buf_info.fragsize = vclient_scale(pvc, pvc->profile->bufsize);
+		data.buf_info.fragments = data.buf_info.bytes / data.buf_info.fragsize;
 		data.buf_info.fragstotal = VMAX_FRAGS;
-		data.buf_info.fragsize = pvc->profile->bufsize;
 		break;
 	case SNDCTL_DSP_GETCAPS:
 		data.val = PCM_CAP_REALTIME | PCM_CAP_DUPLEX;
@@ -941,15 +1216,16 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		data.oss_count.samples = ((16 *
-		    pvc->profile->bufsize) / pvc->profile->bits);
-		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->tx_ready, pvc, 0) +
+		data.oss_count.samples =
+		    ((16 * vclient_scale(pvc, pvc->profile->bufsize)) / pvc->profile->bits);
+		data.oss_count.fifo_samples =
+		    (8 * (vblock_count_bytes(&pvc->tx_ready, pvc, 0) +
 		    vblock_count_bytes(&pvc->tx_free, pvc, 1))) / pvc->profile->bits;
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		data.oss_count.samples = ((16 *
-		    pvc->profile->bufsize) / pvc->profile->bits);
+		data.oss_count.samples =
+		    ((16 * vclient_scale(pvc, pvc->profile->bufsize)) / pvc->profile->bits);
 		data.oss_count.fifo_samples = (8 * (vblock_count_bytes(&pvc->rx_ready, pvc, 0) +
 		    vblock_count_bytes(&pvc->rx_free, pvc, 0)) / pvc->profile->bits);
 		break;
@@ -1124,6 +1400,7 @@ uint32_t voss_dsp_max_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
 uint32_t voss_dsp_fmt;
+uint8_t voss_libsamplerate_enable;
 int	voss_is_recording = 1;
 
 static int voss_dsp_perm = 0666;
@@ -1144,6 +1421,7 @@ usage(void)
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
 	    "\t" "-s <samples> \\\n"
+	    "\t" "-S \\\n"
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
 	    "\t" "-i <rtprio> \\\n"
@@ -1257,7 +1535,7 @@ main(int argc, char **argv)
 	int opt_amp = 0;
 	int opt_pol = 0;
 	int samples = 0;
-	const char *optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:";
+	const char *optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:S";
 	struct virtual_profile profile;
 	struct rtprio rtp;
 
@@ -1332,10 +1610,10 @@ main(int argc, char **argv)
 				errx(EX_USAGE, "Number of channels is too high");
 			break;
 		case 'r':
-			profile.rate = atoi(optarg);
-			if (profile.rate < 8000)
+			voss_dsp_sample_rate = atoi(optarg);
+			if (voss_dsp_sample_rate < 8000)
 				errx(EX_USAGE, "Sample rate is too low, 8000 Hz");
-			if (profile.rate > 0xFFFFFF)
+			if (voss_dsp_sample_rate > 0xFFFFFF)
 				errx(EX_USAGE, "Sample rate is too high");
 			break;
 		case 'i':
@@ -1383,7 +1661,7 @@ main(int argc, char **argv)
 		case 'f':
 		case 'P':
 		case 'R':
-			if (profile.bits == 0 || profile.rate == 0 ||
+			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
 			    profile.channels == 0 || samples == 0)
 				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
 
@@ -1391,7 +1669,6 @@ main(int argc, char **argv)
 				errx(EX_USAGE, "The -f argument may only be used once");
 
 			voss_dsp_max_channels = profile.channels;
-			voss_dsp_sample_rate = profile.rate;
 			voss_dsp_bits = profile.bits;
 			switch (voss_dsp_bits) {
 			case 8:
@@ -1423,7 +1700,7 @@ main(int argc, char **argv)
 			profile.oss_name = optarg;
 			profile.pvc_head = &virtual_client_head;
 
-			if (profile.bits == 0 || profile.rate == 0 ||
+			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
 			    profile.channels == 0 || samples == 0)
 				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
 
@@ -1438,7 +1715,7 @@ main(int argc, char **argv)
 			profile.oss_name = optarg;
 			profile.pvc_head = &virtual_loopback_head;
 
-			if (profile.bits == 0 || profile.rate == 0 ||
+			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
 			    profile.channels == 0 || samples == 0)
 				errx(EX_USAGE, "Missing -b, -r, -r or -s parameters");
 
@@ -1448,6 +1725,9 @@ main(int argc, char **argv)
 				errx(EX_USAGE, "-s option value is too big");
 
 			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			break;
+		case 'S':
+			voss_libsamplerate_enable = 1;
 			break;
 		case 's':
 			if (samples != 0)

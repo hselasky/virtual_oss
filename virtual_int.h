@@ -26,6 +26,8 @@
 #ifndef _VIRTUAL_INT_H_
 #define	_VIRTUAL_INT_H_
 
+#include <samplerate.h>
+
 #define	VMAX_CHAN 64
 #define	VMAX_FRAGS 16
 
@@ -60,6 +62,9 @@ typedef TAILQ_ENTRY(virtual_monitor) vmonitor_entry_t;
 typedef TAILQ_HEAD(, virtual_monitor) vmonitor_head_t;
 typedef struct virtual_monitor vmonitor_t;
 
+struct virtual_resample;
+typedef struct virtual_resample vresample_t;
+
 #if 0
 }
 #endif
@@ -85,7 +90,6 @@ struct virtual_profile {
 	uint8_t	channels;
 	uint8_t	limiter;
 	uint32_t bufsize;
-	uint32_t rate;
 	uint32_t rec_delay;
 };
 
@@ -96,12 +100,23 @@ struct virtual_block {
 	uint32_t buf_pos;
 };
 
+struct virtual_resample {
+	SRC_DATA data;
+	SRC_STATE *state;
+	int64_t *scratch_in_buf;
+  	int64_t *scratch_out_buf;
+	uint32_t in_offset;
+	uint32_t channels;
+};
+
 struct virtual_client {
 	vclient_entry_t entry;
 	vblock_head_t rx_ready;
 	vblock_head_t rx_free;
 	vblock_head_t tx_ready;
 	vblock_head_t tx_free;
+	vresample_t rx_resample;
+	vresample_t tx_resample;
 	struct virtual_profile *profile;
 	int	rx_busy;
 	int	tx_busy;
@@ -112,6 +127,7 @@ struct virtual_client {
 	int	blocksize;
 	int	tx_volume;
 	int	type;		/* VTYPE_XXX */
+	int	sample_rate;
 	uint32_t rec_delay;
 	uint32_t noise_rem;
 };
@@ -150,6 +166,7 @@ extern uint32_t voss_dsp_max_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
 extern uint32_t voss_dsp_fmt;
+extern uint8_t voss_libsamplerate_enable;
 extern int voss_is_recording;
 extern const char *voss_dsp_rx_device;
 extern const char *voss_dsp_tx_device;

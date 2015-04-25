@@ -47,7 +47,7 @@ virtual_main.c \
 virtual_oss.c
 
 CFLAGS += -I${LOCALBASE}/include
-LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS} -lm
+LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS} -lm -lsamplerate
 
 .include <bsd.prog.mk>
 
