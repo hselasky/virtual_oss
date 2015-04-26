@@ -1580,6 +1580,19 @@ virtual_cuse_process(void *arg)
 	return (NULL);
 }
 
+static void
+virtual_cuse_init_profile(struct virtual_profile *pvp, int clear)
+{
+	int x;
+
+	if (clear != 0)
+		memset(pvp, 0, sizeof(*pvp));
+	for (x = 0; x != VMAX_CHAN; x++) {
+		pvp->rx_src[x] = x;
+		pvp->tx_dst[x] = x;
+	}
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1596,7 +1609,7 @@ main(int argc, char **argv)
 	struct virtual_profile profile;
 	struct rtprio rtp;
 
-	memset(&profile, 0, sizeof(profile));
+	virtual_cuse_init_profile(&profile, 1);
 
 	TAILQ_INIT(&virtual_profile_client_head);
 	TAILQ_INIT(&virtual_profile_loopback_head);
@@ -1806,8 +1819,7 @@ main(int argc, char **argv)
 			ptr = optarg;
 			val = 0;
 			idx = 0;
-			memset(profile.tx_dst, 0, sizeof(profile.tx_dst));
-			memset(profile.rx_src, 0, sizeof(profile.rx_src));
+			virtual_cuse_init_profile(&profile, 0);
 			while (1) {
 				c = *ptr++;
 				if (c == ',' || c == 0) {
