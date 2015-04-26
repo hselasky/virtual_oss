@@ -29,7 +29,6 @@
 #include <samplerate.h>
 
 #define	VMAX_CHAN 64
-#define	VMAX_FRAGS 16
 
 #define	VTYPE_OSS_DAT 0
 #define	VTYPE_WAV_HDR 1
@@ -118,18 +117,20 @@ struct virtual_client {
 	vresample_t rx_resample;
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
+	uint64_t start_block;
+	uint32_t buffer_frags;
+	uint32_t buffer_size;
+	uint32_t rec_delay;
+	uint32_t noise_rem;
 	int	rx_busy;
 	int	tx_busy;
 	int	channels;
 	int	format;
 	int	rx_enabled;
 	int	tx_enabled;
-	int	blocksize;
 	int	tx_volume;
 	int	type;		/* VTYPE_XXX */
 	int	sample_rate;
-	uint32_t rec_delay;
-	uint32_t noise_rem;
 };
 
 struct virtual_monitor {
@@ -166,7 +167,9 @@ extern uint32_t voss_dsp_max_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
 extern uint32_t voss_dsp_fmt;
+extern uint32_t voss_dsp_max_frags;
 extern uint8_t voss_libsamplerate_enable;
+extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
 extern const char *voss_dsp_rx_device;
 extern const char *voss_dsp_tx_device;
@@ -180,7 +183,8 @@ extern void atomic_wakeup(void);
 extern vblock_t *vblock_peek(vblock_head_t *);
 extern void vblock_insert(vblock_t *, vblock_head_t *);
 extern void vblock_remove(vblock_t *, vblock_head_t *);
-extern uint32_t vblock_buf_size(vblock_t *, vclient_t *);
+extern uint32_t vclient_bufsize(vclient_t *);
+extern uint32_t vclient_bufsize_scaled(vclient_t *);
 
 extern int64_t vclient_noise(vclient_t *, int64_t, int8_t);
 

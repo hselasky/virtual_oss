@@ -207,6 +207,8 @@ virtual_oss_process(void *arg)
 
 			atomic_lock();
 
+			voss_dsp_blocks++;
+
 			if (TAILQ_FIRST(&virtual_monitor_input) != NULL) {
 				memcpy(buffer_monitor, buffer_data,
 				    8 * samples * src_chans);
@@ -282,7 +284,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_temp,
-				    pvb->buf_start, vblock_buf_size(pvb, pvc),
+				    pvb->buf_start, vclient_bufsize(pvc),
 				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
@@ -317,7 +319,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_import(pvc->format, pvb->buf_start,
-				    vblock_buf_size(pvb, pvc), buffer_data);
+				    vclient_bufsize(pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
 				    pvc->channels, samples);
@@ -390,7 +392,7 @@ virtual_oss_process(void *arg)
 				if (pvb == NULL || pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start, vblock_buf_size(pvb, pvc), buffer_data);
+				format_import(pvc->format, pvb->buf_start, vclient_bufsize(pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
 				    pvc->channels, samples);
@@ -641,7 +643,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
-				    pvb->buf_start, vblock_buf_size(pvb, pvc),
+				    pvb->buf_start, vclient_bufsize(pvc),
 				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
