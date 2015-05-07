@@ -37,16 +37,42 @@
 
 #include "virtual_int.h"
 
+static int
+virtual_oss_set_format(int fd, uint32_t *format)
+{
+	int value[6];
+	int error;
+	int i;
+
+	value[0] = *format & VPREFERRED_SNE_AFMT;
+	value[1] = *format & VPREFERRED_UNE_AFMT;
+	value[2] = *format & VPREFERRED_SLE_AFMT;
+	value[3] = *format & VPREFERRED_SBE_AFMT;
+	value[4] = *format & VPREFERRED_ULE_AFMT;
+	value[5] = *format & VPREFERRED_UBE_AFMT;
+
+	for (i = 0; i != 6; i++) {
+		error = ioctl(fd, SNDCTL_DSP_SETFMT, value + i);
+		if (error == 0) {
+			*format = value[i];
+			return (0);
+		}
+	}
+	warn("Could not set FMT=0x%08x", *format);
+	return (-1);
+}
+
 void   *
 virtual_oss_process(void *arg)
 {
 	vclient_t *pvc;
 	vblock_t *pvb;
 	vmonitor_t *pvm;
+	uint32_t rx_fmt;
+	uint32_t tx_fmt;
 	int fd_rx = -1;
 	int fd_tx = -1;
 	int off;
-	int afmt;
 	int src_chans;
 	int dst_chans;
 	int src;
@@ -73,8 +99,6 @@ virtual_oss_process(void *arg)
 
 	buffer_dsp_max_size = voss_dsp_samples *
 	    voss_dsp_max_channels * (voss_dsp_bits / 8);
-
-	afmt = voss_dsp_fmt;
 
 	buffer_dsp = malloc(buffer_dsp_max_size);
 	buffer_temp = malloc(voss_dsp_samples * voss_max_channels * 8);
@@ -118,18 +142,14 @@ virtual_oss_process(void *arg)
 			warn("Could not set blocking mode on DSP");
 			continue;
 		}
-		blocks = voss_dsp_fmt;
-		len = ioctl(fd_rx, SNDCTL_DSP_SETFMT, &blocks);
-		if (len < 0) {
-			warn("Could not set FMT=0x%08x", blocks);
+		rx_fmt = voss_dsp_rx_fmt;
+		len = virtual_oss_set_format(fd_rx, &rx_fmt);
+		if (len < 0)
 			continue;
-		}
-		blocks = voss_dsp_fmt;
-		len = ioctl(fd_tx, SNDCTL_DSP_SETFMT, &blocks);
-		if (len < 0) {
-			warn("Could not set FMT=0x%08x", blocks);
+		tx_fmt = voss_dsp_tx_fmt;
+		len = virtual_oss_set_format(fd_tx, &tx_fmt);
+		if (len < 0)
 			continue;
-		}
 		blocks = voss_dsp_max_channels;
 		do {
 			len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
@@ -189,7 +209,7 @@ virtual_oss_process(void *arg)
 			if (len <= 0)
 				break;
 
-			format_import(afmt, buffer_dsp,
+			format_import(rx_fmt, buffer_dsp,
 			    buffer_dsp_rx_size, buffer_data);
 
 			/* Compute master input peak values */
@@ -663,7 +683,7 @@ virtual_oss_process(void *arg)
 			    voss_dsp_tx_channels, voss_dsp_samples);
 
 			/* Update limiter */
-			fmt_max = format_max(afmt);
+			fmt_max = format_max(tx_fmt);
 
 			for (x = 0; x != VMAX_CHAN; x++) {
 				y = voss_output_group[x];
@@ -674,7 +694,7 @@ virtual_oss_process(void *arg)
 
 			/* Export and transmit resulting audio */
 
-			format_export(afmt, buffer_temp, buffer_dsp,
+			format_export(tx_fmt, buffer_temp, buffer_dsp,
 			    buffer_dsp_tx_size, fmt_limit, voss_dsp_tx_channels);
 
 			atomic_unlock();

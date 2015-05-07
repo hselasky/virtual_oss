@@ -156,6 +156,7 @@ static uint32_t
 vclient_scale(vclient_t *pvc, uint32_t bufsize)
 {
 	uint32_t mul = pvc->channels * (pvc->profile->bits / 8);
+
 	/* scale bytes according to sample rate */
 	bufsize = ((uint64_t)bufsize * (uint64_t)pvc->sample_rate) /
 	    (uint64_t)voss_dsp_sample_rate;
@@ -270,9 +271,10 @@ vresample_setup(vclient_t *pvc, vresample_t *pvr)
 {
 	if (pvc->channels != pvr->channels) {
 		int code = 0;
+
 		if (pvr->state != NULL)
 			src_delete(pvr->state);
-		pvr->state = src_new (SRC_SINC_BEST_QUALITY, pvc->channels, &code);
+		pvr->state = src_new(SRC_SINC_BEST_QUALITY, pvc->channels, &code);
 		if (pvr->state == NULL)
 			goto error;
 		free(pvr->data.data_in);
@@ -416,9 +418,8 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 	/* compute default buffer size */
 	vclient_set_buffer_size(pvc, vclient_bufsize_scaled(pvc), 2);
 
-	/* set default formats */
-	pvc->format = vclient_get_fmts(pvc) &
-	    (AFMT_S8 | AFMT_S16_LE | AFMT_S24_LE | AFMT_S32_LE);
+	/* set default format */
+	pvc->format = vclient_get_fmts(pvc) & VPREFERRED_SNE_AFMT;
 
 	pvc->type = type;
 
@@ -549,7 +550,7 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 	pvc->rx_busy = 0;
 	*pout_len = delta_out;
 	*pin_len = delta_in;
-	
+
 	return (error);
 }
 
@@ -834,7 +835,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			vblock_insert(pvb, &pvc->tx_ready);
 			continue;
 		}
-
 		if (pvc->sample_rate == voss_dsp_sample_rate) {
 			if (delta > len)
 				delta = len;
@@ -849,7 +849,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 				retval = error;
 				break;
 			}
-
 			/* update local buffer position */
 			pvb->buf_pos += delta;
 
@@ -858,7 +857,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			retval += delta;
 			len -= delta;
 		} else {
-		  	vresample_t *pvr = &pvc->rx_resample;
+			vresample_t *pvr = &pvc->rx_resample;
 			uint8_t plimit[pvc->channels];
 			int fmtbytes = (pvc->profile->bits / 8);
 			int frame_size = pvc->channels * fmtbytes;
@@ -871,7 +870,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 				retval = CUSE_ERR_NO_MEMORY;
 				break;
 			}
-
 			max_in = (voss_dsp_samples - pvr->in_offset) * frame_size;
 			if (max_in > len)
 				max_in = len;
@@ -880,7 +878,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 				retval = CUSE_ERR_INVALID;
 				break;
 			}
-
 			pvc->tx_busy = 1;
 			atomic_unlock();
 			error = cuse_copy_in(peer_ptr, pvr->scratch_in_buf, max_in);
@@ -891,7 +888,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 				retval = error;
 				break;
 			}
-
 			/* update remote buffer position */
 			peer_ptr = ((const uint8_t *)peer_ptr) + max_in;
 			retval += max_in;
@@ -917,7 +913,6 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 				retval = CUSE_ERR_INVALID;
 				break;
 			}
-
 			/* compute total number of output samples */
 			y = pvr->data.output_frames_gen * pvc->channels;
 			for (x = 0; x != y; x++)
@@ -962,7 +957,7 @@ vclient_set_channels(vclient_t *pvc, int channels)
 {
 	if (channels < 0 || channels > pvc->profile->channels)
 		return;
-  
+
 	pvc->channels = channels;
 	vclient_set_buffer_size(pvc, vclient_bufsize_scaled(pvc), 2);
 
@@ -1000,7 +995,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 
 	uint64_t rem;
 	uint64_t div;
-	
+
 	int len;
 	int error;
 	int temp;
@@ -1266,7 +1261,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		rem /= pvc->sample_rate;
 		/* compute output samples */
 		data.oss_count.samples = (voss_dsp_blocks - pvc->start_block - rem) *
-		  (voss_dsp_samples / div) * pvc->channels;
+		    (voss_dsp_samples / div) * pvc->channels;
 		break;
 	case SNDCTL_DSP_GETOPTR:
 	case SNDCTL_DSP_GETIPTR:
@@ -1279,9 +1274,9 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		rem /= pvc->sample_rate;
 		/* compute output samples */
 		rem = (voss_dsp_blocks - pvc->start_block - rem) *
-		  (voss_dsp_samples / div) * pvc->channels * (pvc->profile->bits / 8);
+		    (voss_dsp_samples / div) * pvc->channels * (pvc->profile->bits / 8);
 		data.oss_count_info.bytes = rem;
-		data.oss_count_info.blocks =  rem / pvc->buffer_size;
+		data.oss_count_info.blocks = rem / pvc->buffer_size;
 		data.oss_count_info.ptr = rem;
 		break;
 	case SNDCTL_DSP_HALT_OUTPUT:
@@ -1371,7 +1366,7 @@ vclient_ioctl_wav(struct cuse_dev *pdev, int fflags,
 	switch (cmd) {
 	case FIONREAD:
 		data.val = vblock_count_bufs(&pvc->rx_ready) *
-		  vclient_bufsize_scaled(pvc);
+		    vclient_bufsize_scaled(pvc);
 		break;
 	case FIOASYNC:
 	case SNDCTL_DSP_NONBLOCK:
@@ -1404,13 +1399,15 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 	atomic_lock();
 	if (events & CUSE_POLL_READ) {
 		uint32_t temp = vblock_count_bufs(&pvc->rx_ready) *
-		    vclient_bufsize_scaled(pvc);
+		vclient_bufsize_scaled(pvc);
+
 		if (temp >= pvc->buffer_size)
 			retval |= CUSE_POLL_READ;
 	}
 	if (events & CUSE_POLL_WRITE) {
 		uint32_t temp = vblock_count_bufs(&pvc->tx_free) *
-		    vclient_bufsize_scaled(pvc);
+		vclient_bufsize_scaled(pvc);
+
 		if (temp >= pvc->buffer_size)
 			retval |= CUSE_POLL_WRITE;
 	}
@@ -1454,9 +1451,10 @@ uint32_t voss_dsp_tx_channels;
 uint32_t voss_dsp_max_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
-uint32_t voss_dsp_fmt;
+uint32_t voss_dsp_rx_fmt;
+uint32_t voss_dsp_tx_fmt;
 uint64_t voss_dsp_blocks;
-uint8_t voss_libsamplerate_enable;
+uint8_t	voss_libsamplerate_enable;
 int	voss_is_recording = 1;
 uint32_t voss_dsp_max_frags;
 
@@ -1742,16 +1740,27 @@ main(int argc, char **argv)
 			voss_dsp_bits = profile.bits;
 			switch (voss_dsp_bits) {
 			case 8:
-				voss_dsp_fmt = AFMT_S8;
+				voss_dsp_rx_fmt =
+				    voss_dsp_tx_fmt =
+				    AFMT_S8 | AFMT_U8;
 				break;
 			case 16:
-				voss_dsp_fmt = AFMT_S16_LE;
+				voss_dsp_rx_fmt =
+				    voss_dsp_tx_fmt =
+				    AFMT_S16_BE | AFMT_S16_LE |
+				    AFMT_U16_BE | AFMT_U16_LE;
 				break;
 			case 24:
-				voss_dsp_fmt = AFMT_S24_LE;
+				voss_dsp_rx_fmt =
+				    voss_dsp_tx_fmt =
+				    AFMT_S24_BE | AFMT_S24_LE |
+				    AFMT_U24_BE | AFMT_U24_LE;
 				break;
 			case 32:
-				voss_dsp_fmt = AFMT_S32_LE;
+				voss_dsp_rx_fmt =
+				    voss_dsp_tx_fmt =
+				    AFMT_S32_BE | AFMT_S32_LE |
+				    AFMT_U32_BE | AFMT_U32_LE;
 				break;
 			default:
 				errx(EX_USAGE, "Invalid number of sample bits");

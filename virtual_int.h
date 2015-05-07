@@ -34,6 +34,19 @@
 #define	VTYPE_WAV_HDR 1
 #define	VTYPE_WAV_DAT 2
 
+#define	VPREFERRED_SNE_AFMT \
+  (AFMT_S8 | AFMT_S16_NE | AFMT_S24_NE | AFMT_S32_NE)
+#define	VPREFERRED_UNE_AFMT \
+  (AFMT_U8 | AFMT_U16_NE | AFMT_U24_NE | AFMT_U32_NE)
+#define	VPREFERRED_SLE_AFMT \
+  (AFMT_S8 | AFMT_S16_LE | AFMT_S24_LE | AFMT_S32_LE)
+#define	VPREFERRED_SBE_AFMT \
+  (AFMT_S8 | AFMT_S16_BE | AFMT_S24_BE | AFMT_S32_BE)
+#define	VPREFERRED_ULE_AFMT \
+  (AFMT_U8 | AFMT_U16_LE | AFMT_U24_LE | AFMT_U32_LE)
+#define	VPREFERRED_UBE_AFMT \
+  (AFMT_U8 | AFMT_U16_BE | AFMT_U24_BE | AFMT_U32_BE)
+
 struct virtual_profile;
 
 #if 0
@@ -166,7 +179,8 @@ extern uint32_t voss_dsp_tx_channels;
 extern uint32_t voss_dsp_max_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
-extern uint32_t voss_dsp_fmt;
+extern uint32_t voss_dsp_rx_fmt;
+extern uint32_t voss_dsp_tx_fmt;
 extern uint32_t voss_dsp_max_frags;
 extern uint8_t voss_libsamplerate_enable;
 extern uint64_t voss_dsp_blocks;
@@ -190,6 +204,7 @@ extern int64_t vclient_noise(vclient_t *, int64_t, int8_t);
 
 extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 
+extern uint32_t format_best(uint32_t);
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);
 extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t, const uint8_t *, uint8_t);
 extern int64_t format_max(uint32_t);
