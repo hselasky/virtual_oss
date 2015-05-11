@@ -60,5 +60,5 @@ package: clean
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
 	rm -rf ${PACKAGE}.tar
-	tar -jcvf ${PACKAGE}.tar.bz2 ${PACKAGE}
+	tar -jcvf ${PACKAGE}.tar.bz2 --uid 0 --gid 0 ${PACKAGE}
 
