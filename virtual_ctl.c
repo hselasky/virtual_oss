@@ -416,6 +416,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		voss_ad_reset();
 		break;
 	case VIRTUAL_OSS_ADD_OPTIONS:
+		data.options[VIRTUAL_OSS_OPTIONS_MAX - 1] = 0;
 		voss_add_options(data.options);
 		break;
 	default:
