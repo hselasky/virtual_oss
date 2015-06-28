@@ -92,6 +92,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
 		struct virtual_oss_audio_delay_locator ad_locator;
+		char options[VIRTUAL_OSS_OPTIONS_MAX];
 	}     data;
 
 	vprofile_t *pvp;
@@ -414,7 +415,9 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR:
 		voss_ad_reset();
 		break;
-
+	case VIRTUAL_OSS_ADD_OPTIONS:
+		voss_add_options(data.options);
+		break;
 	default:
 		error = CUSE_ERR_INVALID;
 		break;

@@ -118,12 +118,14 @@ virtual_oss_process(void *arg)
 			close(fd_tx);
 			sleep(1);
 		}
+		voss_dsp_rx_refresh = 0;
 		fd_rx = open(voss_dsp_rx_device, O_RDONLY);
 		if (fd_rx < 0) {
 			warn("Could not open %s", voss_dsp_rx_device);
 			sleep(1);
 			continue;
 		}
+		voss_dsp_tx_refresh = 0;
 		fd_tx = open(voss_dsp_tx_device, O_WRONLY);
 		if (fd_tx < 0) {
 			warn("Could not open %s", voss_dsp_tx_device);
@@ -195,6 +197,10 @@ virtual_oss_process(void *arg)
 			continue;
 		}
 		while (1) {
+
+			/* Check if DSP device should be re-opened */
+			if (voss_dsp_rx_refresh || voss_dsp_tx_refresh)
+				break;
 
 			off = 0;
 			len = 0;

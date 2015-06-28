@@ -216,6 +216,8 @@ extern void *virtual_oss_process(void *);
 
 /* Audio Delay prototypes */
 extern uint32_t voss_ad_last_delay;
+extern uint32_t voss_dsp_rx_refresh;
+extern uint32_t voss_dsp_tx_refresh;
 extern uint8_t voss_ad_enabled;
 extern uint8_t voss_ad_output_signal;
 extern uint8_t voss_ad_input_channel;
@@ -223,5 +225,8 @@ extern uint8_t voss_ad_output_channel;
 extern void voss_ad_reset(void);
 extern void voss_ad_init(uint32_t);
 extern double voss_ad_getput_sample(double);
+
+/* Add audio options prototype */
+extern void voss_add_options(char *);
 
 #endif					/* _VIRTUAL_INT_H_ */

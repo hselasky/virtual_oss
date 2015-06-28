@@ -43,6 +43,8 @@
 
 #include "virtual_int.h"
 
+#include "virtual_oss.h"
+
 static pthread_mutex_t atomic_mtx;
 static pthread_cond_t atomic_cv;
 
@@ -435,13 +437,13 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 static int
 vclient_open_wav(struct cuse_dev *pdev, int fflags)
 {
-	vclient_open_sub(pdev, fflags, VTYPE_WAV_HDR);
+	return (vclient_open_sub(pdev, fflags, VTYPE_WAV_HDR));
 }
 
 static int
 vclient_open_oss(struct cuse_dev *pdev, int fflags)
 {
-	vclient_open_sub(pdev, fflags, VTYPE_OSS_DAT);
+	return (vclient_open_sub(pdev, fflags, VTYPE_OSS_DAT));
 }
 
 static int
@@ -1460,11 +1462,13 @@ uint32_t voss_dsp_max_frags;
 
 static int voss_dsp_perm = 0666;
 
+uint32_t voss_dsp_rx_refresh;
+uint32_t voss_dsp_tx_refresh;
 const char *voss_dsp_rx_device;
 const char *voss_dsp_tx_device;
 const char *voss_ctl_device;
 
-int	voss_dups;
+static int voss_dups;
 
 static void
 usage(void)
@@ -1591,49 +1595,41 @@ virtual_cuse_init_profile(struct virtual_profile *pvp, int clear)
 	}
 }
 
-int
-main(int argc, char **argv)
+static const char * const
+parse_options(int narg, char **pparg, int is_main)
 {
-	int c;
 	const char *ptr;
+	int c;
 	int val;
 	int idx;
 	int type;
 	int opt_mute[2] = {0, 0};
 	int opt_amp = 0;
 	int opt_pol = 0;
-	int samples = 0;
-	const char *optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:S";
+	const char *optstr;
 	struct virtual_profile profile;
 	struct rtprio rtp;
 
+	if (is_main)
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:S";
+	else
+		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
+
 	virtual_cuse_init_profile(&profile, 1);
 
-	TAILQ_INIT(&virtual_profile_client_head);
-	TAILQ_INIT(&virtual_profile_loopback_head);
+	/* reset getopt parsing */
+	optreset = 1;
+	optind = 1;
 
-	TAILQ_INIT(&virtual_client_head);
-	TAILQ_INIT(&virtual_loopback_head);
-
-	TAILQ_INIT(&virtual_monitor_input);
-	TAILQ_INIT(&virtual_monitor_output);
-
-	atomic_init();
-
-	if (cuse_init() != 0)
-		errx(EX_USAGE, "Could not connect to cuse module");
-
-	while ((c = getopt(argc, argv, optstr)) != -1) {
+	while ((c = getopt(narg, pparg, optstr)) != -1) {
 		switch (c) {
 		case 'C':
 			if (voss_mix_channels != 0) {
-				errx(EX_USAGE, "The -C argument may "
-				    "only be used once");
+				return ("The -C argument may only be used once");
 			}
 			voss_mix_channels = atoi(optarg);
 			if (voss_mix_channels >= VMAX_CHAN) {
-				errx(EX_USAGE, "Number of mixing "
-				    "channels is too high");
+				return ("Number of mixing channels is too high");
 			}
 			break;
 		case 'a':
@@ -1654,7 +1650,7 @@ main(int argc, char **argv)
 				if (idx < 2 && c >= '0' && c <= '1') {
 					opt_mute[idx] = c - '0';
 				} else {
-					errx(EX_USAGE, "Invalid -e parameter");
+					return ("Invalid -e parameter");
 				}
 			}
 			switch (idx) {
@@ -1664,7 +1660,7 @@ main(int argc, char **argv)
 			case 2:
 				break;
 			default:
-				errx(EX_USAGE, "Invalid -e parameter");
+				return ("Invalid -e parameter");
 			}
 			break;
 		case 'p':
@@ -1673,16 +1669,16 @@ main(int argc, char **argv)
 		case 'c':
 			profile.channels = atoi(optarg);
 			if (profile.channels == 0)
-				errx(EX_USAGE, "Number of channels is zero");
+				return ("Number of channels is zero");
 			if (profile.channels >= VMAX_CHAN)
-				errx(EX_USAGE, "Number of channels is too high");
+				return ("Number of channels is too high");
 			break;
 		case 'r':
 			voss_dsp_sample_rate = atoi(optarg);
 			if (voss_dsp_sample_rate < 8000)
-				errx(EX_USAGE, "Sample rate is too low, 8000 Hz");
+				return ("Sample rate is too low, 8000 Hz");
 			if (voss_dsp_sample_rate > 0xFFFFFF)
-				errx(EX_USAGE, "Sample rate is too high");
+				return ("Sample rate is too high");
 			break;
 		case 'i':
 			memset(&rtp, 0, sizeof(rtp));
@@ -1700,8 +1696,7 @@ main(int argc, char **argv)
 			case 32:
 				break;
 			default:
-				errx(EX_USAGE, "Invalid number of sample bits");
-				break;
+				return ("Invalid number of sample bits");
 			}
 			break;
 		case 'g':
@@ -1712,7 +1707,7 @@ main(int argc, char **argv)
 				c = *ptr++;
 				if (c == ',' || c == 0) {
 					if (idx >= VMAX_CHAN)
-						errx(EX_USAGE, "Too many channel groups");
+						return ("Too many channel groups");
 					voss_output_group[idx] = val;
 					if (c == 0)
 						break;
@@ -1729,15 +1724,18 @@ main(int argc, char **argv)
 		case 'f':
 		case 'P':
 		case 'R':
-			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
-			    profile.channels == 0 || samples == 0)
-				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
-
-			if (voss_dsp_max_channels != 0 && c == 'f')
-				errx(EX_USAGE, "The -f argument may only be used once");
-
-			voss_dsp_max_channels = profile.channels;
-			voss_dsp_bits = profile.bits;
+			if (voss_dsp_sample_rate == 0 || voss_dsp_samples == 0)
+				return ("Missing -r or -s parameters");
+			if (voss_dsp_bits == 0) {
+				if (profile.bits == 0)
+					return ("Missing -b parameter");
+				voss_dsp_bits = profile.bits;
+			}
+			if (voss_dsp_max_channels == 0) {
+				if (profile.channels == 0)
+					return ("Missing -c parameter");
+				voss_dsp_max_channels = profile.channels;
+			}
 			switch (voss_dsp_bits) {
 			case 8:
 				voss_dsp_rx_fmt =
@@ -1763,14 +1761,16 @@ main(int argc, char **argv)
 				    AFMT_U32_BE | AFMT_U32_LE;
 				break;
 			default:
-				errx(EX_USAGE, "Invalid number of sample bits");
-				break;
+				return ("Invalid number of sample bits");
 			}
-			voss_dsp_samples = samples;
-			if (c == 'f' || c == 'R')
+			if (c == 'f' || c == 'R') {
 				voss_dsp_rx_device = optarg;
-			if (c == 'f' || c == 'P')
+				voss_dsp_rx_refresh = 1;
+			}
+			if (c == 'f' || c == 'P') {
 				voss_dsp_tx_device = optarg;
+				voss_dsp_tx_refresh = 1;
+			}
 			break;
 		case 'w':
 			profile.wav_name = optarg;
@@ -1780,13 +1780,13 @@ main(int argc, char **argv)
 			profile.pvc_head = &virtual_client_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
-			    profile.channels == 0 || samples == 0)
-				errx(EX_USAGE, "Missing -b, -r, -c or -s parameters");
+			    profile.channels == 0 || voss_dsp_samples == 0)
+				return ("Missing -b, -r, -c or -s parameters");
 
-			profile.bufsize = (samples *
+			profile.bufsize = (voss_dsp_samples *
 			    profile.bits * profile.channels) / 8;
 			if (profile.bufsize >= (1024 * 1024))
-				errx(EX_USAGE, "-s option value is too big");
+				return ("-s option value is too big");
 
 			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
@@ -1795,13 +1795,13 @@ main(int argc, char **argv)
 			profile.pvc_head = &virtual_loopback_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
-			    profile.channels == 0 || samples == 0)
-				errx(EX_USAGE, "Missing -b, -r, -r or -s parameters");
+			    profile.channels == 0 || voss_dsp_samples == 0)
+				return ("Missing -b, -r, -r or -s parameters");
 
-			profile.bufsize = (samples *
+			profile.bufsize = (voss_dsp_samples *
 			    profile.bits * profile.channels) / 8;
 			if (profile.bufsize >= (1024 * 1024))
-				errx(EX_USAGE, "-s option value is too big");
+				return ("-s option value is too big");
 
 			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
@@ -1809,18 +1809,17 @@ main(int argc, char **argv)
 			voss_libsamplerate_enable = 1;
 			break;
 		case 's':
-			if (samples != 0)
-				errx(EX_USAGE, "-s option may only be used once");
+			if (voss_dsp_samples != 0)
+				return ("-s option may only be used once");
 			if (profile.bits == 0 || profile.channels == 0)
-				errx(EX_USAGE, "-s option requires -b and -c options");
-
-			samples = atoi(optarg);
-			if (samples <= 0)
-				errx(EX_USAGE, "-s option requires a non-zero positive value");
+				return ("-s option requires -b and -c options");
+			voss_dsp_samples = atoi(optarg);
+			if (voss_dsp_samples >= (1U << 24))
+				return ("-s option requires a non-zero positive value");
 			break;
 		case 't':
 			if (voss_ctl_device != NULL)
-				errx(EX_USAGE, "-t parameter may only be used once");
+				return ("-t parameter may only be used once");
 
 			voss_ctl_device = optarg;
 			break;
@@ -1833,7 +1832,7 @@ main(int argc, char **argv)
 				c = *ptr++;
 				if (c == ',' || c == 0) {
 					if (idx >= (2 * VMAX_CHAN))
-						errx(EX_USAGE, "Too many channels in mask");
+						return ("Too many channels in mask");
 					if (idx & 1)
 						profile.tx_dst[idx / 2] = val;
 					else
@@ -1891,10 +1890,11 @@ main(int argc, char **argv)
 							mute = val ? 1 : 0;
 							break;
 						case 4:
-							if (val > 31)
-								errx(EX_USAGE,
-								    "Absolute amplitude for "
-								    "-M parameter cannot exceed 31");
+							if (val > 31) {
+								return ("Absolute amplitude "
+								    "for -M parameter "
+								    "cannot exceed 31");
+							}
 							amp = neg ? -val : val;
 							break;
 						default:
@@ -1913,14 +1913,14 @@ main(int argc, char **argv)
 					}
 				}
 				if (idx < 4)
-					errx(EX_USAGE, "Too few parameters for -M");
+					return ("Too few parameters for -M");
 
 				pvm = vmonitor_alloc(&idx,
 				    (type == 'i') ? &virtual_monitor_input :
 				    &virtual_monitor_output);
 
 				if (pvm == NULL)
-					errx(EX_USAGE, "Out of memory");
+					return ("Out of memory");
 
 				pvm->src_chan = src;
 				pvm->dst_chan = dst;
@@ -1928,14 +1928,89 @@ main(int argc, char **argv)
 				pvm->mute = mute;
 				pvm->shift = amp;
 			} else {
-				errx(EX_USAGE, "Invalid -M parameter");
+				return ("Invalid -M parameter");
 			}
 			break;
 		default:
-			usage();
+			if (is_main)
+				usage();
+			else
+				return ("Invalid option detected");
 			break;
 		}
 	}
+	return (NULL);
+}
+
+static void
+create_threads(void)
+{
+	int idx;
+
+	/* Give each DSP device 4 threads */
+
+	for (idx = 0; idx != (voss_dups * 4); idx++) {
+		pthread_t td;
+
+		pthread_create(&td, NULL, &virtual_cuse_process, NULL);
+	}
+
+	/* Reset until next time called */
+	voss_dups = 0;
+}
+
+void
+voss_add_options(char *str)
+{
+	const char sep[] = "\t ";
+	const char *ptrerr;
+	char *parg[64];
+	char *word;
+	char *brkt;
+	int narg = 0;
+
+	parg[narg++] = "virtual_oss";
+
+	for (word = strtok_r(str, sep, &brkt); word != NULL;
+	     word = strtok_r(NULL, sep, &brkt)) {
+		if (narg >= 64) {
+			ptrerr = "Too many arguments";
+			goto done;
+		}
+		parg[narg++] = word;
+	}
+	ptrerr = parse_options(narg, parg, 0);
+done:
+	if (ptrerr != NULL) {
+		strlcpy(str, ptrerr, VIRTUAL_OSS_OPTIONS_MAX);
+	} else {
+		str[0] = 0;
+		create_threads();
+	}
+}
+
+int
+main(int argc, char **argv)
+{
+	const char *ptrerr;
+
+	TAILQ_INIT(&virtual_profile_client_head);
+	TAILQ_INIT(&virtual_profile_loopback_head);
+
+	TAILQ_INIT(&virtual_client_head);
+	TAILQ_INIT(&virtual_loopback_head);
+
+	TAILQ_INIT(&virtual_monitor_input);
+	TAILQ_INIT(&virtual_monitor_output);
+
+	atomic_init();
+
+	if (cuse_init() != 0)
+		errx(EX_USAGE, "Could not connect to cuse module");
+
+	ptrerr = parse_options(argc, argv, 1);
+	if (ptrerr != NULL)
+		errx(EX_USAGE, "%s", ptrerr);
 
 	if (voss_dsp_rx_device == NULL || voss_dsp_tx_device == NULL)
 		errx(EX_USAGE, "Missing -f argument");
@@ -1970,14 +2045,11 @@ main(int argc, char **argv)
 
 		voss_dups++;
 	}
-	/* Give each DSP device 4 threads */
 
-	for (idx = 0; idx != (voss_dups * 4); idx++) {
-		pthread_t td;
+	/* Create worker threads */
 
-		pthread_create(&td, NULL, &virtual_cuse_process, NULL);
-	}
-
+	create_threads();
+	
 	/* Run DSP threads */
 
 	virtual_oss_process(NULL);

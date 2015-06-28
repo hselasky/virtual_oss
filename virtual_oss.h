@@ -31,6 +31,7 @@
 #define	VIRTUAL_OSS_NAME_MAX	32
 #define	VIRTUAL_OSS_VERSION 0x00010005
 #define	VIRTUAL_OSS_LIMITER_MAX	64	/* exclusive */
+#define	VIRTUAL_OSS_OPTIONS_MAX	1024	/* bytes */
 
 #define	VIRTUAL_OSS_GET_VERSION		_IOR('O', 0, int)
 
@@ -161,5 +162,7 @@ struct virtual_oss_midi_delay_locator {
 #define	VIRTUAL_OSS_SET_MIDI_DELAY_LOCATOR	_IOW('O', 30, struct virtual_oss_midi_delay_locator)
 #define	VIRTUAL_OSS_GET_MIDI_DELAY_LOCATOR	_IOR('O', 31, struct virtual_oss_midi_delay_locator)
 #define	VIRTUAL_OSS_RST_MIDI_DELAY_LOCATOR	_IO('O', 32)
+
+#define	VIRTUAL_OSS_ADD_OPTIONS			_IOWR('O', 33, char [VIRTUAL_OSS_OPTIONS_MAX])
 
 #endif					/* _VIRTUAL_OSS_H_ */
