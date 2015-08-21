@@ -481,6 +481,10 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 			delta_out = delta_in;
 		else
 			delta_in = delta_out;
+
+		pvc->rx_busy = 1;
+		atomic_unlock();
+		error = cuse_copy_out(src, peer_ptr, delta_out);
 	} else {
 		vresample_t *pvr = &pvc->tx_resample;
 		uint8_t plimit[pvc->channels];
@@ -544,10 +548,11 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 		/* export resulting samples into buffer */
 		format_export(pvc->format, pvr->scratch_in_buf,
 		    src, delta_out, plimit, pvc->channels);
+
+		pvc->rx_busy = 1;
+		atomic_unlock();
+		error = cuse_copy_out(src, peer_ptr, delta_out);
 	}
-	pvc->rx_busy = 1;
-	atomic_unlock();
-	error = cuse_copy_out(src, peer_ptr, delta_out);
 	atomic_lock();
 	pvc->rx_busy = 0;
 	*pout_len = delta_out;
@@ -957,7 +962,7 @@ vclient_write_wav(struct cuse_dev *pdev, int fflags,
 static void
 vclient_set_channels(vclient_t *pvc, int channels)
 {
-	if (channels < 0 || channels > pvc->profile->channels)
+	if (channels <= 0 || channels > pvc->profile->channels)
 		return;
 
 	pvc->channels = channels;
@@ -1401,14 +1406,15 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 	atomic_lock();
 	if (events & CUSE_POLL_READ) {
 		uint32_t temp = vblock_count_bufs(&pvc->rx_ready) *
-		vclient_bufsize_scaled(pvc);
+		    vclient_bufsize_scaled(pvc);
 
+		pvc->rx_enabled = 1;
 		if (temp >= pvc->buffer_size)
 			retval |= CUSE_POLL_READ;
 	}
 	if (events & CUSE_POLL_WRITE) {
 		uint32_t temp = vblock_count_bufs(&pvc->tx_free) *
-		vclient_bufsize_scaled(pvc);
+		    vclient_bufsize_scaled(pvc);
 
 		if (temp >= pvc->buffer_size)
 			retval |= CUSE_POLL_WRITE;
