@@ -1470,9 +1470,9 @@ static int voss_dsp_perm = 0666;
 
 uint32_t voss_dsp_rx_refresh;
 uint32_t voss_dsp_tx_refresh;
-const char *voss_dsp_rx_device;
-const char *voss_dsp_tx_device;
-const char *voss_ctl_device;
+char voss_dsp_rx_device[VMAX_STRING];
+char voss_dsp_tx_device[VMAX_STRING];
+char voss_ctl_device[VMAX_STRING];
 
 static int voss_dups;
 
@@ -1542,14 +1542,14 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 	}
 
 	/* create DSP device */
-	if (ptr->oss_name != NULL && ptr->oss_name[0] != 0) {
+	if (ptr->oss_name[0] != 0) {
 		pdev = cuse_dev_create(&vclient_oss_methods, ptr, NULL,
 		    0, 0, voss_dsp_perm, ptr->oss_name);
 		if (pdev == NULL)
 			errx(EX_USAGE, "DSP: Could not create '/dev/%s'", ptr->oss_name);
 	}
 	/* create WAV device */
-	if (ptr->wav_name != NULL && ptr->wav_name[0] != 0) {
+	if (ptr->wav_name[0] != 0) {
 		pdev = cuse_dev_create(&vclient_wav_methods, ptr, NULL,
 		    0, 0, voss_dsp_perm, ptr->wav_name);
 		if (pdev == NULL)
@@ -1566,8 +1566,8 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 	voss_dups++;
 
 	/* need new names next time */
-	pvp->oss_name = NULL;
-	pvp->wav_name = NULL;
+	memset(pvp->oss_name, 0, sizeof(pvp->oss_name));
+	memset(pvp->wav_name, 0, sizeof(pvp->wav_name));
 }
 
 static void
@@ -1770,19 +1770,27 @@ parse_options(int narg, char **pparg, int is_main)
 				return ("Invalid number of sample bits");
 			}
 			if (c == 'f' || c == 'R') {
-				voss_dsp_rx_device = optarg;
+				if (strlen(optarg) > VMAX_STRING - 1)
+					return ("Device name too long");
+				strncpy(voss_dsp_rx_device, optarg, sizeof(voss_dsp_rx_device));
 				voss_dsp_rx_refresh = 1;
 			}
 			if (c == 'f' || c == 'P') {
-				voss_dsp_tx_device = optarg;
+				if (strlen(optarg) > VMAX_STRING - 1)
+					return ("Device name too long");
+				strncpy(voss_dsp_tx_device, optarg, sizeof(voss_dsp_tx_device));
 				voss_dsp_tx_refresh = 1;
 			}
 			break;
 		case 'w':
-			profile.wav_name = optarg;
+			if (strlen(optarg) > VMAX_STRING - 1)
+				return ("Device name too long");
+			strncpy(profile.wav_name, optarg, sizeof(profile.wav_name));
 			break;
 		case 'd':
-			profile.oss_name = optarg;
+			if (strlen(optarg) > VMAX_STRING - 1)
+				return ("Device name too long");
+			strncpy(profile.oss_name, optarg, sizeof(profile.oss_name));
 			profile.pvc_head = &virtual_client_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
@@ -1797,7 +1805,9 @@ parse_options(int narg, char **pparg, int is_main)
 			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
 			break;
 		case 'l':
-			profile.oss_name = optarg;
+			if (strlen(optarg) > VMAX_STRING - 1)
+				return ("Device name too long");
+			strncpy(profile.oss_name, optarg, sizeof(profile.oss_name));
 			profile.pvc_head = &virtual_loopback_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
@@ -1824,10 +1834,10 @@ parse_options(int narg, char **pparg, int is_main)
 				return ("-s option requires a non-zero positive value");
 			break;
 		case 't':
-			if (voss_ctl_device != NULL)
+			if (voss_ctl_device[0])
 				return ("-t parameter may only be used once");
 
-			voss_ctl_device = optarg;
+			strncpy(voss_ctl_device, optarg, sizeof(voss_ctl_device));
 			break;
 		case 'm':
 			ptr = optarg;
@@ -2018,7 +2028,7 @@ main(int argc, char **argv)
 	if (ptrerr != NULL)
 		errx(EX_USAGE, "%s", ptrerr);
 
-	if (voss_dsp_rx_device == NULL || voss_dsp_tx_device == NULL)
+	if (voss_dsp_rx_device[0] == 0 || voss_dsp_tx_device[0] == 0)
 		errx(EX_USAGE, "Missing -f argument");
 
 	/* use DSP channels as default */
@@ -2041,7 +2051,7 @@ main(int argc, char **argv)
 
 	/* Create CTL device */
 
-	if (voss_ctl_device != NULL) {
+	if (voss_ctl_device[0] != 0) {
 		struct cuse_dev *pdev;
 
 		pdev = cuse_dev_create(&vctl_methods, NULL, NULL,

@@ -29,6 +29,7 @@
 #include <samplerate.h>
 
 #define	VMAX_CHAN 64
+#define	VMAX_STRING 64	/* characters */
 
 #define	VTYPE_OSS_DAT 0
 #define	VTYPE_WAV_HDR 1
@@ -85,8 +86,8 @@ struct cuse_methods;
 
 struct virtual_profile {
 	vprofile_entry_t entry;
-	const char *oss_name;
-	const char *wav_name;
+	char oss_name[VMAX_STRING];
+	char wav_name[VMAX_STRING];
 	vclient_head_t *pvc_head;
 	int64_t	rx_peak_value[VMAX_CHAN];
 	int64_t	tx_peak_value[VMAX_CHAN];
@@ -185,9 +186,9 @@ extern uint32_t voss_dsp_max_frags;
 extern uint8_t voss_libsamplerate_enable;
 extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
-extern const char *voss_dsp_rx_device;
-extern const char *voss_dsp_tx_device;
-extern const char *voss_ctl_device;
+extern char voss_dsp_rx_device[VMAX_STRING];
+extern char voss_dsp_tx_device[VMAX_STRING];
+extern char voss_ctl_device[VMAX_STRING];
 
 extern void atomic_lock(void);
 extern void atomic_unlock(void);
