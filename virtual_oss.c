@@ -26,41 +26,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
 
-#include <sys/soundcard.h>
 #include <sys/queue.h>
 #include <sys/types.h>
-#include <sys/filio.h>
 
 #include "virtual_int.h"
-
-static int
-virtual_oss_set_format(int fd, uint32_t *format)
-{
-	int value[6];
-	int error;
-	int i;
-
-	value[0] = *format & VPREFERRED_SNE_AFMT;
-	value[1] = *format & VPREFERRED_UNE_AFMT;
-	value[2] = *format & VPREFERRED_SLE_AFMT;
-	value[3] = *format & VPREFERRED_SBE_AFMT;
-	value[4] = *format & VPREFERRED_ULE_AFMT;
-	value[5] = *format & VPREFERRED_UBE_AFMT;
-
-	for (i = 0; i != 6; i++) {
-		error = ioctl(fd, SNDCTL_DSP_SETFMT, value + i);
-		if (error == 0) {
-			*format = value[i];
-			return (0);
-		}
-	}
-	warn("Could not set FMT=0x%08x", *format);
-	return (-1);
-}
+#include "virtual_backend.h"
 
 void   *
 virtual_oss_process(void *arg)
@@ -68,10 +41,12 @@ virtual_oss_process(void *arg)
 	vclient_t *pvc;
 	vblock_t *pvb;
 	vmonitor_t *pvm;
-	uint32_t rx_fmt;
-	uint32_t tx_fmt;
-	int fd_rx = -1;
-	int fd_tx = -1;
+	struct voss_backend *rx_be = voss_rx_backend;
+	struct voss_backend *tx_be = voss_tx_backend;
+	int rx_fmt;
+	int tx_fmt;
+	int rx_chn;
+	int tx_chn;
 	int off;
 	int src_chans;
 	int dst_chans;
@@ -110,92 +85,35 @@ virtual_oss_process(void *arg)
 		errx(1, "Cannot allocate buffer memory");
 
 	while (1) {
-		if (fd_rx > -1) {
-			close(fd_rx);
-			sleep(1);
-		}
-		if (fd_tx > -1) {
-			close(fd_tx);
-			sleep(1);
-		}
+		rx_be->close(rx_be);
+		tx_be->close(tx_be);
+
+		sleep(1);
+
 		voss_dsp_rx_refresh = 0;
-		fd_rx = open(voss_dsp_rx_device, O_RDONLY);
-		if (fd_rx < 0) {
-			warn("Could not open %s", voss_dsp_rx_device);
-			sleep(1);
-			continue;
-		}
 		voss_dsp_tx_refresh = 0;
-		fd_tx = open(voss_dsp_tx_device, O_WRONLY);
-		if (fd_tx < 0) {
-			warn("Could not open %s", voss_dsp_tx_device);
-			sleep(1);
-			continue;
-		}
-		blocks = 0;
-		len = ioctl(fd_rx, FIONBIO, &blocks);
-		if (len < 0) {
-			warn("Could not set blocking mode on DSP");
-			continue;
-		}
-		blocks = 0;
-		len = ioctl(fd_tx, FIONBIO, &blocks);
-		if (len < 0) {
-			warn("Could not set blocking mode on DSP");
-			continue;
-		}
+
+		rx_be = voss_rx_backend;
+		tx_be = voss_tx_backend;
+
 		rx_fmt = voss_dsp_rx_fmt;
-		len = virtual_oss_set_format(fd_rx, &rx_fmt);
-		if (len < 0)
+		rx_chn = voss_dsp_max_channels;
+		if (rx_be->open(rx_be, voss_dsp_rx_device, voss_dsp_sample_rate,
+		    &rx_chn, &rx_fmt) < 0)
 			continue;
-		tx_fmt = voss_dsp_tx_fmt;
-		len = virtual_oss_set_format(fd_tx, &tx_fmt);
-		if (len < 0)
-			continue;
-		blocks = voss_dsp_max_channels;
-		do {
-			len = ioctl(fd_tx, SOUND_PCM_WRITE_CHANNELS, &blocks);
-		} while (len < 0 && --blocks > 0);
 
-		len = ioctl(fd_tx, SOUND_PCM_READ_CHANNELS, &blocks);
-		if (len < 0 || (unsigned)blocks == 0 ||
-		    (unsigned)blocks > voss_dsp_max_channels) {
-			warn("Could not set TX CHANNELS=%d/%d",
-			    blocks, (int)voss_dsp_max_channels);
-			continue;
-		}
-		voss_dsp_tx_channels = blocks;
-		buffer_dsp_tx_size = voss_dsp_samples *
-		    voss_dsp_tx_channels * (voss_dsp_bits / 8);
-
-		blocks = voss_dsp_max_channels;
-		do {
-			len = ioctl(fd_rx, SOUND_PCM_WRITE_CHANNELS, &blocks);
-		} while (len < 0 && --blocks > 0);
-
-		len = ioctl(fd_rx, SOUND_PCM_READ_CHANNELS, &blocks);
-		if (len < 0 || (unsigned)blocks == 0 ||
-		    (unsigned)blocks > voss_dsp_max_channels) {
-			warn("Could not set RX CHANNELS=%d/%d",
-			    blocks, (int)voss_dsp_max_channels);
-			continue;
-		}
-		voss_dsp_rx_channels = blocks;
 		buffer_dsp_rx_size = voss_dsp_samples *
-		    voss_dsp_rx_channels * (voss_dsp_bits / 8);
+		    rx_chn * (voss_dsp_bits / 8);
 
-		blocks = voss_dsp_sample_rate;
-		len = ioctl(fd_rx, SNDCTL_DSP_SPEED, &blocks);
-		if (len < 0) {
-			warn("Could not set SPEED=%d Hz", blocks);
+		tx_fmt = voss_dsp_tx_fmt;
+		tx_chn = voss_dsp_max_channels;
+		if (tx_be->open(tx_be, voss_dsp_tx_device, voss_dsp_sample_rate,
+		    &tx_chn, &tx_fmt) < 0)
 			continue;
-		}
-		blocks = voss_dsp_sample_rate;
-		len = ioctl(fd_tx, SNDCTL_DSP_SPEED, &blocks);
-		if (len < 0) {
-			warn("Could not set SPEED=%d Hz", blocks);
-			continue;
-		}
+
+		buffer_dsp_tx_size = voss_dsp_samples *
+		    tx_chn * (voss_dsp_bits / 8);
+
 		while (1) {
 
 			/* Check if DSP device should be re-opened */
@@ -206,7 +124,7 @@ virtual_oss_process(void *arg)
 			len = 0;
 
 			while (off < (int)buffer_dsp_rx_size) {
-				len = read(fd_rx, buffer_dsp + off,
+				len = rx_be->transfer(rx_be, buffer_dsp + off,
 				    buffer_dsp_rx_size - off);
 				if (len <= 0)
 					break;
@@ -221,10 +139,10 @@ virtual_oss_process(void *arg)
 			/* Compute master input peak values */
 
 			format_maximum(buffer_data, voss_input_peak,
-			    voss_dsp_rx_channels, voss_dsp_samples);
+			    rx_chn, voss_dsp_samples);
 
 			format_remix(buffer_data,
-			    voss_dsp_rx_channels,
+			    rx_chn,
 			    voss_mix_channels,
 			    voss_dsp_samples);
 
@@ -680,13 +598,13 @@ virtual_oss_process(void *arg)
 
 			format_remix(buffer_temp,
 			    voss_mix_channels,
-			    voss_dsp_tx_channels,
+			    tx_chn,
 			    voss_dsp_samples);
 
 			/* Compute master output peak values */
 
 			format_maximum(buffer_temp, voss_output_peak,
-			    voss_dsp_tx_channels, voss_dsp_samples);
+			    tx_chn, voss_dsp_samples);
 
 			/* Update limiter */
 			fmt_max = format_max(tx_fmt);
@@ -701,38 +619,51 @@ virtual_oss_process(void *arg)
 			/* Export and transmit resulting audio */
 
 			format_export(tx_fmt, buffer_temp, buffer_dsp,
-			    buffer_dsp_tx_size, fmt_limit, voss_dsp_tx_channels);
+			    buffer_dsp_tx_size, fmt_limit, tx_chn);
 
 			atomic_unlock();
 
-			blocks = 0;
+			/* Get output delay in bytes */
+			tx_be->delay(tx_be, &blocks);
 
-			ioctl(fd_tx, SNDCTL_DSP_GETODELAY, &blocks);
-
-			blocks /= (int)buffer_dsp_tx_size;
+			/* Convert delay into frames */
+			if (blocks > 0)
+				blocks /= (int)buffer_dsp_tx_size;
+			else
+				blocks = 1;
 
 			/*
 			 * Simple fix for jitter: Repeat data when too
 			 * little. Skip data when too much. This
 			 * should not happen during normal operation.
 			 */
-			if (blocks < 1)
+			switch (blocks) {
+			case 0:
 				blocks = 2;
-			else if (blocks > 2)
-				blocks = 0;
-			else
+				break;
+			case 1:
+			case 2:
 				blocks = 1;
-
+				break;
+			default:
+				blocks = 0;
+				break;
+			}
+			len = 0;
 			while (blocks--) {
 				off = 0;
 				while (off < (int)buffer_dsp_tx_size) {
-					len = write(fd_tx, buffer_dsp + off,
-					    (buffer_dsp_tx_size - off));
+					len = tx_be->transfer(tx_be, buffer_dsp + off,
+					    buffer_dsp_tx_size - off);
 					if (len <= 0)
 						break;
 					off += len;
 				}
+				if (len <= 0)
+					break;
 			}
+			if (len <= 0)
+				break;
 		}
 	}
 	return (NULL);

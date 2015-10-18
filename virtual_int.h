@@ -175,8 +175,6 @@ extern int64_t voss_input_peak[VMAX_CHAN];
 extern uint32_t voss_max_channels;
 extern uint32_t voss_mix_channels;
 extern uint32_t voss_dsp_samples;
-extern uint32_t voss_dsp_rx_channels;
-extern uint32_t voss_dsp_tx_channels;
 extern uint32_t voss_dsp_max_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;

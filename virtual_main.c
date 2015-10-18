@@ -42,8 +42,8 @@
 #include <pthread.h>
 
 #include "virtual_int.h"
-
 #include "virtual_oss.h"
+#include "virtual_backend.h"
 
 static pthread_mutex_t atomic_mtx;
 static pthread_cond_t atomic_cv;
@@ -1113,7 +1113,11 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		temp = (1 << (data.val & 0xFFFF)) * (data.val >> 16);
 		if (temp < 0 || temp > (vclient_bufsize_scaled(pvc) *
 		    (voss_dsp_max_frags - 1))) {
+#if 0
+			error = 0;
+#else
 			error = CUSE_ERR_INVALID;
+#endif
 			break;
 		}
 		vclient_set_buffer_size(pvc,
@@ -1454,8 +1458,6 @@ vmonitor_head_t virtual_monitor_output;
 uint32_t voss_max_channels;
 uint32_t voss_mix_channels;
 uint32_t voss_dsp_samples;
-uint32_t voss_dsp_rx_channels;
-uint32_t voss_dsp_tx_channels;
 uint32_t voss_dsp_max_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
@@ -1474,7 +1476,40 @@ char voss_dsp_rx_device[VMAX_STRING];
 char voss_dsp_tx_device[VMAX_STRING];
 char voss_ctl_device[VMAX_STRING];
 
+struct voss_backend *voss_rx_backend;
+struct voss_backend *voss_tx_backend;
+
 static int voss_dups;
+
+static void
+voss_rx_backend_refresh(void)
+{
+  	/* setup RX backend */
+	if (strcmp(voss_dsp_rx_device, "/dev/null") == 0) {
+		voss_rx_backend = &voss_backend_null_rec;
+#ifdef HAVE_BLUETOOTH
+	} else if (strstr(voss_dsp_rx_device, "/dev/bluetooth/") == voss_dsp_rx_device) {
+		voss_rx_backend = &voss_backend_bt_rec;
+#endif
+	} else {
+		voss_rx_backend = &voss_backend_oss_rec;
+	}
+}
+
+static void
+voss_tx_backend_refresh(void)
+{
+  	/* setup TX backend */
+	if (strcmp(voss_dsp_tx_device, "/dev/null") == 0) {
+		voss_tx_backend = &voss_backend_null_play;
+#ifdef HAVE_BLUETOOTH
+	} else if (strstr(voss_dsp_tx_device, "/dev/bluetooth/") == voss_dsp_tx_device) {
+		voss_tx_backend = &voss_backend_bt_play;
+#endif
+	} else {
+		voss_tx_backend = &voss_backend_oss_play;
+	}
+}
 
 static void
 usage(void)
@@ -1773,12 +1808,14 @@ parse_options(int narg, char **pparg, int is_main)
 				if (strlen(optarg) > VMAX_STRING - 1)
 					return ("Device name too long");
 				strncpy(voss_dsp_rx_device, optarg, sizeof(voss_dsp_rx_device));
+				voss_rx_backend_refresh();
 				voss_dsp_rx_refresh = 1;
 			}
 			if (c == 'f' || c == 'P') {
 				if (strlen(optarg) > VMAX_STRING - 1)
 					return ("Device name too long");
 				strncpy(voss_dsp_tx_device, optarg, sizeof(voss_dsp_tx_device));
+				voss_tx_backend_refresh();
 				voss_dsp_tx_refresh = 1;
 			}
 			break;

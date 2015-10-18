@@ -26,7 +26,7 @@
 # Makefile for virtual_oss
 #
 
-.PATH: .
+.PATH: . backend_oss backend_bt backend_null
 
 VERSION=1.0.8
 PROG=virtual_oss
@@ -44,7 +44,15 @@ virtual_audio_delay.c \
 virtual_ctl.c \
 virtual_format.c \
 virtual_main.c \
-virtual_oss.c
+virtual_oss.c \
+backend_oss.c \
+backend_null.c
+
+.if defined(HAVE_BLUETOOTH)
+SRCS += backend_bt.c avdtp.c sbc_encode.c
+CFLAGS += -DHAVE_BLUETOOTH
+LDFLAGS += -lbluetooth -lsdp
+.endif
 
 CFLAGS += -I${LOCALBASE}/include
 LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS} -lm -lsamplerate
