@@ -54,8 +54,15 @@ CFLAGS += -DHAVE_BLUETOOTH
 LDFLAGS += -lbluetooth -lsdp
 .endif
 
+.if defined(HAVE_CUSE)
+CFLAGS+= -DHAVE_CUSE
+LDFLAGS+= -lcuse
+.else
+LDFLAGS+= -lcuse4bsd
+.endif
+
 CFLAGS += -I${LOCALBASE}/include
-LDFLAGS += -L${LIBDIR} -lcuse4bsd ${PTHREAD_LIBS} -lm -lsamplerate
+LDFLAGS += -L${LIBDIR} ${PTHREAD_LIBS} -lm -lsamplerate
 
 .include <bsd.prog.mk>
 

@@ -38,7 +38,11 @@
 #include <sys/filio.h>
 #include <sys/rtprio.h>
 
+#ifdef HAVE_CUSE
+#include <cuse.h>
+#else
 #include <cuse4bsd.h>
+#endif
 #include <pthread.h>
 
 #include "virtual_int.h"
