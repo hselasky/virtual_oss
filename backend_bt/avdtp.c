@@ -101,15 +101,15 @@ avdtpCheckResponse(int recvfd, int *trans, int signalId,
 		if (len == AVDTP_LEN_ERROR)
 			return (buffer[2]);
 		else if ((len % AVDTP_LEN_SUCCESS) == 0 &&
-		    buffer[0] & RESPONSEACCEPT) {
+		    (buffer[0] & RESPONSEACCEPT)) {
 			if (len == AVDTP_LEN_SUCCESS)
 				return (0);
-			else if (datasize && data && len > AVDTP_LEN_SUCCESS) {
-				memcpy(data, buffer + 2, len - 2);
-				*datasize = len - 2;
-
-				return (0);
-			}
+		}
+		if (datasize && data && len > AVDTP_LEN_SUCCESS &&
+		    (buffer[0] & RESPONSEACCEPT)) {
+			memcpy(data, buffer + 2, len - 2);
+			*datasize = len - 2;
+			return (0);
 		}
 	}
 response_invalid:
