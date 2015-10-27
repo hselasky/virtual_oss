@@ -62,10 +62,21 @@ null_open(struct voss_backend *pbe, const char *devname,
 	return (-1);
 }
 
+static void
+null_wait(void)
+{
+	uint64_t delay;
+ 
+	delay = voss_dsp_samples;
+	delay *= (1000000ULL / 4ULL);
+	delay /= voss_dsp_sample_rate;
+	usleep(delay);
+}
+
 static int
 null_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-
+	null_wait();
 	memset(ptr, 0, len);
 	return (len);
 }
@@ -73,6 +84,7 @@ null_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 static int
 null_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
+	null_wait();
 	return (len);
 }
 
