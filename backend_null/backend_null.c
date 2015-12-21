@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
+#include <time.h>
 
 #include <sys/queue.h>
 #include <sys/filio.h>
@@ -65,12 +66,19 @@ null_open(struct voss_backend *pbe, const char *devname,
 static void
 null_wait(void)
 {
+	struct timespec ts;
 	uint64_t delay;
- 
+	uint64_t nsec;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
+
 	delay = voss_dsp_samples;
-	delay *= (1000000ULL / 4ULL);
+	delay *= 1000000000ULL;
 	delay /= voss_dsp_sample_rate;
-	usleep(delay);
+
+	usleep((delay - (nsec % delay)) / 1000);
 }
 
 static int
@@ -84,7 +92,6 @@ null_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 static int
 null_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	null_wait();
 	return (len);
 }
 
