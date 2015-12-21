@@ -88,7 +88,7 @@ virtual_oss_process(void *arg)
 		rx_be->close(rx_be);
 		tx_be->close(tx_be);
 
-		sleep(1);
+		sleep(2);
 
 		voss_dsp_rx_refresh = 0;
 		voss_dsp_tx_refresh = 0;
