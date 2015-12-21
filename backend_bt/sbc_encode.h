@@ -34,30 +34,60 @@
 #ifndef _SBC_ENCODE_H_
 #define	_SBC_ENCODE_H_
 
-#define SBC_CODEC_ID	0x6
-#define DEFAULT_MAXBPOOL 80
+#define	SBC_CODEC_ID	0x6
+#define	DEFAULT_MAXBPOOL 80
+#define	SBC_MAX_MTU	65536
 
-#define MODE_STEREO	2
-#define MODE_JOINT	3
-#define MODE_DUAL	1
-#define MODE_MONO	0
+struct sbc_config {
+	uint8_t	chmode;
+#define	MODE_STEREO	2
+#define	MODE_JOINT	3
+#define	MODE_DUAL	1
+#define	MODE_MONO	0
+	uint8_t	allocm;
+#define	ALLOC_LOUDNESS	0
+#define	ALLOC_SNR 	1
+	uint8_t	bitpool;
+	uint8_t	bands;
+#define	BANDS_4		0
+#define	BANDS_8		1
+	uint8_t	blocks;
+#define	BLOCKS_4	0
+#define	BLOCKS_8	1
+#define	BLOCKS_12	2
+#define	BLOCKS_16	3
+	uint8_t	freq;
+#define	FREQ_16K	0
+#define	FREQ_32K	1
+#define	FREQ_44_1K	2
+#define	FREQ_48K	3
+	uint16_t mtu;
+};
 
-#define ALLOC_LOUDNESS	0
-#define ALLOC_SNR 	1
+struct sbc_encode {
+	uint8_t	pkt_data[SBC_MAX_MTU];
+	int32_t	output[256];
+	int16_t	music_data[256];
+	uint8_t	data[1024];
+	int	bits[2][8];
+	int32_t	left[80];
+	int32_t	right[80];
+	int32_t	samples[16][2][8];
+	uint32_t rem_len;
+	uint32_t bitoffset;
+	uint32_t maxoffset;
+	uint32_t pktoffset;
+	uint32_t crc;
+	uint32_t timestamp;
+	uint16_t seqnumber;
+	uint16_t framesamples;
+	uint8_t	scalefactor[2][8];
+	uint8_t	channels;
+	uint8_t	bands;
+	uint8_t	blocks;
+	struct sbc_config cfg;
+};
 
-#define FREQ_16K	0
-#define FREQ_32K	1
-#define FREQ_44_1K	2
-#define FREQ_48K	3
+int	sbc_encode_stream(struct sbc_encode *, int);
 
-#define BANDS_4		0
-#define BANDS_8		1
-
-#define BLOCKS_4	0
-#define BLOCKS_8	1
-#define BLOCKS_12	2
-#define BLOCKS_16	3
-
-int stream(int16_t *, size_t, int, int, int, int, int, int, size_t, size_t);
-
-#endif			/* _SBC_ENCODE_H_ */
+#endif					/* _SBC_ENCODE_H_ */

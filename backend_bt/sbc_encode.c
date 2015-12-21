@@ -43,36 +43,14 @@
 #include <unistd.h>
 
 #include "sbc_coeffs.h"
-#include "sbc_crc.h"
 #include "sbc_encode.h"
 
-static uint8_t make_crc(uint8_t);
-uint8_t	Crc8(uint8_t, uint8_t *, size_t, size_t);
-static size_t make_frame(uint8_t *, int16_t *);
-static void calc_scalefactors(int32_t samples[16][2][8]);
-static uint8_t calc_scalefactors_joint(int32_t sb_sample[16][2][8]);
-static size_t sbc_encode(int16_t *, uint32_t *);
-static void calc_bitneed(void);
-static size_t move_bits(uint8_t *, int, uint32_t);
-static size_t move_bits_crc(uint8_t *, int, uint32_t);
-
-uint32_t scalefactor[2][8];
-int	bits[2][8];
-int	global_bitpool = 32;
-int	global_mode = MODE_STEREO;
-int	global_alloc = ALLOC_LOUDNESS;
-int	global_freq = FREQ_44_1K;
-int	global_chan = 2;
-int	global_bands = 8;
-int	global_bands_config = BANDS_8;
-int	global_block_config = BLOCKS_16;
-int	global_blocks = 16;
 int	join = 0;
 
 #define	SYNCWORD	0x9c
 #define	ABS(x)		(((x) < 0) ? -(x) : (x))
 #define	BIT30		(1U << 30)
-#define	BM(x)		((1U << (x)) - 1U)
+#define	BM(x)		((1ULL << (x)) - 1ULL)
 
 struct a2dp_frame_header {
 	uint8_t	syncword;
@@ -88,7 +66,6 @@ struct a2dp_frame_header_joint {
 	uint8_t	crc;
 	uint8_t	joint;
 };
-
 
 struct a2dp_frame_mono {
 	struct a2dp_frame_header header;
@@ -121,54 +98,52 @@ struct rtpHeader {
 	uint8_t	reserved3;
 	uint8_t	reserved2;
 	uint8_t	reserved1;
-	uint8_t	reserved0;		/* Reseverd least significant byte set
+	uint8_t	reserved0;		/* Reserved least significant byte set
 					 * to 1. */
 	uint8_t	numFrames;		/* Number of sbc frames in this
 					 * packet. */
 };
 
 /* Loudness offset allocations. */
-int	loudnessoffset8[4][8] = {
+static const int loudnessoffset8[4][8] = {
 	{-2, 0, 0, 0, 0, 0, 0, 1},
 	{-3, 0, 0, 0, 0, 0, 1, 2},
 	{-4, 0, 0, 0, 0, 0, 1, 2},
 	{-4, 0, 0, 0, 0, 0, 1, 2},
 };
 
-int	loudnessoffset4[4][4] = {
+static const int loudnessoffset4[4][4] = {
 	{-1, 0, 0, 0},
 	{-2, 0, 0, 1},
 	{-2, 0, 0, 1},
-	{-2, 0, 0, 1}
+	{-2, 0, 0, 1},
 };
 
-uint8_t
-calc_scalefactors_joint(int32_t sb_sample[16][2][8])
+static uint8_t
+calc_scalefactors_joint(struct sbc_encode *sbc)
 {
-	int64_t sb_j[16][2];
-	uint32_t x, y;
-	int32_t ax;
-	int block, sb, lz;
+	int32_t sb_j[16][2];
+	uint32_t x;
+	uint32_t y;
+	uint8_t block;
 	uint8_t joint;
+	uint8_t sb;
+	uint8_t lz;
 
 	joint = 0;
-	for (sb = 0; sb < global_bands - 1; sb++) {
-		for (block = 0; block < global_blocks; block++) {
-			sb_j[block][0] = (sb_sample[block][0][sb]) +
-			    (sb_sample[block][1][sb]);
-			sb_j[block][1] = (sb_sample[block][0][sb]) -
-			    (sb_sample[block][1][sb]);
+	for (sb = 0; sb != sbc->bands - 1; sb++) {
+		for (block = 0; block < sbc->blocks; block++) {
+			sb_j[block][0] = (sbc->samples[block][0][sb] +
+			    sbc->samples[block][1][sb]) / 2;
+			sb_j[block][1] = (sbc->samples[block][0][sb] -
+			    sbc->samples[block][1][sb]) / 2;
 		}
 
 		x = 1 << 15;
 		y = 1 << 15;
-		for (block = 0; block < global_blocks; block++) {
-			ax = ABS(sb_j[block][0] / 2);
-			if (ax)
-				x |= ax;
-			ax = ABS(sb_j[block][1] / 2);
-			if (ax)
-				y |= ax;
+		for (block = 0; block < sbc->blocks; block++) {
+			x |= ABS(sb_j[block][0]);
+			y |= ABS(sb_j[block][1]);
 		}
 
 		lz = 1;
@@ -185,49 +160,45 @@ calc_scalefactors_joint(int32_t sb_sample[16][2][8])
 		}
 		y = 16 - lz;
 
-		if ((scalefactor[0][sb] + scalefactor[1][sb]) > x + y) {
-			joint |= 1 << (global_bands - sb - 1);
-			scalefactor[0][sb] = x;
-			scalefactor[1][sb] = y;
-			for (block = 0; block < global_blocks; block++) {
-				sb_sample[block][0][sb] = sb_j[block][0] / 2;
-				sb_sample[block][1][sb] = sb_j[block][1] / 2;
+		if ((sbc->scalefactor[0][sb] + sbc->scalefactor[1][sb]) > x + y) {
+			joint |= 1 << (sbc->bands - sb - 1);
+			sbc->scalefactor[0][sb] = x;
+			sbc->scalefactor[1][sb] = y;
+			for (block = 0; block < sbc->blocks; block++) {
+				sbc->samples[block][0][sb] = sb_j[block][0];
+				sbc->samples[block][1][sb] = sb_j[block][1];
 			}
 		}
 	}
-
-	return joint;
+	return (joint);
 }
 
-void
-calc_scalefactors(int32_t samples[16][2][8])
+static void
+calc_scalefactors(struct sbc_encode *sbc)
 {
-	uint32_t x;
-	int32_t ax;
-	size_t lz;
-	int ch, sb, block;
+	uint8_t block;
+	uint8_t ch;
+	uint8_t sb;
 
-	for (ch = 0; ch < global_chan; ch++) {
-		for (sb = 0; sb < global_bands; sb++) {
-			x = 1 << 16;
-			for (block = 0; block < global_blocks; block++) {
-				ax = ABS(samples[block][ch][sb]);
-				if (ax)
-					x |= ax;
-			}
+	for (ch = 0; ch != sbc->channels; ch++) {
+		for (sb = 0; sb != sbc->bands; sb++) {
+			uint32_t x = 1 << 15;
+			uint8_t lx = 1;
 
-			lz = 1;
+			for (block = 0; block != sbc->blocks; block++)
+				x |= ABS(sbc->samples[block][ch][sb]);
+
 			while (!(x & BIT30)) {
-				lz++;
+				lx++;
 				x <<= 1;
 			}
-			scalefactor[ch][sb] = 16 - lz;
+			sbc->scalefactor[ch][sb] = 16 - lx;
 		}
 	}
 }
 
-void
-calc_bitneed()
+static void
+calc_bitneed(struct sbc_encode *sbc)
 {
 	int32_t bitneed[2][8];
 	int32_t max_bitneed, bitcount;
@@ -235,34 +206,36 @@ calc_bitneed()
 	int32_t loudness;
 	int ch, sb, start_chan = 0;
 
-	if (global_mode == MODE_DUAL)
-		global_chan = 1;
+	if (sbc->cfg.chmode == MODE_DUAL)
+		sbc->channels = 1;
+
 next_chan:
 	max_bitneed = 0;
 	bitcount = 0;
 	slicecount = 0;
 
-	if (global_alloc == ALLOC_SNR) {
-		for (ch = start_chan; ch < global_chan; ch++) {
-			for (sb = 0; sb < global_bands; sb++) {
-				bitneed[ch][sb] = scalefactor[ch][sb];
+	if (sbc->cfg.allocm == ALLOC_SNR) {
+		for (ch = start_chan; ch < sbc->channels; ch++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				bitneed[ch][sb] = sbc->scalefactor[ch][sb];
 
 				if (bitneed[ch][sb] > max_bitneed)
 					max_bitneed = bitneed[ch][sb];
 			}
 		}
 	} else {
-		for (ch = start_chan; ch < global_chan; ch++) {
-			for (sb = 0; sb < global_bands; sb++) {
-				if (scalefactor[ch][sb] == 0)
+		for (ch = start_chan; ch < sbc->channels; ch++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->scalefactor[ch][sb] == 0) {
 					bitneed[ch][sb] = -5;
-				else {
-					if (global_bands == 8)
-						loudness = scalefactor[ch][sb] -
-						    loudnessoffset8[global_freq][sb];
-					else
-						loudness = scalefactor[ch][sb] -
-						    loudnessoffset4[global_freq][sb];
+				} else {
+					if (sbc->bands == 8) {
+						loudness = sbc->scalefactor[ch][sb] -
+						    loudnessoffset8[sbc->cfg.freq][sb];
+					} else {
+						loudness = sbc->scalefactor[ch][sb] -
+						    loudnessoffset4[sbc->cfg.freq][sb];
+					}
 					if (loudness > 0)
 						bitneed[ch][sb] = loudness / 2;
 					else
@@ -280,8 +253,8 @@ next_chan:
 		bitslice--;
 		bitcount += slicecount;
 		slicecount = 0;
-		for (ch = start_chan; ch < global_chan; ch++) {
-			for (sb = 0; sb < global_bands; sb++) {
+		for (ch = start_chan; ch < sbc->channels; ch++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
 				if ((bitneed[ch][sb] > bitslice + 1) &&
 				    (bitneed[ch][sb] < bitslice + 16))
 					slicecount++;
@@ -289,38 +262,40 @@ next_chan:
 					slicecount += 2;
 			}
 		}
-	} while (bitcount + slicecount < global_bitpool);
-	if (bitcount + slicecount == global_bitpool) {
+	} while (bitcount + slicecount < sbc->cfg.bitpool);
+
+	/* check if exactly one more fits */
+	if (bitcount + slicecount == sbc->cfg.bitpool) {
 		bitcount += slicecount;
 		bitslice--;
 	}
-	for (ch = start_chan; ch < global_chan; ch++) {
-		for (sb = 0; sb < global_bands; sb++) {
-			if (bitneed[ch][sb] < bitslice + 2)
-				bits[ch][sb] = 0;
-			else {
-				bits[ch][sb] = bitneed[ch][sb] - bitslice;
-				if (bits[ch][sb] > 16)
-					bits[ch][sb] = 16;
+	for (ch = start_chan; ch < sbc->channels; ch++) {
+		for (sb = 0; sb < sbc->bands; sb++) {
+			if (bitneed[ch][sb] < bitslice + 2) {
+				sbc->bits[ch][sb] = 0;
+			} else {
+				sbc->bits[ch][sb] = bitneed[ch][sb] - bitslice;
+				if (sbc->bits[ch][sb] > 16)
+					sbc->bits[ch][sb] = 16;
 			}
 		}
 	}
 
-	if (global_mode == MODE_DUAL)
+	if (sbc->cfg.chmode == MODE_DUAL)
 		ch = start_chan;
 	else
 		ch = 0;
 	sb = 0;
-	while (bitcount < global_bitpool && sb < global_bands) {
-		if ((bits[ch][sb] >= 2) && (bits[ch][sb] < 16)) {
-			bits[ch][sb]++;
+	while (bitcount < sbc->cfg.bitpool && sb < sbc->bands) {
+		if ((sbc->bits[ch][sb] >= 2) && (sbc->bits[ch][sb] < 16)) {
+			sbc->bits[ch][sb]++;
 			bitcount++;
 		} else if ((bitneed[ch][sb] == bitslice + 1) &&
-		    (global_bitpool > bitcount + 1)) {
-			bits[ch][sb] = 2;
+		    (sbc->cfg.bitpool > bitcount + 1)) {
+			sbc->bits[ch][sb] = 2;
 			bitcount += 2;
 		}
-		if (global_chan == 1 || start_chan == 1)
+		if (sbc->channels == 1 || start_chan == 1)
 			sb++;
 		else if (ch == 1) {
 			ch = 0;
@@ -329,17 +304,17 @@ next_chan:
 			ch = 1;
 	}
 
-	if (global_mode == MODE_DUAL)
+	if (sbc->cfg.chmode == MODE_DUAL)
 		ch = start_chan;
 	else
 		ch = 0;
 	sb = 0;
-	while (bitcount < global_bitpool && sb < global_bands) {
-		if (bits[ch][sb] < 16) {
-			bits[ch][sb]++;
+	while (bitcount < sbc->cfg.bitpool && sb < sbc->bands) {
+		if (sbc->bits[ch][sb] < 16) {
+			sbc->bits[ch][sb]++;
 			bitcount++;
 		}
-		if (global_chan == 1 || start_chan == 1)
+		if (sbc->channels == 1 || start_chan == 1)
 			sb++;
 		else if (ch == 1) {
 			ch = 0;
@@ -348,366 +323,251 @@ next_chan:
 			ch = 1;
 	}
 
-	if (global_mode == MODE_DUAL && start_chan == 0) {
+	if (sbc->cfg.chmode == MODE_DUAL && start_chan == 0) {
 		start_chan = 1;
-		global_chan = 2;
+		sbc->channels = 2;
 		goto next_chan;
 	}
 }
 
-size_t
-move_bits(uint8_t *data, int numbits, uint32_t sample)
+static void
+sbc_store_bits_crc(struct sbc_encode *sbc, uint32_t numbits, uint32_t value)
 {
-	static uint16_t cache = 0;
-	static int cache_pos = 0;
-	uint8_t tmp_cache;
-	size_t written = 0;
+	uint32_t off = sbc->bitoffset;
 
-	if (numbits == 0) {
-		if (cache_pos > 8) {
-			cache_pos -= 8;
-			tmp_cache = cache >> cache_pos;
-			*data++ = tmp_cache;
-			written++;
+	while (numbits-- && off != sbc->maxoffset) {
+		if (value & (1 << numbits)) {
+			sbc->data[off / 8] |= 1 << ((7 - off) & 7);
+			sbc->crc ^= 0x80;
 		}
-		if (cache_pos) {
-			*data = (cache & BM(cache_pos + 1)) << (8 - cache_pos);
-			written++;
-		}
-		cache = cache_pos = 0;
-	} else {
-		cache_pos += numbits;
-		cache <<= numbits;
-		cache |= sample & BM(numbits + 1);
-		if (cache_pos >= 8) {
-			cache_pos -= 8;
-			tmp_cache = cache >> cache_pos;
-			*data = tmp_cache;
-			written++;
-		}
+		sbc->crc *= 2;
+		if (sbc->crc & 0x100)
+			sbc->crc ^= 0x11d;	/* CRC-8 polynomial */
+
+		off++;
 	}
-	return written;
+	sbc->bitoffset = off;
 }
 
-size_t
-move_bits_crc(uint8_t *data, int numbits, uint32_t sample)
+static int
+sbc_encode(struct sbc_encode *sbc)
 {
-	static uint16_t cache = 0;
-	static int cache_pos = 0;
-	uint8_t tmp_cache;
-	size_t written = 0;
-
-	if (numbits > 8 || numbits < 0)
-		return 0;
-
-	if (numbits == 0) {
-		if (cache_pos > 8) {
-			cache_pos -= 8;
-			tmp_cache = cache >> cache_pos;
-			*data++ = tmp_cache;
-			written++;
-		}
-		if (cache_pos) {
-			*data = (cache & BM(cache_pos + 1)) << (8 - cache_pos);
-			written++;
-		}
-		cache = cache_pos = 0;
-	} else {
-		cache_pos += numbits;
-		cache <<= numbits;
-		cache |= sample & BM(numbits + 1);
-		if (cache_pos >= 8) {
-			cache_pos -= 8;
-			tmp_cache = cache >> cache_pos;
-			*data = tmp_cache;
-			written++;
-		}
-	}
-	return written;
-}
-
-size_t
-sbc_encode(int16_t *input, uint32_t *samples)
-{
-	int64_t delta[2][8], levels[2][8], S[80];
-	static int32_t L[80], R[80];
-	int32_t *X, Z[80], Y[80];
-	int32_t output[16][2][8];
+	const int16_t *input = sbc->music_data;
+	int64_t delta[2][8];
+	int64_t levels[2][8];
+	int64_t S;
+	int32_t *X;
+	int32_t Z[80];
+	int32_t Y[80];
 	int32_t audioout;
-	int16_t left[8], right[8], *data;
-	size_t numsamples;
-	int i, k, block, chan, sb;
+	int16_t left[8];
+	int16_t right[8];
+	int16_t *data;
+	int numsamples;
+	int i;
+	int k;
+	int block;
+	int chan;
+	int sb;
 
-	for (block = 0; block < global_blocks; block++) {
+	for (block = 0; block < sbc->blocks; block++) {
 
-		k = 0;
-		for (i = 0; i < global_bands; i++) {
-			left[i] = input[k++];
-			if (global_chan == 2)
-				right[i] = input[k++];
+		for (i = 0; i < sbc->bands; i++) {
+			left[i] = *input++;
+			if (sbc->channels == 2)
+				right[i] = *input++;
 		}
-		input += k;
 
-		for (chan = 0; chan < global_chan; chan++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+
+			/* select right or left channel */
 			if (chan == 0) {
-				X = L;
+				X = sbc->left;
 				data = left;
 			} else {
-				X = R;
+				X = sbc->right;
 				data = right;
 			}
 
-			for (i = (global_bands * 10) - 1; i > global_bands - 1; i--)
-				X[i] = X[i - global_bands];
+			/* shift up old data */
+			for (i = (sbc->bands * 10) - 1; i > sbc->bands - 1; i--)
+				X[i] = X[i - sbc->bands];
 			k = 0;
-			for (i = global_bands - 1; i >= 0; i--)
+			for (i = sbc->bands - 1; i >= 0; i--)
 				X[i] = data[k++];
-			for (i = 0; i < global_bands * 10; i++) {
-				if (global_bands == 8)
+			for (i = 0; i < sbc->bands * 10; i++) {
+				if (sbc->bands == 8)
 					Z[i] = sbc_coeffs8[i] * X[i];
 				else
 					Z[i] = sbc_coeffs4[i] * X[i];
 			}
-			for (i = 0; i < global_bands * 2; i++) {
+			for (i = 0; i < sbc->bands * 2; i++) {
 				Y[i] = 0;
 				for (k = 0; k < 5; k++)
-					Y[i] += Z[i + k * global_bands * 2];
+					Y[i] += Z[i + k * sbc->bands * 2];
 			}
-			for (i = 0; i < global_bands; i++) {
-				S[i] = 0;
-				for (k = 0; k < global_bands * 2; k++) {
-					if (global_bands == 8) {
-						S[i] += (int64_t)cosdata8[i][k] *
+			for (i = 0; i < sbc->bands; i++) {
+				S = 0;
+				for (k = 0; k < sbc->bands * 2; k++) {
+					if (sbc->bands == 8) {
+						S += (int64_t)cosdata8[i][k] *
 						    (int64_t)Y[k];
-					} else
-						S[i] += (int64_t)cosdata4[i][k] *
+					} else {
+						S += (int64_t)cosdata4[i][k] *
 						    (int64_t)Y[k];
+					}
 				}
-				output[block][chan][i] = S[i] / SIMULTI;
+				sbc->samples[block][chan][i] = S / SIMULTI;
 			}
 		}
 	}
 
-	calc_scalefactors(output);
-	if (global_mode == MODE_JOINT)
-		join = calc_scalefactors_joint(output);
+	calc_scalefactors(sbc);
 
-	calc_bitneed();
+	if (sbc->cfg.chmode == MODE_JOINT)
+		join = calc_scalefactors_joint(sbc);
 
-	for (chan = 0; chan < global_chan; chan++) {
-		for (sb = 0; sb < global_bands; sb++) {
-			levels[chan][sb] = BM(bits[chan][sb]) <<
-			    (15 - scalefactor[chan][sb]);
-			delta[chan][sb] = 1 << (scalefactor[chan][sb] + 16);
+	calc_bitneed(sbc);
+
+	for (chan = 0; chan < sbc->channels; chan++) {
+		for (sb = 0; sb < sbc->bands; sb++) {
+			levels[chan][sb] = BM(sbc->bits[chan][sb]) <<
+			    (15 - sbc->scalefactor[chan][sb]);
+			delta[chan][sb] =
+			    1 << (sbc->scalefactor[chan][sb] + 16);
 		}
 	}
 
 	numsamples = 0;
-	for (block = 0; block < global_blocks; block++) {
-		for (chan = 0; chan < global_chan; chan++) {
-			for (sb = 0; sb < global_bands; sb++) {
-				if (bits[chan][sb] == 0)
+	for (block = 0; block < sbc->blocks; block++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->bits[chan][sb] == 0)
 					continue;
 
-				audioout = (levels[chan][sb] * (delta[chan][sb]
-				    + (int32_t)output[block][chan][sb])) >> 32;
+				audioout = (levels[chan][sb] * (delta[chan][sb] +
+				    sbc->samples[block][chan][sb])) >> 32;
 
-				samples[numsamples++] = audioout;
+				sbc->output[numsamples++] = audioout;
 			}
 		}
 	}
-	return numsamples;
+	return (numsamples);
 }
 
-uint8_t
-Crc8(uint8_t inCrc, uint8_t *inData, size_t numbits, size_t inBytes)
+static size_t
+sbc_make_frame(struct sbc_encode *sbc)
 {
-	uint8_t data;
-	int i;
+	uint8_t config;
+	uint8_t block;
+	uint8_t chan;
+	uint8_t sb;
+	uint8_t j;
+	uint8_t i;
 
-	for (i = 0; i < (int)inBytes; i++) {
-		data = inCrc ^ inData[i];
+	config = (sbc->cfg.freq << 6) | (sbc->cfg.blocks << 4) |
+	    (sbc->cfg.chmode << 2) | (sbc->cfg.allocm << 1) | sbc->cfg.bands;
 
-		if (numbits == 8)
-			data = sbc_crc8[data];
-		else if (numbits == 4)
-			data = sbc_crc4[data];
+	sbc_encode(sbc);
 
-		inCrc = data;
+	/* set initial CRC */
+	sbc->crc = 0x5e;
+
+	/* reset data position and size */
+	sbc->bitoffset = 0;
+	sbc->maxoffset = sizeof(sbc->data) * 8;
+
+	/* clear buffer */
+	memset(sbc->data, 0, sbc->cfg.mtu);
+
+	sbc_store_bits_crc(sbc, 8, SYNCWORD);
+	sbc_store_bits_crc(sbc, 8, config);
+	sbc_store_bits_crc(sbc, 8, sbc->cfg.bitpool);
+
+	/* skip 8-bit CRC */
+	sbc->bitoffset += 8;
+
+	if (sbc->cfg.chmode == MODE_JOINT) {
+		if (sbc->bands == 8)
+			sbc_store_bits_crc(sbc, 8, join);
+		else if (sbc->bands == 4)
+			sbc_store_bits_crc(sbc, 4, join);
 	}
-	return inCrc;
-}
-
-uint8_t
-make_crc(uint8_t config)
-{
-	uint8_t crc, data[11];
-	int i, j;
-	uint8_t *dataStart = data;
-	uint8_t *crcData = data;
-
-
-	crcData += move_bits_crc(crcData, 8, config);
-	crcData += move_bits_crc(crcData, 8, global_bitpool);
-	if (global_mode == MODE_JOINT) {
-		if (global_bands == 8)
-			crcData += move_bits_crc(crcData, 8, join);
-		else
-			crcData += move_bits_crc(crcData, 4, join);
-	}
-	for (i = 0; i < global_chan; i++) {
-		for (j = 0; j < global_bands; j++)
-			crcData += move_bits_crc(crcData, 4, scalefactor[i][j]);
+	for (i = 0; i < sbc->channels; i++) {
+		for (j = 0; j < sbc->bands; j++)
+			sbc_store_bits_crc(sbc, 4, sbc->scalefactor[i][j]);
 	}
 
-	crc = Crc8(0xf, data, 8, crcData - dataStart);
-
-	if (global_mode == MODE_JOINT && global_bands == 4) {
-		move_bits_crc(crcData, 0, 0);
-		crc = Crc8(crc, crcData, 4, 1);
-	}
-	return crc;
-}
-
-size_t
-make_frame(uint8_t *frame, int16_t *input)
-{
-	static uint32_t samples[256 * 2];
-	uint8_t config, crc;
-	int block, chan, sb, j, i;
-
-	uint8_t *frameStart = frame;
-
-	config = (global_freq << 6) | (global_block_config << 4) |
-	    (global_mode << 2) | (global_alloc << 1) | global_bands_config;
-
-	sbc_encode(input, samples);
-
-	crc = make_crc(config);
-
-	frame += move_bits(frame, 8, SYNCWORD);
-	frame += move_bits(frame, 8, config);
-	frame += move_bits(frame, 8, global_bitpool);
-	frame += move_bits(frame, 8, crc);
-
-	if (global_mode == MODE_JOINT && global_bands == 8)
-		frame += move_bits(frame, 8, join);
-	else if (global_mode == MODE_JOINT && global_bands == 4)
-		frame += move_bits(frame, 4, join);
-
-	for (i = 0; i < global_chan; i++) {
-		for (j = 0; j < global_bands; j++)
-			frame += move_bits(frame, 4, scalefactor[i][j]);
-	}
+	/* store 8-bit CRC */
+	sbc->data[3] = (sbc->crc & 0xFF);
 
 	i = 0;
-	for (block = 0; block < global_blocks; block++) {
-		for (chan = 0; chan < global_chan; chan++) {
-			for (sb = 0; sb < global_bands; sb++) {
-				if (bits[chan][sb] == 0)
+	for (block = 0; block < sbc->blocks; block++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->bits[chan][sb] == 0)
 					continue;
 
-				frame += move_bits(frame, bits[chan][sb], samples[i++]);
+				sbc_store_bits_crc(sbc, sbc->bits[chan][sb],
+				    sbc->output[i++]);
 			}
 		}
 	}
-	frame += move_bits(frame, 0, 0);
-
-	return (uint8_t *)frame - frameStart;
+	return ((sbc->bitoffset + 7) / 8);
 }
 
 int
-stream(int16_t *music_data, size_t music_samp, int outfd, int mode, int freq, int bands, int blocks,
-    int alloc_method, size_t bitpool, size_t mtu)
+sbc_encode_stream(struct sbc_encode *sbc, int outfd)
 {
-	struct rtpHeader myHeader;
-	struct iovec iov[2];
-	uint8_t frameData[mtu];
-	size_t totalSize;
-	size_t pkt_len;
-	size_t readsize;
-	size_t offset;
-	size_t next_pkt;
-	static uint32_t ts = 0;
-	static uint16_t seqnumber = 0;
-	int len;
-	int numpkts;
+	struct rtpHeader *phdr = (struct rtpHeader *)sbc->pkt_data;
+	uint32_t pkt_len;
+	uint32_t rem;
 
-	global_mode = mode;
-	global_bitpool = bitpool;
-	global_alloc = alloc_method;
-	global_freq = freq;
-
-	global_bands_config = bands;
-	if (bands == BANDS_8)
-		global_bands = 8;
+	if (sbc->cfg.chmode == MODE_MONO)
+		sbc->channels = 1;
 	else
-		global_bands = 4;
+		sbc->channels = 2;
 
-	if (blocks == BLOCKS_4)
-		global_blocks = 4;
-	else if (blocks == BLOCKS_8)
-		global_blocks = 8;
-	else if (blocks == BLOCKS_12)
-		global_blocks = 12;
-	else {
-		blocks = BLOCKS_16;
-		global_blocks = 16;
+	pkt_len = sbc_make_frame(sbc);
+
+retry:
+	if (sbc->pktoffset == 0) {
+		phdr->id = 0x80;	/* RTP v2 */
+		phdr->id2 = 0x60;	/* payload type 96. */
+		phdr->seqnumMSB = (uint8_t)(sbc->seqnumber >> 8);
+		phdr->seqnumLSB = (uint8_t)(sbc->seqnumber);
+		phdr->ts3 = (uint8_t)(sbc->timestamp >> 24);
+		phdr->ts2 = (uint8_t)(sbc->timestamp >> 16);
+		phdr->ts1 = (uint8_t)(sbc->timestamp >> 8);
+		phdr->ts0 = (uint8_t)(sbc->timestamp);
+		phdr->reserved0 = 0x01;
+		phdr->numFrames = 0;
+
+		sbc->seqnumber++;
+		sbc->pktoffset += sizeof(*phdr);
 	}
+	/* compute bytes left */
+	rem = sbc->cfg.mtu - sbc->pktoffset;
 
-	global_block_config = blocks;
+	if (phdr->numFrames == 255 || rem < pkt_len) {
+		int len;
 
-	global_chan = 2;
-	if (global_mode == MODE_MONO)
-		global_chan = 1;
-
-	readsize = 0;
-
-	while (music_samp >= 256 / 4) {
-		memset(&myHeader, 0, sizeof(myHeader));
-		myHeader.id = 0x80;	/* RTP v2 */
-		myHeader.id2 = 0x60;	/* payload type 96. */
-		myHeader.seqnumMSB = (uint8_t)(seqnumber >> 8);
-		myHeader.seqnumLSB = (uint8_t)seqnumber;
-		myHeader.ts3 = (uint8_t)(ts >> 24);
-		myHeader.ts2 = (uint8_t)(ts >> 16);
-		myHeader.ts1 = (uint8_t)(ts >> 8);
-		myHeader.ts0 = (uint8_t)ts;
-		myHeader.reserved0 = 0x01;
-
-		totalSize = sizeof(myHeader);
-
-		numpkts = next_pkt = len = 0;
-
-		pkt_len = 80;
-		while (totalSize + (pkt_len * 2) <= mtu && music_samp >= 256 / 4) {
-			pkt_len = make_frame(frameData + next_pkt, music_data);
-			next_pkt += pkt_len;
-			totalSize += pkt_len;
-			numpkts++;
-			music_data += 256 / 4;
-			music_samp -= 256 / 4;
-			readsize += 512 / 4;
-			if (numpkts == 255)
-				break;
-		}
-		myHeader.numFrames = numpkts;
-
-		/* setup I/O vector */
-		iov[0].iov_base = &myHeader;
-		iov[0].iov_len = sizeof(myHeader);
-		iov[1].iov_base = frameData;
-		iov[1].iov_len = next_pkt;
-
+		if (phdr->numFrames == 0)
+			return (-1);
 		do {
-			len = writev(outfd, iov, 2);
+			len = write(outfd, sbc->pkt_data, sbc->pktoffset);
 		} while (len < 0 && errno == EAGAIN);
 
 		if (len < 0)
 			return (-1);
 
-		seqnumber++;
-		ts += (readsize / (global_chan * sizeof(int16_t))) * numpkts;
+		sbc->pktoffset = 0;
+		goto retry;
 	}
+	memcpy(sbc->pkt_data + sbc->pktoffset, sbc->data, pkt_len);
+	sbc->pktoffset += pkt_len;
+	sbc->timestamp += sbc->framesamples;
+	phdr->numFrames++;
+
 	return (0);
 }

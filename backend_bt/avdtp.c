@@ -287,8 +287,7 @@ avdtpAbort(int fd, int recvfd, uint8_t sep)
 }
 
 int
-avdtpAutoConfig(int fd, int recvfd, uint8_t sep, int freq, int mode,
-    int *alloc_method, int *bitpool, int *bands, int *blocks)
+avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct sbc_config *sbcfg)
 {
 	uint8_t capabilities[128];
 	uint8_t freqmode;
@@ -318,36 +317,37 @@ avdtpAutoConfig(int fd, int recvfd, uint8_t sep, int freq, int mode,
 	supBitpoolMin = capabilities[i + 8];
 	supBitpoolMax = capabilities[i + 9];
 
-	freqmode = (1 << (3 - freq + 4)) |
-	    (1 << (3 - mode));
+	freqmode = (1 << (3 - sbcfg->freq + 4)) |
+	    (1 << (3 - sbcfg->chmode));
 
 	if ((availFreqMode & freqmode) != freqmode)
 		goto auto_config_failed;
 
 	for (i = 0; i != 4; i++) {
-		blk_len_sb_alloc = (1 << (3 - i + 4)) |
-		    (1 << (2 - *bands + 1)) | (1 << *alloc_method);
+		blk_len_sb_alloc = (1 << (i + 4)) |
+		    (1 << (1 - sbcfg->bands + 2)) |
+		    (1 << sbcfg->allocm);
 
 		if ((availConfig & blk_len_sb_alloc) == blk_len_sb_alloc)
 			break;
 	}
 	if (i == 4)
 		goto auto_config_failed;
-	*blocks = i;
+	sbcfg->blocks = (3 - i);
 
-	if (*alloc_method == ALLOC_SNR)
+	if (sbcfg->allocm == ALLOC_SNR)
 		supBitpoolMax &= ~1;
 
-	if (mode == MODE_DUAL || mode == MODE_MONO)
+	if (sbcfg->chmode == MODE_DUAL || sbcfg->chmode == MODE_MONO)
 		supBitpoolMax /= 2;
 
-	if (*bands == BANDS_4)
+	if (sbcfg->bands == BANDS_4)
 		supBitpoolMax /= 2;
 
-	if (supBitpoolMax > *bitpool)
-		supBitpoolMax = *bitpool;
+	if (supBitpoolMax > sbcfg->bitpool)
+		supBitpoolMax = sbcfg->bitpool;
 	else
-		*bitpool = supBitpoolMax;
+		sbcfg->bitpool = supBitpoolMax;
 
 	do {
 		uint8_t config[10] = {mediaTransport, 0x0, mediaCodec, SBC_CODEC_ID,

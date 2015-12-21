@@ -107,25 +107,25 @@
 /* Media Codec Capabilities */
 #define	mediaType			0xf0
 
+struct sbc_config;
 struct avdtp_sepInfo {
 	uint8_t	sep;
 	uint8_t	media_Type;
 };
 
-int 
+int
 avdtpSendCommand(int fd, uint8_t command, uint8_t type,
     uint8_t *data, size_t datasize);
-int 
+int
 avdtpCheckResponse(int recvfd, int *trans, int signalId, int *pkt_type,
     uint8_t *data, size_t *datasize);
 int	avdtpDiscover(int fd, int recvfd, struct avdtp_sepInfo *sepInfo);
-int 
+int
 avdtpGetCapabilities(int fd, int recvfd, uint8_t sep, uint8_t *data,
     size_t *datasize);
-int 
-avdtpAutoConfig(int fd, int recvfd, uint8_t sep, int freq, int mode,
-    int *alloc_method, int *bitpool, int *bands, int *blocks);
-int 
+int
+	avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct sbc_config *sbcfg);
+int
 avdtpSetConfiguration(int fd, int recvfd, uint8_t sep, uint8_t *data,
     size_t datasize);
 int	avdtpOpen(int fd, int recvfd, uint8_t sep);

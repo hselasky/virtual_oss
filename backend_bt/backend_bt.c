@@ -57,13 +57,8 @@ struct l2cap_info {
 	bdaddr_t raddr;
 };
 
-static int channel_mode = MODE_STEREO;
-static int alloc_method = ALLOC_LOUDNESS;
-static int bitpool = 0;
-static int bands = BANDS_8;
-static int blocks;
-static int frequency;
-static uint16_t mtu;
+static struct sbc_encode sbc_encode;
+
 static struct avdtp_sepInfo mySepInfo;
 
 static int
@@ -230,7 +225,8 @@ done:
 
 static int
 bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat, int service_class)
+    int *pchannels, int *pformat, struct sbc_config *sbcfg,
+    int service_class)
 {
 	struct sockaddr_l2cap addr;
 	struct l2cap_info info;
@@ -264,43 +260,43 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
 #endif
 	switch (samplerate) {
 	case 16000:
-		frequency = FREQ_16K;
+		sbcfg->freq = FREQ_16K;
 		break;
 	case 32000:
-		frequency = FREQ_32K;
+		sbcfg->freq = FREQ_32K;
 		break;
 	case 44100:
-		frequency = FREQ_44_1K;
+		sbcfg->freq = FREQ_44_1K;
 		break;
 	case 48000:
-		frequency = FREQ_48K;
+		sbcfg->freq = FREQ_48K;
 		break;
 	default:
 		warn("Invalid samplerate %d", samplerate);
 		goto error;
 	}
-#if 0
-	bands = BANDS_4;
-#endif
-#if 0
-	bitpool = XXX;
-#endif
+	sbcfg->bands = BANDS_8;
+	sbcfg->bitpool = 0;
+
 	switch (*pchannels) {
 	case 1:
-		channel_mode = MODE_MONO;
+		*pchannels = 1;
+		sbcfg->chmode = MODE_MONO;
 		break;
 	default:
 		*pchannels = 2;
-		channel_mode = MODE_STEREO;
+		sbcfg->chmode = MODE_STEREO;
 		break;
 	}
 
-	if (channel_mode == MODE_MONO || channel_mode == MODE_DUAL)
+	sbcfg->allocm = ALLOC_LOUDNESS;
+
+	if (sbcfg->chmode == MODE_MONO || sbcfg->chmode == MODE_DUAL)
 		tmpbitpool = 16;
 	else
 		tmpbitpool = 32;
 
-	if (bands == BANDS_8)
+	if (sbcfg->bands == BANDS_8)
 		tmpbitpool *= 8;
 	else
 		tmpbitpool *= 4;
@@ -308,8 +304,7 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
 	if (tmpbitpool > DEFAULT_MAXBPOOL)
 		tmpbitpool = DEFAULT_MAXBPOOL;
 
-	if (bitpool == 0 || tmpbitpool < bitpool)
-		bitpool = tmpbitpool;
+	sbcfg->bitpool = tmpbitpool;
 
 	if (bt_set_format(pformat)) {
 		warn("Unsupported sample format");
@@ -344,8 +339,7 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
 		warn("DISCOVER FAILED");
 		goto error;
 	}
-	if (avdtpAutoConfig(pbe->hc, pbe->hc, mySepInfo.sep, frequency,
-	    channel_mode, &alloc_method, &bitpool, &bands, &blocks)) {
+	if (avdtpAutoConfig(pbe->hc, pbe->hc, mySepInfo.sep, sbcfg)) {
 		warn("AUTOCONFIG FAILED");
 		goto error;
 	}
@@ -374,14 +368,14 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
 		warn("Could not connect");
 		goto error;
 	}
-	getsockopt(pbe->fd, SOL_L2CAP, SO_L2CAP_OMTU, &mtu, &mtusize);
+	getsockopt(pbe->fd, SOL_L2CAP, SO_L2CAP_OMTU, &sbcfg->mtu, &mtusize);
 
-	temp = 2 * mtu;
+	temp = sbcfg->mtu * 2;
 	if (setsockopt(pbe->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
 		warn("Could not set send buffer size");
 		goto error;
 	}
-	temp = mtu;
+	temp = sbcfg->mtu;
 	if (setsockopt(pbe->fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
 		warn("Could not set low water mark");
 		goto error;
@@ -409,15 +403,17 @@ bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
 	return (bt_open(pbe, devname, samplerate, pchannels, pformat,
-	    SDP_SERVICE_CLASS_AUDIO_SOURCE));
+	    NULL, SDP_SERVICE_CLASS_AUDIO_SOURCE));
 }
 
 static int
 bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
+	memset(&sbc_encode, 0, sizeof(sbc_encode));
+
 	return (bt_open(pbe, devname, samplerate, pchannels, pformat,
-	    SDP_SERVICE_CLASS_AUDIO_SINK));
+	    &sbc_encode.cfg, SDP_SERVICE_CLASS_AUDIO_SINK));
 }
 
 static int
@@ -429,52 +425,75 @@ bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 static int
 bt_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	static int16_t rem_data[256];
-	static unsigned rem_len;
-	int rem_size;
+	int rem_size = 1;
 	int old_len = len;
 	int err = 0;
 
-	switch (blocks) {
+	switch (sbc_encode.cfg.blocks) {
 	case BLOCKS_4:
-		rem_size = 1 * 64 * 2;
+		sbc_encode.blocks = 4;
+		rem_size *= 4;
 		break;
 	case BLOCKS_8:
-		rem_size = 2 * 64 * 2;
+		sbc_encode.blocks = 8;
+		rem_size *= 8;
 		break;
 	case BLOCKS_12:
-		rem_size = 3 * 64 * 2;
+		sbc_encode.blocks = 12;
+		rem_size *= 12;
 		break;
-	default:			/* 16 */
-		rem_size = 4 * 64 * 2;
+	default:
+		sbc_encode.blocks = 16;
+		rem_size *= 16;
 		break;
 	}
-	if (rem_len != 0) {
+
+	switch (sbc_encode.cfg.bands) {
+	case BANDS_4:
+		rem_size *= 4;
+		sbc_encode.bands = 4;
+		break;
+	default:
+		rem_size *= 8;
+		sbc_encode.bands = 8;
+		break;
+	}
+
+	/* store number of samples per frame */
+	sbc_encode.framesamples = rem_size;
+
+	if (sbc_encode.cfg.chmode != MODE_MONO) {
+		rem_size *= 2;
+		sbc_encode.channels = 2;
+	} else {
+		sbc_encode.channels = 1;
+	}
+
+	rem_size *= 2;			/* 16-bit samples */
+
+	while (len > 0) {
 		int delta = len;
 
-		if (delta > (rem_size - rem_len))
-			delta = (rem_size - rem_len);
-		memcpy((char *)rem_data + rem_len, ptr, len);
+		if (delta > (int)(rem_size - sbc_encode.rem_len))
+			delta = (int)(rem_size - sbc_encode.rem_len);
+
+		/* copy in samples */
+		memcpy((char *)sbc_encode.music_data +
+		    sbc_encode.rem_len, ptr, delta);
+
 		ptr = (char *)ptr + delta;
 		len -= delta;
-		rem_len += delta;
+		sbc_encode.rem_len += delta;
 
-		if (rem_len == rem_size) {
-			if (stream(rem_data, rem_len / 2, pbe->fd, channel_mode, frequency, bands, blocks,
-			    alloc_method, bitpool, mtu))
+		/* check if buffer is full */
+		if (sbc_encode.rem_len == rem_size) {
+			if (sbc_encode_stream(&sbc_encode, pbe->fd)) {
 				err = -1;
-		} else {
-			return (old_len);
+				break;
+			}
+			sbc_encode.rem_len = 0;
 		}
 	}
-	rem_len = len % rem_size;
-	if (rem_len != 0) {
-		memcpy(rem_data, (char *)ptr + len - rem_len, rem_len);
-		len -= rem_len;
-	}
-	if (stream(ptr, len / 2, pbe->fd, channel_mode, frequency, bands, blocks,
-	    alloc_method, bitpool, mtu))
-		err = -1;
 	if (err == 0)
 		return (old_len);
 	return (err);
