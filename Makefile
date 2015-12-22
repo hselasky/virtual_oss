@@ -51,7 +51,7 @@ backend_null.c
 .if defined(HAVE_BLUETOOTH)
 SRCS += backend_bt.c avdtp.c sbc_encode.c
 CFLAGS += -DHAVE_BLUETOOTH
-LDFLAGS += -lbluetooth -lsdp
+LDFLAGS += -lbluetooth -lsdp -lfaac
 .endif
 
 .if defined(HAVE_CUSE)

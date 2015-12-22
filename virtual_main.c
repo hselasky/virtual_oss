@@ -1610,6 +1610,13 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 }
 
 static void
+virtual_pipe(int sig)
+{
+	voss_dsp_tx_refresh = 1;
+	voss_dsp_rx_refresh = 1;
+}
+
+static void
 virtual_cuse_hup(int sig)
 {
 	atomic_wakeup();
@@ -2064,6 +2071,8 @@ main(int argc, char **argv)
 
 	if (cuse_init() != 0)
 		errx(EX_USAGE, "Could not connect to cuse module");
+
+	signal(SIGPIPE, &virtual_pipe);
 
 	ptrerr = parse_options(argc, argv, 1);
 	if (ptrerr != NULL)

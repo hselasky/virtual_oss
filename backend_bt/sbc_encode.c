@@ -43,7 +43,7 @@
 #include <unistd.h>
 
 #include "sbc_coeffs.h"
-#include "sbc_encode.h"
+#include "backend_bt.h"
 
 int	join = 0;
 
@@ -83,25 +83,6 @@ struct a2dp_frame {
 	struct a2dp_frame_header header;
 	uint8_t	scale[8];
 	uint8_t	samples[256];
-};
-
-struct rtpHeader {
-	uint8_t	id;			/* Just random number. */
-	uint8_t	id2;
-	uint8_t	seqnumMSB;		/* Packet sequence number most
-					 * significant byte. */
-	uint8_t	seqnumLSB;
-	uint8_t	ts3;			/* Timestamp most significant byte. */
-	uint8_t	ts2;
-	uint8_t	ts1;
-	uint8_t	ts0;			/* Timestamp least significant byte. */
-	uint8_t	reserved3;
-	uint8_t	reserved2;
-	uint8_t	reserved1;
-	uint8_t	reserved0;		/* Reserved least significant byte set
-					 * to 1. */
-	uint8_t	numFrames;		/* Number of sbc frames in this
-					 * packet. */
 };
 
 /* Loudness offset allocations. */
@@ -198,15 +179,16 @@ calc_scalefactors(struct sbc_encode *sbc)
 }
 
 static void
-calc_bitneed(struct sbc_encode *sbc)
+calc_bitneed(struct bt_config *cfg)
 {
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	int32_t bitneed[2][8];
 	int32_t max_bitneed, bitcount;
 	int32_t slicecount, bitslice;
 	int32_t loudness;
 	int ch, sb, start_chan = 0;
 
-	if (sbc->cfg.chmode == MODE_DUAL)
+	if (cfg->chmode == MODE_DUAL)
 		sbc->channels = 1;
 
 next_chan:
@@ -214,7 +196,7 @@ next_chan:
 	bitcount = 0;
 	slicecount = 0;
 
-	if (sbc->cfg.allocm == ALLOC_SNR) {
+	if (cfg->allocm == ALLOC_SNR) {
 		for (ch = start_chan; ch < sbc->channels; ch++) {
 			for (sb = 0; sb < sbc->bands; sb++) {
 				bitneed[ch][sb] = sbc->scalefactor[ch][sb];
@@ -231,10 +213,10 @@ next_chan:
 				} else {
 					if (sbc->bands == 8) {
 						loudness = sbc->scalefactor[ch][sb] -
-						    loudnessoffset8[sbc->cfg.freq][sb];
+						    loudnessoffset8[cfg->freq][sb];
 					} else {
 						loudness = sbc->scalefactor[ch][sb] -
-						    loudnessoffset4[sbc->cfg.freq][sb];
+						    loudnessoffset4[cfg->freq][sb];
 					}
 					if (loudness > 0)
 						bitneed[ch][sb] = loudness / 2;
@@ -262,10 +244,10 @@ next_chan:
 					slicecount += 2;
 			}
 		}
-	} while (bitcount + slicecount < sbc->cfg.bitpool);
+	} while (bitcount + slicecount < cfg->bitpool);
 
 	/* check if exactly one more fits */
-	if (bitcount + slicecount == sbc->cfg.bitpool) {
+	if (bitcount + slicecount == cfg->bitpool) {
 		bitcount += slicecount;
 		bitslice--;
 	}
@@ -281,17 +263,17 @@ next_chan:
 		}
 	}
 
-	if (sbc->cfg.chmode == MODE_DUAL)
+	if (cfg->chmode == MODE_DUAL)
 		ch = start_chan;
 	else
 		ch = 0;
 	sb = 0;
-	while (bitcount < sbc->cfg.bitpool && sb < sbc->bands) {
+	while (bitcount < cfg->bitpool && sb < sbc->bands) {
 		if ((sbc->bits[ch][sb] >= 2) && (sbc->bits[ch][sb] < 16)) {
 			sbc->bits[ch][sb]++;
 			bitcount++;
 		} else if ((bitneed[ch][sb] == bitslice + 1) &&
-		    (sbc->cfg.bitpool > bitcount + 1)) {
+		    (cfg->bitpool > bitcount + 1)) {
 			sbc->bits[ch][sb] = 2;
 			bitcount += 2;
 		}
@@ -304,12 +286,12 @@ next_chan:
 			ch = 1;
 	}
 
-	if (sbc->cfg.chmode == MODE_DUAL)
+	if (cfg->chmode == MODE_DUAL)
 		ch = start_chan;
 	else
 		ch = 0;
 	sb = 0;
-	while (bitcount < sbc->cfg.bitpool && sb < sbc->bands) {
+	while (bitcount < cfg->bitpool && sb < sbc->bands) {
 		if (sbc->bits[ch][sb] < 16) {
 			sbc->bits[ch][sb]++;
 			bitcount++;
@@ -323,7 +305,7 @@ next_chan:
 			ch = 1;
 	}
 
-	if (sbc->cfg.chmode == MODE_DUAL && start_chan == 0) {
+	if (cfg->chmode == MODE_DUAL && start_chan == 0) {
 		start_chan = 1;
 		sbc->channels = 2;
 		goto next_chan;
@@ -350,8 +332,9 @@ sbc_store_bits_crc(struct sbc_encode *sbc, uint32_t numbits, uint32_t value)
 }
 
 static int
-sbc_encode(struct sbc_encode *sbc)
+sbc_encode(struct bt_config *cfg)
 {
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	const int16_t *input = sbc->music_data;
 	int64_t delta[2][8];
 	int64_t levels[2][8];
@@ -424,10 +407,10 @@ sbc_encode(struct sbc_encode *sbc)
 
 	calc_scalefactors(sbc);
 
-	if (sbc->cfg.chmode == MODE_JOINT)
+	if (cfg->chmode == MODE_JOINT)
 		join = calc_scalefactors_joint(sbc);
 
-	calc_bitneed(sbc);
+	calc_bitneed(cfg);
 
 	for (chan = 0; chan < sbc->channels; chan++) {
 		for (sb = 0; sb < sbc->bands; sb++) {
@@ -455,9 +438,10 @@ sbc_encode(struct sbc_encode *sbc)
 	return (numsamples);
 }
 
-static size_t
-sbc_make_frame(struct sbc_encode *sbc)
+size_t
+sbc_make_frame(struct bt_config *cfg)
 {
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	uint8_t config;
 	uint8_t block;
 	uint8_t chan;
@@ -465,10 +449,10 @@ sbc_make_frame(struct sbc_encode *sbc)
 	uint8_t j;
 	uint8_t i;
 
-	config = (sbc->cfg.freq << 6) | (sbc->cfg.blocks << 4) |
-	    (sbc->cfg.chmode << 2) | (sbc->cfg.allocm << 1) | sbc->cfg.bands;
+	config = (cfg->freq << 6) | (cfg->blocks << 4) |
+	    (cfg->chmode << 2) | (cfg->allocm << 1) | cfg->bands;
 
-	sbc_encode(sbc);
+	sbc_encode(cfg);
 
 	/* set initial CRC */
 	sbc->crc = 0x5e;
@@ -479,12 +463,12 @@ sbc_make_frame(struct sbc_encode *sbc)
 
 	sbc_store_bits_crc(sbc, 8, SYNCWORD);
 	sbc_store_bits_crc(sbc, 8, config);
-	sbc_store_bits_crc(sbc, 8, sbc->cfg.bitpool);
+	sbc_store_bits_crc(sbc, 8, cfg->bitpool);
 
 	/* skip 8-bit CRC */
 	sbc->bitoffset += 8;
 
-	if (sbc->cfg.chmode == MODE_JOINT) {
+	if (cfg->chmode == MODE_JOINT) {
 		if (sbc->bands == 8)
 			sbc_store_bits_crc(sbc, 8, join);
 		else if (sbc->bands == 4)
@@ -511,61 +495,4 @@ sbc_make_frame(struct sbc_encode *sbc)
 		}
 	}
 	return ((sbc->bitoffset + 7) / 8);
-}
-
-int
-sbc_encode_stream(struct sbc_encode *sbc, int outfd)
-{
-	struct rtpHeader *phdr = (struct rtpHeader *)sbc->pkt_data;
-	uint32_t pkt_len;
-	uint32_t rem;
-
-	if (sbc->cfg.chmode == MODE_MONO)
-		sbc->channels = 1;
-	else
-		sbc->channels = 2;
-
-	pkt_len = sbc_make_frame(sbc);
-
-retry:
-	if (sbc->pktoffset == 0) {
-		phdr->id = 0x80;	/* RTP v2 */
-		phdr->id2 = 0x60;	/* payload type 96. */
-		phdr->seqnumMSB = (uint8_t)(sbc->seqnumber >> 8);
-		phdr->seqnumLSB = (uint8_t)(sbc->seqnumber);
-		phdr->ts3 = (uint8_t)(sbc->timestamp >> 24);
-		phdr->ts2 = (uint8_t)(sbc->timestamp >> 16);
-		phdr->ts1 = (uint8_t)(sbc->timestamp >> 8);
-		phdr->ts0 = (uint8_t)(sbc->timestamp);
-		phdr->reserved0 = 0x01;
-		phdr->numFrames = 0;
-
-		sbc->seqnumber++;
-		sbc->pktoffset += sizeof(*phdr);
-	}
-	/* compute bytes left */
-	rem = sbc->cfg.mtu - sbc->pktoffset;
-
-	if (phdr->numFrames == 255 || rem < pkt_len) {
-		int len;
-
-		if (phdr->numFrames == 0)
-			return (-1);
-		do {
-			len = write(outfd, sbc->pkt_data, sbc->pktoffset);
-		} while (len < 0 && errno == EAGAIN);
-
-		if (len < 0)
-			return (-1);
-
-		sbc->pktoffset = 0;
-		goto retry;
-	}
-	memcpy(sbc->pkt_data + sbc->pktoffset, sbc->data, pkt_len);
-	memset(sbc->data, 0, pkt_len);
-	sbc->pktoffset += pkt_len;
-	sbc->timestamp += sbc->framesamples;
-	phdr->numFrames++;
-
-	return (0);
 }

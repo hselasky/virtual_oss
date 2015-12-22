@@ -31,13 +31,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "avdtp_signal.h"
-#include "sbc_encode.h"
+#include "backend_bt.h"
+
+#define	DPRINTF(...) printf("backend_bt: " __VA_ARGS__)
 
 int	avdtpSendDescResponse(int, int, int, int);
 
@@ -287,76 +290,142 @@ avdtpAbort(int fd, int recvfd, uint8_t sep)
 }
 
 int
-avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct sbc_config *sbcfg)
+avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct bt_config *cfg)
 {
 	uint8_t capabilities[128];
 	uint8_t freqmode;
 	uint8_t blk_len_sb_alloc;
-	uint8_t availFreqMode;
-	uint8_t availConfig;
-	uint8_t supBitpoolMin;
-	uint8_t supBitpoolMax;
+	uint8_t availFreqMode = 0;
+	uint8_t availConfig = 0;
+	uint8_t supBitpoolMin = 0;
+	uint8_t supBitpoolMax = 0;
+	uint8_t aacMode1 = 0;
+	uint8_t aacMode2 = 0;
+	uint8_t aacBitrate3 = 0;
+	uint8_t aacBitrate4 = 0;
+	uint8_t aacBitrate5 = 0;
 	size_t cap_len;
 	size_t i;
 
-	if (avdtpGetCapabilities(fd, fd, sep, capabilities, &cap_len))
+	if (avdtpGetCapabilities(fd, fd, sep, capabilities, &cap_len)) {
+		DPRINTF("Cannot get capabilities\n");
 		return (ENOTSUP);
-
-	for (i = 0; i < cap_len; i++) {
-		if (capabilities[i] == mediaTransport &&
-		    capabilities[i + 1] == 0 &&
-		    capabilities[i + 2] == mediaCodec &&
-		    capabilities[i + 3] == SBC_CODEC_ID)
-			break;
 	}
-	if (i >= cap_len)
+retry:
+	for (i = 0; (i + 1) < cap_len;) {
+		if (i + 2 + capabilities[i + 1] > cap_len)
+			break;
+		switch (capabilities[i]) {
+		case mediaTransport:
+			break;
+		case mediaCodec:
+#if 0
+			DPRINTF("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+			    capabilities[i + 2],
+			    capabilities[i + 3],
+			    capabilities[i + 4],
+			    capabilities[i + 5],
+			    capabilities[i + 6],
+			    capabilities[i + 7]);
+#endif
+			if (capabilities[i + 1] < 2)
+				break;
+			/* check codec */
+			switch (capabilities[i + 3]) {
+			case 0:	/* SBC */
+				if (capabilities[i + 1] < 6)
+					break;
+				availFreqMode = capabilities[i + 4];
+				availConfig = capabilities[i + 5];
+				supBitpoolMin = capabilities[i + 6];
+				supBitpoolMax = capabilities[i + 7];
+				break;
+			case 2:	/* MPEG2/4 AAC */
+				if (capabilities[i + 1] < 8)
+					break;
+				aacMode1 = capabilities[i + 5];
+				aacMode2 = capabilities[i + 6];
+				aacBitrate3 = capabilities[i + 7];
+				aacBitrate4 = capabilities[i + 8];
+				aacBitrate5 = capabilities[i + 9];
+				break;
+			default:
+				break;
+			}
+		}
+		/* jump to next information element */
+		i += 2 + capabilities[i + 1];
+	}
+	aacMode1 &= cfg->aacMode1;
+	aacMode2 &= cfg->aacMode2;
+
+	/* Try AAC first */
+	if (aacMode1 == cfg->aacMode1 &&
+	    aacMode2 == cfg->aacMode2) {
+		uint8_t config[12] = {mediaTransport, 0x0, mediaCodec,
+		0x8, 0x0, 0x02, 0x80, aacMode1, aacMode2, aacBitrate3,
+		aacBitrate4, aacBitrate5};
+
+		if (avdtpSetConfiguration(fd, fd, sep, config, sizeof(config)) == 0) {
+			cfg->codec = CODEC_AAC;
+			return (0);
+		}
+	}
+
+	/* Try SBC second */
+	if (cfg->freq == FREQ_UNDEFINED)
 		goto auto_config_failed;
 
-	availFreqMode = capabilities[i + 6];
-	availConfig = capabilities[i + 7];
-	supBitpoolMin = capabilities[i + 8];
-	supBitpoolMax = capabilities[i + 9];
+	freqmode = (1 << (3 - cfg->freq + 4)) |
+	    (1 << (3 - cfg->chmode));
 
-	freqmode = (1 << (3 - sbcfg->freq + 4)) |
-	    (1 << (3 - sbcfg->chmode));
-
-	if ((availFreqMode & freqmode) != freqmode)
+	if ((availFreqMode & freqmode) != freqmode) {
+		DPRINTF("No frequency and mode match\n");
 		goto auto_config_failed;
-
+	}
 	for (i = 0; i != 4; i++) {
 		blk_len_sb_alloc = (1 << (i + 4)) |
-		    (1 << (1 - sbcfg->bands + 2)) |
-		    (1 << sbcfg->allocm);
+		    (1 << (1 - cfg->bands + 2)) |
+		    (1 << cfg->allocm);
 
 		if ((availConfig & blk_len_sb_alloc) == blk_len_sb_alloc)
 			break;
 	}
-	if (i == 4)
+	if (i == 4) {
+		DPRINTF("No bands available\n");
 		goto auto_config_failed;
-	sbcfg->blocks = (3 - i);
+	}
+	cfg->blocks = (3 - i);
 
-	if (sbcfg->allocm == ALLOC_SNR)
+	if (cfg->allocm == ALLOC_SNR)
 		supBitpoolMax &= ~1;
 
-	if (sbcfg->chmode == MODE_DUAL || sbcfg->chmode == MODE_MONO)
+	if (cfg->chmode == MODE_DUAL || cfg->chmode == MODE_MONO)
 		supBitpoolMax /= 2;
 
-	if (sbcfg->bands == BANDS_4)
+	if (cfg->bands == BANDS_4)
 		supBitpoolMax /= 2;
 
-	if (supBitpoolMax > sbcfg->bitpool)
-		supBitpoolMax = sbcfg->bitpool;
+	if (supBitpoolMax > cfg->bitpool)
+		supBitpoolMax = cfg->bitpool;
 	else
-		sbcfg->bitpool = supBitpoolMax;
+		cfg->bitpool = supBitpoolMax;
 
 	do {
-		uint8_t config[10] = {mediaTransport, 0x0, mediaCodec, SBC_CODEC_ID,
+		uint8_t config[10] = {mediaTransport, 0x0, mediaCodec, 0x6,
 		0x0, 0x0, freqmode, blk_len_sb_alloc, supBitpoolMin, supBitpoolMax};
 
-		if (avdtpSetConfiguration(fd, fd, sep, config, sizeof(config)) == 0)
+		if (avdtpSetConfiguration(fd, fd, sep, config, sizeof(config)) == 0) {
+			cfg->codec = CODEC_SBC;
 			return (0);
+		}
 	} while (0);
 
 auto_config_failed:
+	if (cfg->chmode == MODE_STEREO) {
+		cfg->chmode = MODE_MONO;
+		cfg->aacMode2 ^= 0x0C;
+		goto retry;
+	}
 	return (EINVAL);
 }

@@ -107,7 +107,11 @@
 /* Media Codec Capabilities */
 #define	mediaType			0xf0
 
-struct sbc_config;
+#define	mediaCodecSbc			0x00
+#define	mediaCodecMpeg1			0x01
+#define	mediaCodecMpeg2			0x02
+
+struct bt_config;
 struct avdtp_sepInfo {
 	uint8_t	sep;
 	uint8_t	media_Type;
@@ -123,8 +127,7 @@ int	avdtpDiscover(int fd, int recvfd, struct avdtp_sepInfo *sepInfo);
 int
 avdtpGetCapabilities(int fd, int recvfd, uint8_t sep, uint8_t *data,
     size_t *datasize);
-int
-	avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct sbc_config *sbcfg);
+int	avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct bt_config *cfg);
 int
 avdtpSetConfiguration(int fd, int recvfd, uint8_t sep, uint8_t *data,
     size_t datasize);
