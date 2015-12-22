@@ -477,9 +477,6 @@ sbc_make_frame(struct sbc_encode *sbc)
 	sbc->bitoffset = 0;
 	sbc->maxoffset = sizeof(sbc->data) * 8;
 
-	/* clear buffer */
-	memset(sbc->data, 0, sbc->cfg.mtu);
-
 	sbc_store_bits_crc(sbc, 8, SYNCWORD);
 	sbc_store_bits_crc(sbc, 8, config);
 	sbc_store_bits_crc(sbc, 8, sbc->cfg.bitpool);
@@ -565,6 +562,7 @@ retry:
 		goto retry;
 	}
 	memcpy(sbc->pkt_data + sbc->pktoffset, sbc->data, pkt_len);
+	memset(sbc->data, 0, pkt_len);
 	sbc->pktoffset += pkt_len;
 	sbc->timestamp += sbc->framesamples;
 	phdr->numFrames++;
