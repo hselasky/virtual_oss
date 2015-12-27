@@ -42,9 +42,10 @@
 
 #define	DPRINTF(...) printf("backend_bt: " __VA_ARGS__)
 
-int	avdtpSendDescResponse(int, int, int, int);
+static int avdtpSendDescResponse(int, int, int, int);
 
 static uint8_t transLabel = 1;
+
 int
 avdtpSendCommand(int fd, uint8_t command, uint8_t type, uint8_t *data,
     size_t datasize)
@@ -117,7 +118,7 @@ response_invalid:
 	return (EINVAL);
 }
 
-int
+static int
 avdtpSendDescResponse(int fd, int recvfd, int trans, int mySep)
 {
 	uint8_t data[4];
@@ -133,7 +134,7 @@ avdtpSendDescResponse(int fd, int recvfd, int trans, int mySep)
 }
 
 int
-avdtpDiscover(int fd, int recvfd, struct avdtp_sepInfo *sepInfo)
+avdtpDiscover(int fd, int recvfd, struct bt_config *cfg)
 {
 	int sentINT = 0;
 	int sepRECV = 0;
@@ -161,8 +162,8 @@ avdtpDiscover(int fd, int recvfd, struct avdtp_sepInfo *sepInfo)
 
 		if (len == 0 && recvsize >= 2) {
 			for (offset = 0; offset <= len; offset += 2) {
-				sepInfo->sep = buffer[offset] >> 2;
-				sepInfo->media_Type = buffer[offset + 1] >> 4;
+				cfg->sep = buffer[offset] >> 2;
+				cfg->media_Type = buffer[offset + 1] >> 4;
 				if (buffer[offset] & DISCOVER_SEP_IN_USE)
 					continue;
 				else
@@ -220,7 +221,6 @@ avdtpSetConfiguration(int fd, int recvfd, uint8_t sep, uint8_t *data,
 
 	return (avdtpCheckResponse(fd, &trans, AVDTP_SET_CONFIGURATION,
 	    &pkt, NULL, NULL));
-
 }
 
 int
@@ -313,21 +313,21 @@ avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct bt_config *cfg)
 	}
 retry:
 	for (i = 0; (i + 1) < cap_len;) {
+#if 0
+		DPRINTF("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		    capabilities[i + 0],
+		    capabilities[i + 1],
+		    capabilities[i + 2],
+		    capabilities[i + 3],
+		    capabilities[i + 4],
+		    capabilities[i + 5]);
+#endif
 		if (i + 2 + capabilities[i + 1] > cap_len)
 			break;
 		switch (capabilities[i]) {
 		case mediaTransport:
 			break;
 		case mediaCodec:
-#if 0
-			DPRINTF("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-			    capabilities[i + 2],
-			    capabilities[i + 3],
-			    capabilities[i + 4],
-			    capabilities[i + 5],
-			    capabilities[i + 6],
-			    capabilities[i + 7]);
-#endif
 			if (capabilities[i + 1] < 2)
 				break;
 			/* check codec */
@@ -362,16 +362,17 @@ retry:
 	/* Try AAC first */
 	if (aacMode1 == cfg->aacMode1 &&
 	    aacMode2 == cfg->aacMode2) {
+#ifdef HAVE_FFMPEG
 		uint8_t config[12] = {mediaTransport, 0x0, mediaCodec,
-		0x8, 0x0, 0x02, 0x80, aacMode1, aacMode2, aacBitrate3,
+			0x8, 0x0, 0x02, 0x80, aacMode1, aacMode2, aacBitrate3,
 		aacBitrate4, aacBitrate5};
 
 		if (avdtpSetConfiguration(fd, fd, sep, config, sizeof(config)) == 0) {
 			cfg->codec = CODEC_AAC;
 			return (0);
 		}
+#endif
 	}
-
 	/* Try SBC second */
 	if (cfg->freq == FREQ_UNDEFINED)
 		goto auto_config_failed;

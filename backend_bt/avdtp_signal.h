@@ -31,6 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _AVDTP_SIGNAL_H_
+#define	_AVDTP_SIGNAL_H_
+
 #include <sys/types.h>
 /* Our endpoint. */
 #define	INTSEP				8
@@ -105,34 +108,22 @@
 #define	mediaCodec			0x7
 
 /* Media Codec Capabilities */
-#define	mediaType			0xf0
-
 #define	mediaCodecSbc			0x00
 #define	mediaCodecMpeg1			0x01
 #define	mediaCodecMpeg2			0x02
 
 struct bt_config;
-struct avdtp_sepInfo {
-	uint8_t	sep;
-	uint8_t	media_Type;
-};
 
-int
-avdtpSendCommand(int fd, uint8_t command, uint8_t type,
-    uint8_t *data, size_t datasize);
-int
-avdtpCheckResponse(int recvfd, int *trans, int signalId, int *pkt_type,
-    uint8_t *data, size_t *datasize);
-int	avdtpDiscover(int fd, int recvfd, struct avdtp_sepInfo *sepInfo);
-int
-avdtpGetCapabilities(int fd, int recvfd, uint8_t sep, uint8_t *data,
-    size_t *datasize);
-int	avdtpAutoConfig(int fd, int recvfd, uint8_t sep, struct bt_config *cfg);
-int
-avdtpSetConfiguration(int fd, int recvfd, uint8_t sep, uint8_t *data,
-    size_t datasize);
-int	avdtpOpen(int fd, int recvfd, uint8_t sep);
-int	avdtpStart(int fd, int recvfd, uint8_t sep);
-int	avdtpClose(int fd, int recvfd, uint8_t sep);
-int	avdtpSuspend(int fd, int recvfd, uint8_t sep);
-int	avdtpAbort(int fd, int recvfd, uint8_t sep);
+int	avdtpSendCommand(int, uint8_t, uint8_t, uint8_t *, size_t);
+int	avdtpCheckResponse(int, int *, int, int *, uint8_t *, size_t *);
+int	avdtpDiscover(int, int, struct bt_config *);
+int	avdtpGetCapabilities(int, int, uint8_t, uint8_t *, size_t *);
+int	avdtpAutoConfig(int, int, uint8_t, struct bt_config *);
+int	avdtpSetConfiguration(int, int, uint8_t, uint8_t *, size_t);
+int	avdtpOpen(int, int, uint8_t);
+int	avdtpStart(int, int, uint8_t);
+int	avdtpClose(int, int, uint8_t);
+int	avdtpSuspend(int, int, uint8_t);
+int	avdtpAbort(int, int, uint8_t);
+
+#endif					/* _AVDTP_SIGNAL_H_ */

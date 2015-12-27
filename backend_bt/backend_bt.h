@@ -26,10 +26,17 @@
 #ifndef _BACKEND_BT_H_
 #define	_BACKEND_BT_H_
 
-#include <faac.h>
+#ifdef HAVE_FFMPEG
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/opt.h>
+#endif
+
 #include "sbc_encode.h"
 
 struct bt_config {
+  	uint8_t	sep;
+	uint8_t	media_Type;
 	uint8_t	chmode;
 #define	MODE_STEREO	2
 #define	MODE_JOINT	3
@@ -60,24 +67,33 @@ struct bt_config {
 	uint8_t	aacMode1;
 	uint8_t	aacMode2;
 
-	/* transcoding handle */
+	/* transcoding handle(s) */
 	union {
-		faacEncHandle aac_enc;
+#ifdef HAVE_FFMPEG
+		struct {
+			AVCodec *codec;
+			AVCodecContext *context;
+			AVFormatContext *format;
+			AVFrame *frame;
+			AVStream *stream;
+		} av;
+#endif
 		struct sbc_encode *sbc_enc;
 	}	handle;
 
-	/* audio transcoding */
+	/* audio input buffer */
 	uint32_t rem_in_len;
 	uint32_t rem_in_size;
 	uint8_t *rem_in_data;
-
-	uint32_t rem_out_size;
-	uint8_t *rem_out_data;
 
 	/* data transport */
 	uint32_t mtu_seqnumber;
 	uint32_t mtu_timestamp;
 	uint32_t mtu_offset;
+
+	/* bluetooth file handles */
+	int fd;
+	int hc;
 
 	/* scratch buffer */
 	uint8_t	mtu_data[65536];

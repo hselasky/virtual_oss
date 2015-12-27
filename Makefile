@@ -51,7 +51,12 @@ backend_null.c
 .if defined(HAVE_BLUETOOTH)
 SRCS += backend_bt.c avdtp.c sbc_encode.c
 CFLAGS += -DHAVE_BLUETOOTH
-LDFLAGS += -lbluetooth -lsdp -lfaac
+LDFLAGS += -lbluetooth -lsdp
+.endif
+
+.if defined(HAVE_FFMPEG)
+CFLAGS += -DHAVE_FFMPEG
+LDFLAGS += -lavdevice
 .endif
 
 .if defined(HAVE_CUSE)

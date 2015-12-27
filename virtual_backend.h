@@ -31,9 +31,8 @@ struct voss_backend {
 	void (*close)(struct voss_backend *);
 	int (*transfer)(struct voss_backend *, void *, int);
 	void (*delay)(struct voss_backend *, int *);
-
-	int fd;		/* main streaming channel */
-	int hc;		/* control/command channel */
+	void *arg;
+	int fd;
 };
 
 /* Available backends */

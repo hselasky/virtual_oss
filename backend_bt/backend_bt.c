@@ -1,9 +1,6 @@
-/* $NetBSD$ */
-
 /*-
  * Copyright (c) 2015 Hans Petter Selasky. All rights reserved.
- * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>.
- * All rights reserved.
+ * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>. All rights reserved.
  * Copyright (c) 2006 Itronix Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,9 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of Itronix Inc. may not be used to endorse
- *    or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -30,8 +24,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-/* This was based upon bta2dpd.c which was based upon bthset.c */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -63,8 +55,6 @@ struct l2cap_info {
 static struct bt_config bt_play_cfg;
 static struct bt_config bt_rec_cfg;
 
-static struct avdtp_sepInfo mySepInfo;
-
 static int
 bt_set_format(int *format)
 {
@@ -81,22 +71,24 @@ bt_set_format(int *format)
 static void
 bt_close(struct voss_backend *pbe)
 {
-	if (pbe->hc > -1) {
-		avdtpAbort(pbe->hc, pbe->hc, mySepInfo.sep);
-		avdtpClose(pbe->hc, pbe->hc, mySepInfo.sep);
-		close(pbe->hc);
-		pbe->hc = -1;
+	struct bt_config *cfg = pbe->arg;
+
+	if (cfg->hc > 0) {
+		avdtpAbort(cfg->hc, cfg->hc, cfg->sep);
+		avdtpClose(cfg->hc, cfg->hc, cfg->sep);
+		close(cfg->hc);
+		cfg->hc = -1;
 	}
-	if (pbe->fd > -1) {
-		close(pbe->fd);
-		pbe->fd = -1;
+	if (cfg->fd > 0) {
+		close(cfg->fd);
+		cfg->fd = -1;
 	}
 }
 
 static void
 bt_play_close(struct voss_backend *pbe)
 {
-  	struct bt_config *cfg = &bt_play_cfg;
+	struct bt_config *cfg = pbe->arg;
 
 	switch (cfg->codec) {
 	case CODEC_SBC:
@@ -105,14 +97,17 @@ bt_play_close(struct voss_backend *pbe)
 		free(cfg->handle.sbc_enc);
 		cfg->handle.sbc_enc = NULL;
 		break;
+#ifdef HAVE_FFMPEG
 	case CODEC_AAC:
-		if (cfg->handle.aac_enc == NULL)
+		if (cfg->handle.av.context == NULL)
 			break;
-		faacEncClose(cfg->handle.aac_enc);
-		cfg->handle.aac_enc = NULL;
-		free(cfg->rem_in_data);
-		free(cfg->rem_out_data);
+		av_free(cfg->rem_in_data);
+		av_frame_free(&cfg->handle.av.frame);
+		avcodec_close(cfg->handle.av.context);
+		avformat_free_context(cfg->handle.av.format);
+		cfg->handle.av.context = NULL;
 		break;
+#endif
 	default:
 		break;
 	}
@@ -122,12 +117,16 @@ bt_play_close(struct voss_backend *pbe)
 static void
 bt_rec_close(struct voss_backend *pbe)
 {
-	/* setup codec */
-	switch (bt_rec_cfg.codec) {
+	struct bt_config *cfg = pbe->arg;
+
+	switch (cfg->codec) {
 	case CODEC_SBC:
 		break;
+#ifdef HAVE_FFMPEG
 	case CODEC_AAC:
 		break;
+#endif
+
 	default:
 		break;
 	}
@@ -254,7 +253,6 @@ bt_query(struct l2cap_info *info, uint16_t service_class)
 		DPRINTF("SDP search failed\n");
 		goto done;
 	}
-
 	/* Print attributes values */
 	for (n = 0; n != BT_NUM_VALUES; n++) {
 		if (values[n].flags != SDP_ATTR_OK)
@@ -411,8 +409,8 @@ retry:
 		DPRINTF("PSM not found\n");
 		goto error;
 	}
-	pbe->hc = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
-	if (pbe->hc < 0) {
+	cfg->hc = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
+	if (cfg->hc < 0) {
 		DPRINTF("Could not create BT socket\n");
 		goto error;
 	}
@@ -421,30 +419,30 @@ retry:
 	addr.l2cap_family = AF_BLUETOOTH;
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.laddr);
 
-	if (bind(pbe->hc, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (bind(cfg->hc, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		DPRINTF("Could not bind to HC\n");
 		goto error;
 	}
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.raddr);
 	addr.l2cap_psm = l2cap_psm;
-	if (connect(pbe->hc, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (connect(cfg->hc, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		DPRINTF("Could not connect to HC\n");
 		goto error;
 	}
-	if (avdtpDiscover(pbe->hc, pbe->hc, &mySepInfo)) {
+	if (avdtpDiscover(cfg->hc, cfg->hc, cfg)) {
 		DPRINTF("DISCOVER FAILED\n");
 		goto error;
 	}
-	if (avdtpAutoConfig(pbe->hc, pbe->hc, mySepInfo.sep, cfg)) {
+	if (avdtpAutoConfig(cfg->hc, cfg->hc, cfg->sep, cfg)) {
 		DPRINTF("AUTOCONFIG FAILED\n");
 		goto error;
 	}
-	if (avdtpOpen(pbe->hc, pbe->hc, mySepInfo.sep)) {
+	if (avdtpOpen(cfg->hc, cfg->hc, cfg->sep)) {
 		DPRINTF("OPEN FAILED\n");
 		goto error;
 	}
-	pbe->fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
-	if (pbe->fd < 0) {
+	cfg->fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
+	if (cfg->fd < 0) {
 		DPRINTF("Could not create BT socket\n");
 		goto error;
 	}
@@ -454,29 +452,29 @@ retry:
 	addr.l2cap_family = AF_BLUETOOTH;
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.laddr);
 
-	if (bind(pbe->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (bind(cfg->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		DPRINTF("Could not bind\n");
 		goto error;
 	}
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.raddr);
 	addr.l2cap_psm = l2cap_psm;
-	if (connect(pbe->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (connect(cfg->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		DPRINTF("Could not connect\n");
 		goto error;
 	}
-	getsockopt(pbe->fd, SOL_L2CAP, SO_L2CAP_OMTU, &cfg->mtu, &mtusize);
+	getsockopt(cfg->fd, SOL_L2CAP, SO_L2CAP_OMTU, &cfg->mtu, &mtusize);
 
 	temp = cfg->mtu * 2;
-	if (setsockopt(pbe->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
+	if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
 		DPRINTF("Could not set send buffer size\n");
 		goto error;
 	}
 	temp = cfg->mtu;
-	if (setsockopt(pbe->fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
+	if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
 		DPRINTF("Could not set low water mark\n");
 		goto error;
 	}
-	if (avdtpStart(pbe->hc, pbe->hc, mySepInfo.sep)) {
+	if (avdtpStart(cfg->hc, cfg->hc, cfg->sep)) {
 		DPRINTF("START FAILED\n");
 		goto error;
 	}
@@ -491,13 +489,13 @@ retry:
 	return (0);
 
 error:
-	if (pbe->hc > -1) {
-		close(pbe->hc);
-		pbe->hc = -1;
+	if (cfg->hc > 0) {
+		close(cfg->hc);
+		cfg->hc = -1;
 	}
-	if (pbe->fd > -1) {
-		close(pbe->fd);
-		pbe->fd = -1;
+	if (cfg->fd > 0) {
+		close(cfg->fd);
+		cfg->fd = -1;
 	}
 	return (-1);
 }
@@ -506,7 +504,7 @@ static int
 bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
-  	struct bt_config *cfg = &bt_rec_cfg;
+	struct bt_config *cfg = pbe->arg;
 	int retval;
 
 	memset(cfg, 0, sizeof(*cfg));
@@ -522,7 +520,7 @@ static int
 bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
-	struct bt_config *cfg = &bt_play_cfg;
+	struct bt_config *cfg = pbe->arg;
 	int retval;
 
 	memset(cfg, 0, sizeof(*cfg));
@@ -534,10 +532,6 @@ bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
 
 	/* setup codec */
 	switch (cfg->codec) {
-		unsigned long aacFrameSamples = 0;
-		unsigned long aacFrameBytes = 0;
-		faacEncConfigurationPtr aac_cfg;
-
 	case CODEC_SBC:
 		cfg->handle.sbc_enc =
 		    malloc(sizeof(*cfg->handle.sbc_enc));
@@ -545,48 +539,115 @@ bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
 			return (-1);
 		memset(cfg->handle.sbc_enc, 0, sizeof(*cfg->handle.sbc_enc));
 		break;
+#ifdef HAVE_FFMPEG
 	case CODEC_AAC:
-		cfg->handle.aac_enc =
-		    faacEncOpen(samplerate, *pchannels,
-		    &aacFrameSamples,
-		    &aacFrameBytes);
-		if (cfg->handle.aac_enc == NULL)
-			return (-1);
+		av_register_all();
 
-		aac_cfg = faacEncGetCurrentConfiguration(cfg->handle.aac_enc);
-		aac_cfg->inputFormat = FAAC_INPUT_16BIT;
-		aac_cfg->mpegVersion = MPEG2;
-		aac_cfg->outputFormat = 1;	/* RAW data */
-		aac_cfg->useTns = 1;
-		aac_cfg->useLfe = 0;
-		aac_cfg->aacObjectType = LOW;
-		aac_cfg->shortctl = SHORTCTL_NORMAL;
-		aac_cfg->quantqual = 100;
-		aac_cfg->bandWidth = 0;
-		aac_cfg->bitRate = 0;
-		if (faacEncSetConfiguration(cfg->handle.aac_enc, aac_cfg) == 0) {
-			faacEncClose(cfg->handle.aac_enc);
-			cfg->handle.aac_enc = NULL;
-			return (-1);
+		cfg->handle.av.codec = avcodec_find_encoder_by_name("aac");
+		if (cfg->handle.av.codec == NULL) {
+			DPRINTF("Codec AAC encoder not found\n");
+			goto av_error_0;
 		}
-		cfg->rem_in_size = aacFrameSamples * 2;
-		cfg->rem_in_data = malloc(cfg->rem_in_size);
+		cfg->handle.av.format = avformat_alloc_context();
+		if (cfg->handle.av.format == NULL) {
+			DPRINTF("Could not allocate format context\n");
+			goto av_error_0;
+		}
+		cfg->handle.av.format->oformat =
+		    av_guess_format("latm", NULL, NULL);
+		if (cfg->handle.av.format->oformat == NULL) {
+			DPRINTF("Could not guess output format\n");
+			goto av_error_1;
+		}
+		cfg->handle.av.stream = avformat_new_stream(
+		    cfg->handle.av.format, cfg->handle.av.codec);
+
+		if (cfg->handle.av.stream == NULL) {
+			DPRINTF("Could not create new stream\n");
+			goto av_error_1;
+		}
+		cfg->handle.av.context = cfg->handle.av.stream->codec;
+		if (cfg->handle.av.context == NULL) {
+			DPRINTF("Could not allocate audio context\n");
+			goto av_error_1;
+		}
+		avcodec_get_context_defaults3(cfg->handle.av.context,
+		    cfg->handle.av.codec);
+
+		cfg->handle.av.context->bit_rate = 128000;
+		cfg->handle.av.context->sample_fmt = AV_SAMPLE_FMT_FLTP;
+		cfg->handle.av.context->sample_rate = samplerate;
+		switch (*pchannels) {
+		case 1:
+			cfg->handle.av.context->channel_layout = AV_CH_LAYOUT_MONO;
+			cfg->handle.av.context->channels = 1;
+			break;
+		default:
+			cfg->handle.av.context->channel_layout = AV_CH_LAYOUT_STEREO;
+			cfg->handle.av.context->channels = 2;
+			break;
+		}
+
+		cfg->handle.av.context->profile = FF_PROFILE_AAC_LOW;
+		if (1) {
+			AVDictionary *opts = NULL;
+
+			av_dict_set(&opts, "strict", "-2", 0);
+			av_dict_set_int(&opts, "latm", 1, 0);
+
+			if (avcodec_open2(cfg->handle.av.context,
+			    cfg->handle.av.codec, &opts) < 0) {
+				av_dict_free(&opts);
+
+				DPRINTF("Could not open codec\n");
+				goto av_error_1;
+			}
+			av_dict_free(&opts);
+		}
+		cfg->handle.av.frame = av_frame_alloc();
+		if (cfg->handle.av.frame == NULL) {
+			DPRINTF("Could not allocate audio frame\n");
+			goto av_error_2;
+		}
+		cfg->handle.av.frame->nb_samples = cfg->handle.av.context->frame_size;
+		cfg->handle.av.frame->format = cfg->handle.av.context->sample_fmt;
+		cfg->handle.av.frame->channel_layout = cfg->handle.av.context->channel_layout;
+		cfg->rem_in_size = av_samples_get_buffer_size(NULL,
+		    cfg->handle.av.context->channels,
+		    cfg->handle.av.context->frame_size,
+		    cfg->handle.av.context->sample_fmt, 0);
+
+		cfg->rem_in_data = av_malloc(cfg->rem_in_size);
 		if (cfg->rem_in_data == NULL) {
-			faacEncClose(cfg->handle.aac_enc);
-			cfg->handle.aac_enc = NULL;
-			return (-1);
+			DPRINTF("Could not allocate %u bytes sample buffer\n",
+			    (unsigned)cfg->rem_in_size);
+			goto av_error_3;
 		}
-		cfg->rem_out_size = aacFrameBytes;
-		cfg->rem_out_data = malloc(cfg->rem_out_size);
-		if (cfg->rem_out_data == NULL) {
-			free(cfg->rem_in_data);
-			faacEncClose(cfg->handle.aac_enc);
-			cfg->handle.aac_enc = NULL;
-			return (-1);
+		retval = avcodec_fill_audio_frame(cfg->handle.av.frame,
+		    cfg->handle.av.context->channels,
+		    cfg->handle.av.context->sample_fmt,
+		    cfg->rem_in_data, cfg->rem_in_size, 0);
+		if (retval < 0) {
+			DPRINTF("Could not setup audio frame\n");
+			goto av_error_4;
 		}
 		break;
+av_error_4:
+		av_free(cfg->rem_in_data);
+av_error_3:
+		av_frame_free(&cfg->handle.av.frame);
+av_error_2:
+		avcodec_close(cfg->handle.av.context);
+av_error_1:
+		avformat_free_context(cfg->handle.av.format);
+		cfg->handle.av.context = NULL;
+av_error_0:
+		bt_close(pbe);
+		return (-1);
+#endif
 	default:
-		break;
+		bt_close(pbe);
+		return (-1);
 	}
 	return (0);
 }
@@ -594,12 +655,12 @@ bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
 static int
 bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	struct bt_config *cfg = &bt_rec_cfg;
+	struct bt_config *cfg = pbe->arg;
 	int err;
 	int i;
 
 	do {
-		err = read(pbe->fd, cfg->mtu_data, cfg->mtu);
+		err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
 	} while (err < 0 && errno == EAGAIN);
 
 	if (err < 0)
@@ -611,7 +672,7 @@ bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 static int
 bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	struct bt_config *cfg = &bt_play_cfg;
+	struct bt_config *cfg = pbe->arg;
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	int rem_size = 1;
 	int old_len = len;
@@ -666,8 +727,7 @@ bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 			delta = (int)(rem_size - sbc->rem_len);
 
 		/* copy in samples */
-		memcpy((char *)sbc->music_data +
-		    sbc->rem_len, ptr, delta);
+		memcpy((char *)sbc->music_data + sbc->rem_len, ptr, delta);
 
 		ptr = (char *)ptr + delta;
 		len -= delta;
@@ -678,6 +738,7 @@ bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 			struct sbc_header *phdr = (struct sbc_header *)cfg->mtu_data;
 			uint32_t pkt_len;
 			uint32_t rem;
+			uint32_t i;
 
 			if (cfg->chmode == MODE_MONO)
 				sbc->channels = 1;
@@ -711,7 +772,7 @@ bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 				if (phdr->numFrames == 0)
 					return (-1);
 				do {
-					xlen = write(pbe->fd, cfg->mtu_data, cfg->mtu_offset);
+					xlen = write(cfg->fd, cfg->mtu_data, cfg->mtu_offset);
 				} while (xlen < 0 && errno == EAGAIN);
 
 				if (xlen < 0)
@@ -734,11 +795,11 @@ bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 	return (err);
 }
 
+#ifdef HAVE_FFMPEG
 static int
 bt_play_aac_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	struct bt_config *cfg = &bt_play_cfg;
-	faacEncHandle *aac = cfg->handle.aac_enc;
+	struct bt_config *cfg = pbe->arg;
 	struct aac_header {
 		uint8_t	id;
 		uint8_t	id2;
@@ -752,20 +813,19 @@ bt_play_aac_transfer(struct voss_backend *pbe, void *ptr, int len)
 		uint8_t	sync2;
 		uint8_t	sync1;
 		uint8_t	sync0;
+		uint8_t	fixed[8];
 	};
-
 	int old_len = len;
-	int pkt_len;
 	int err = 0;
 
 	while (len > 0) {
 		int delta = len;
 		int rem;
+		int i;
 
 		if (delta > (int)(cfg->rem_in_size - cfg->rem_in_len))
 			delta = (int)(cfg->rem_in_size - cfg->rem_in_len);
 
-		/* copy in samples */
 		memcpy(cfg->rem_in_data + cfg->rem_in_len, ptr, delta);
 
 		ptr = (char *)ptr + delta;
@@ -775,56 +835,87 @@ bt_play_aac_transfer(struct voss_backend *pbe, void *ptr, int len)
 		/* check if buffer is full */
 		if (cfg->rem_in_len == cfg->rem_in_size) {
 			struct aac_header *phdr = (struct aac_header *)cfg->mtu_data;
+			AVPacket pkt;
+			uint8_t *pkt_buf;
+			int pkt_len;
+			int got_output;
 			int i;
 
-			pkt_len = faacEncEncode(cfg->handle.aac_enc,
-			    (int *)cfg->rem_in_data, cfg->rem_in_size / 2,
-			    cfg->rem_out_data, cfg->rem_out_size);
-			if (pkt_len < 1) {
+			av_init_packet(&pkt);
+			pkt.data = NULL;
+			pkt.size = 0;
+			err = avcodec_encode_audio2(cfg->handle.av.context,
+			    &pkt, cfg->handle.av.frame, &got_output);
+			if (err < 0) {
+				DPRINTF("Error encoding audio frame\n");
+				return (-1);
+			}
+			if (got_output == 0) {
 				/* reset remaining length */
 				cfg->rem_in_len = 0;
 				continue;
 			}
-	retry:
-			if (cfg->mtu_offset == 0) {
-				phdr->id = 0x80;	/* RTP v2 */
-				phdr->id2 = 0x60;	/* payload type 96. */
-				phdr->seqnumMSB = (uint8_t)(cfg->mtu_seqnumber >> 8);
-				phdr->seqnumLSB = (uint8_t)(cfg->mtu_seqnumber);
-				phdr->ts3 = (uint8_t)(cfg->mtu_timestamp >> 24);
-				phdr->ts2 = (uint8_t)(cfg->mtu_timestamp >> 16);
-				phdr->ts1 = (uint8_t)(cfg->mtu_timestamp >> 8);
-				phdr->ts0 = (uint8_t)(cfg->mtu_timestamp);
-				phdr->sync3 = 0;
-				phdr->sync2 = 0;
-				phdr->sync1 = 0;
-				phdr->sync0 = 0;
+			phdr->id = 0x80;/* RTP v2 */
+			phdr->id2 = 0x60;	/* payload type 96. */
+			phdr->seqnumMSB = (uint8_t)(cfg->mtu_seqnumber >> 8);
+			phdr->seqnumLSB = (uint8_t)(cfg->mtu_seqnumber);
+			phdr->ts3 = (uint8_t)(cfg->mtu_timestamp >> 24);
+			phdr->ts2 = (uint8_t)(cfg->mtu_timestamp >> 16);
+			phdr->ts1 = (uint8_t)(cfg->mtu_timestamp >> 8);
+			phdr->ts0 = (uint8_t)(cfg->mtu_timestamp);
+			phdr->sync3 = 0;
+			phdr->sync2 = 0;
+			phdr->sync1 = 0;
+			phdr->sync0 = 0;
+			phdr->fixed[0] = 0xfc;
+			phdr->fixed[1] = 0x00;
+			phdr->fixed[2] = 0x00;
+			phdr->fixed[3] = 0xb0;
+			phdr->fixed[4] = 0x90;
+			phdr->fixed[5] = 0x80;
+			phdr->fixed[6] = 0x03;
+			phdr->fixed[7] = 0x00;
 
-				cfg->mtu_seqnumber++;
-				cfg->mtu_offset += sizeof(*phdr);
-			}
+			cfg->mtu_seqnumber++;
+			cfg->mtu_offset = sizeof(*phdr);
+
 			/* compute bytes left */
 			rem = cfg->mtu - cfg->mtu_offset;
 
-			if (rem >= pkt_len) {
-				int xlen;
+			if (avio_open_dyn_buf(&cfg->handle.av.format->pb) == 0) {
+				static int once = 0;
 
-				memcpy(cfg->mtu_data + cfg->mtu_offset, cfg->rem_out_data, pkt_len);
-				cfg->mtu_offset += pkt_len;
-				if (cfg->chmode != MODE_MONO)
-					cfg->mtu_timestamp += cfg->rem_in_size / 4;
-				else
-					cfg->mtu_timestamp += cfg->rem_in_size / 2;
-				do {
-					xlen = write(pbe->fd, cfg->mtu_data, cfg->mtu_offset);
-				} while (xlen < 0 && errno == EAGAIN);
+				if (!once++)
+					avformat_write_header(cfg->handle.av.format, NULL);
+				av_write_frame(cfg->handle.av.format, &pkt);
+				av_free_packet(&pkt);
+				pkt_len = avio_close_dyn_buf(cfg->handle.av.format->pb, &pkt_buf);
+				if (rem < pkt_len)
+					DPRINTF("Out of buffer space\n");
+				if (pkt_len >= 3 && rem >= pkt_len) {
+					int xlen;
 
-				if (xlen < 0)
-					return (-1);
+					memcpy(cfg->mtu_data + cfg->mtu_offset, pkt_buf + 3, pkt_len - 3);
+
+					av_free(pkt_buf);
+
+					cfg->mtu_offset += pkt_len - 3;
+					if (cfg->chmode != MODE_MONO)
+						cfg->mtu_timestamp += cfg->rem_in_size / 4;
+					else
+						cfg->mtu_timestamp += cfg->rem_in_size / 2;
+					do {
+						xlen = write(cfg->fd, cfg->mtu_data, cfg->mtu_offset);
+					} while (xlen < 0 && errno == EAGAIN);
+
+					if (xlen < 0)
+						return (-1);
+				} else {
+					av_free(pkt_buf);
+				}
+			} else {
+				av_free_packet(&pkt);
 			}
-			/* reset MTU offset */
-			cfg->mtu_offset = 0;		
-
 			/* reset remaining length */
 			cfg->rem_in_len = 0;
 		}
@@ -834,16 +925,20 @@ bt_play_aac_transfer(struct voss_backend *pbe, void *ptr, int len)
 	return (err);
 }
 
+#endif
+
 static int
 bt_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	struct bt_config *cfg = &bt_play_cfg;
+	struct bt_config *cfg = pbe->arg;
 
 	switch (cfg->codec) {
 	case CODEC_SBC:
 		return (bt_play_sbc_transfer(pbe, ptr, len));
-	case CODEC_AAC:
+#ifdef HAVE_FFMPEG
+	case CODEC_AAC_LC:
 		return (bt_play_aac_transfer(pbe, ptr, len));
+#endif
 	default:
 		return (-1);
 	}
@@ -867,8 +962,7 @@ struct voss_backend voss_backend_bt_rec = {
 	.close = bt_rec_close,
 	.transfer = bt_rec_transfer,
 	.delay = bt_rec_delay,
-	.fd = -1,
-	.hc = -1,
+	.arg = &bt_rec_cfg,
 };
 
 struct voss_backend voss_backend_bt_play = {
@@ -876,6 +970,5 @@ struct voss_backend voss_backend_bt_play = {
 	.close = bt_play_close,
 	.transfer = bt_play_transfer,
 	.delay = bt_play_delay,
-	.fd = -1,
-	.hc = -1,
+	.arg = &bt_play_cfg,
 };
