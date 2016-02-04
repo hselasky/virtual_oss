@@ -1605,7 +1605,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 				int unit;
 				if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
 					snprintf(temp, sizeof(temp),
-					    "pcm%d <Virtual OSS> (play/rec)\n"
+					    "pcm%d: <Virtual OSS> (play/rec)\n"
 					    "%s: <Virtual OSS> (play/rec)\n",
 					    unit, ptr->oss_name);
 				} else {
