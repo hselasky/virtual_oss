@@ -1588,6 +1588,14 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 
 	/* create DSP device */
 	if (ptr->oss_name[0] != 0) {
+		/*
+		 * Detect /dev/dsp creation and try to disable system
+		 * basename cloning automatically:
+		 */
+		if (strcmp(ptr->oss_name, "dsp") == 0)
+			system("sysctl hw.snd.basename_clone=0");
+
+		/* create DSP character device */
 		pdev = cuse_dev_create(&vclient_oss_methods, ptr, NULL,
 		    0, 0, voss_dsp_perm, ptr->oss_name);
 		if (pdev == NULL) {
