@@ -104,6 +104,7 @@ struct virtual_profile {
 	uint8_t	limiter;
 	uint32_t bufsize;
 	uint32_t rec_delay;
+	int fd_sta;
 };
 
 struct virtual_block {
@@ -187,6 +188,7 @@ extern int voss_is_recording;
 extern char voss_dsp_rx_device[VMAX_STRING];
 extern char voss_dsp_tx_device[VMAX_STRING];
 extern char voss_ctl_device[VMAX_STRING];
+extern char voss_sta_device[VMAX_STRING];
 
 extern void atomic_lock(void);
 extern void atomic_unlock(void);

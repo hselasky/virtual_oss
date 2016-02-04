@@ -31,6 +31,7 @@
 #include <err.h>
 #include <sysexits.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #include <sys/soundcard.h>
 #include <sys/queue.h>
@@ -1479,6 +1480,7 @@ uint32_t voss_dsp_tx_refresh;
 char voss_dsp_rx_device[VMAX_STRING];
 char voss_dsp_tx_device[VMAX_STRING];
 char voss_ctl_device[VMAX_STRING];
+char voss_sta_device[VMAX_STRING];
 
 struct voss_backend *voss_rx_backend;
 struct voss_backend *voss_tx_backend;
@@ -1521,6 +1523,8 @@ usage(void)
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
 	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
 	    "\t" "-P /dev/dsp3 -R /dev/dsp1 \\\n"
+	    "\t" "-T /dev/sndstat \\\n"
+	    "\t" "-c 1 -m 0,0 [-w wav.0] -d dsp100.0 \\\n"
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
@@ -1549,7 +1553,7 @@ usage(void)
 	exit(EX_USAGE);
 }
 
-static void
+static const char *
 dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 {
 	vprofile_t *ptr;
@@ -1567,9 +1571,11 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 
 	ptr = malloc(sizeof(*ptr));
 	if (ptr == NULL)
-		errx(EX_USAGE, "Out of memory");
+		return ("Out of memory");
 
 	memcpy(ptr, pvp, sizeof(*ptr));
+
+	ptr->fd_sta = -1;
 
 	for (x = 0; x != ptr->channels; x++) {
 		ptr->tx_mute[x] = tx_mute;
@@ -1584,15 +1590,45 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 	if (ptr->oss_name[0] != 0) {
 		pdev = cuse_dev_create(&vclient_oss_methods, ptr, NULL,
 		    0, 0, voss_dsp_perm, ptr->oss_name);
-		if (pdev == NULL)
-			errx(EX_USAGE, "DSP: Could not create '/dev/%s'", ptr->oss_name);
+		if (pdev == NULL) {
+			free(ptr);
+			return ("Could not create CUSE DSP device");
+		}
+
+		/* register sndstat, if any */
+		if (voss_sta_device[0] != 0) {
+			ptr->fd_sta = open(voss_sta_device, O_WRONLY);
+			if (ptr->fd_sta < 0) {
+				warn("Could not open '%s'", voss_sta_device);
+			} else {
+				char temp[128];
+				int unit;
+				if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
+					snprintf(temp, sizeof(temp),
+					    "pcm%d <Virtual OSS> (play/rec)\n"
+					    "%s: <Virtual OSS> (play/rec)\n",
+					    unit, ptr->oss_name);
+				} else {
+					snprintf(temp, sizeof(temp),
+					    "%s: <Virtual OSS> (play/rec)\n",
+					    ptr->oss_name);
+				}
+				if (write(ptr->fd_sta, temp, strlen(temp)) != strlen(temp)) {
+					warn("Could not register virtual OSS device");
+					close(ptr->fd_sta);
+					ptr->fd_sta = -1;
+				}
+			}
+		}
 	}
 	/* create WAV device */
 	if (ptr->wav_name[0] != 0) {
 		pdev = cuse_dev_create(&vclient_wav_methods, ptr, NULL,
 		    0, 0, voss_dsp_perm, ptr->wav_name);
-		if (pdev == NULL)
-			errx(EX_USAGE, "WAV: Could not create '/dev/%s'", ptr->wav_name);
+		if (pdev == NULL) {
+			free(ptr);
+			return ("Could not create CUSE WAV device");
+		}
 	}
 	atomic_lock();
 	if (ptr->pvc_head == &virtual_client_head) {
@@ -1607,6 +1643,8 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 	/* need new names next time */
 	memset(pvp->oss_name, 0, sizeof(pvp->oss_name));
 	memset(pvp->wav_name, 0, sizeof(pvp->wav_name));
+
+	return (NULL);
 }
 
 static void
@@ -1663,7 +1701,7 @@ parse_options(int narg, char **pparg, int is_main)
 	struct rtprio rtp;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:S";
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:ST:";
 	else
 		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
 
@@ -1850,7 +1888,9 @@ parse_options(int narg, char **pparg, int is_main)
 			if (profile.bufsize >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			if (ptr != NULL)
+				return (ptr);
 			break;
 		case 'l':
 			if (strlen(optarg) > VMAX_STRING - 1)
@@ -1867,7 +1907,9 @@ parse_options(int narg, char **pparg, int is_main)
 			if (profile.bufsize >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			if (ptr != NULL)
+				return (ptr);
 			break;
 		case 'S':
 			voss_libsamplerate_enable = 1;
@@ -1880,6 +1922,12 @@ parse_options(int narg, char **pparg, int is_main)
 			voss_dsp_samples = atoi(optarg);
 			if (voss_dsp_samples >= (1U << 24))
 				return ("-s option requires a non-zero positive value");
+			break;
+		case 'T':
+			if (voss_sta_device[0])
+				return ("-T parameter may only be used once");
+
+			strncpy(voss_sta_device, optarg, sizeof(voss_sta_device));
 			break;
 		case 't':
 			if (voss_ctl_device[0])
