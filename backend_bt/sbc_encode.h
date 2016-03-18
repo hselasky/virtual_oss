@@ -63,8 +63,8 @@ struct sbc_encode {
 	int	rem_data_len;
 	int	rem_data_frames;
 	int	bits[2][8];
-	int32_t	left[80];
-	int32_t	right[80];
+	int32_t	left[160];
+	int32_t	right[160];
 	int32_t	samples[16][2][8];
 	uint32_t rem_len;
 	uint32_t rem_off;
