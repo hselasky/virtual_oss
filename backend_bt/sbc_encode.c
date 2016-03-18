@@ -31,6 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
+
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <sys/param.h>
@@ -405,8 +407,147 @@ sbc_encode(struct bt_config *cfg)
 	return (numsamples);
 }
 
+static void
+sbc_decode(struct bt_config *cfg)
+{
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
+	int64_t delta[2][8];
+	int64_t levels[2][8];
+	int64_t audioout;
+	int64_t *X;
+	int32_t *V;
+	int64_t left[160];
+	int64_t right[160];
+	int64_t U[160];
+	int64_t W[160];
+	int64_t S[8];
+	int position;
+	int block;
+	int chan;
+	int sb;
+	int i;
+	int k;
+
+	for (chan = 0; chan < sbc->channels; chan++) {
+		for (sb = 0; sb < sbc->bands; sb++) {
+			levels[chan][sb] = (1 << sbc->bits[chan][sb]);
+			delta[chan][sb] = (2 << sbc->scalefactor[chan][sb]);
+		}
+	}
+
+	i = 0;
+	for (block = 0; block < sbc->blocks; block++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->bits[chan][sb] == 0) {
+					audioout = 0;
+				} else {
+					audioout = (((((sbc->output[i]
+					    * 2) + 1) * delta[chan][sb]) /
+					    levels[chan][sb]) -
+					    (1 * delta[chan][sb]));
+				}
+				sbc->output[i++] = audioout;
+			}
+		}
+	}
+
+	if (cfg->chmode == MODE_JOINT) {
+		i = 0;
+		while (i < (sbc->blocks * sbc->bands * sbc->channels)) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->join & (1 << (sbc->bands - sb - 1))) {
+					audioout = sbc->output[i];
+					sbc->output[i] = (2 * sbc->output[i]) + (2 *
+					    sbc->output[i + sbc->bands]);
+					sbc->output[i + sbc->bands] =
+					    (int32_t)(2 * audioout) - (2 *
+					    sbc->output[i + sbc->bands]);
+					sbc->output[i] /= 2;
+					sbc->output[i + sbc->bands] /= 2;
+				}
+				i++;
+			}
+			i += sbc->bands;
+		}
+	}
+	position = 0;
+	for (block = 0; block < sbc->blocks; block++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+			/* select right or left channel */
+			if (chan == 0) {
+				X = left;
+				V = sbc->left;
+			} else {
+				X = right;
+				V = sbc->right;
+			}
+			for (i = 0; i < sbc->bands; i++)
+				S[i] = sbc->output[position++];
+
+			for (i = (sbc->bands * 20) - 1; i >= (sbc->bands * 2); i--)
+				V[i] = V[i - (sbc->bands * 2)];
+			for (k = 0; k < sbc->bands * 2; k++) {
+				V[k] = 0;
+				for (i = 0; i < sbc->bands; i++) {
+					if (sbc->bands == 8) {
+						V[k] += cosdecdata8[i][k]
+						    * S[i];
+					} else {
+						V[k] += cosdecdata4[i][k]
+						    * S[i];
+					}
+				}
+				V[k] /= SIMULTI;
+			}
+			for (i = 0; i <= 4; i++) {
+				for (k = 0; k < sbc->bands; k++) {
+					U[(i * sbc->bands * 2) + k] =
+					    V[(i * sbc->bands * 4) + k];
+					U[(i * sbc->bands
+					    * 2) + sbc->bands + k] =
+					    V[(i * sbc->bands * 4) +
+					    (sbc->bands * 3) + k];
+				}
+			}
+			for (i = 0; i < sbc->bands * 10; i++) {
+				if (sbc->bands == 4) {
+					W[i] = U[i] *
+					    (sbc_coeffs4[i] * -4);
+				} else if (sbc->bands == 8) {
+					W[i] = U[i] *
+					    (sbc_coeffs8[i] * -8);
+				} else {
+					W[i] = 0;
+				}
+			}
+
+			for (k = 0; k < sbc->bands; k++) {
+				int offset = k + (block * sbc->bands);
+
+				X[offset] = 0;
+				for (i = 0; i < 10; i++) {
+					X[offset] += W[k + (i *
+					    sbc->bands)];
+				}
+				X[offset] /= COEFFSMULTI;
+				if (X[offset] > 32767)
+					X[offset] = 32767;
+				else if (X[offset] < -32767)
+					X[offset] = -32767;
+			}
+		}
+	}
+
+	for (i = 0, k = 0; k != (sbc->blocks * sbc->bands); k++) {
+		sbc->music_data[i++] = left[k];
+		if (sbc->channels == 2)
+			sbc->music_data[i++] = right[k];
+	}
+}
+
 size_t
-sbc_make_frame(struct bt_config *cfg)
+sbc_encode_frame(struct bt_config *cfg)
 {
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	uint8_t config;
@@ -461,5 +602,103 @@ sbc_make_frame(struct bt_config *cfg)
 			}
 		}
 	}
+	return ((sbc->bitoffset + 7) / 8);
+}
+
+static uint32_t
+sbc_load_bits_crc(struct sbc_encode *sbc, uint32_t numbits)
+{
+	uint32_t off = sbc->bitoffset;
+	uint32_t value = 0;
+
+	while (numbits-- && off != sbc->maxoffset) {
+		if (sbc->rem_data_ptr[off / 8] & (1 << ((7 - off) & 7))) {
+			value |= (1 << numbits);
+			sbc->crc ^= 0x80;
+		}
+		sbc->crc *= 2;
+		if (sbc->crc & 0x100)
+			sbc->crc ^= 0x11d;	/* CRC-8 polynomial */
+
+		off++;
+	}
+	sbc->bitoffset = off;
+	return (value);
+}
+
+size_t
+sbc_decode_frame(struct bt_config *cfg, int bits)
+{
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
+	uint8_t config;
+	uint8_t block;
+	uint8_t chan;
+	uint8_t sb;
+	uint8_t j;
+	uint8_t i;
+
+	sbc->rem_off = 0;
+	sbc->rem_len = 0;
+
+	config = (cfg->freq << 6) | (cfg->blocks << 4) |
+	    (cfg->chmode << 2) | (cfg->allocm << 1) | cfg->bands;
+
+	/* set initial CRC */
+	sbc->crc = 0x5e;
+
+	/* reset data position and size */
+	sbc->bitoffset = 0;
+	sbc->maxoffset = bits;
+
+	/* verify SBC header */
+	if (sbc->maxoffset < (8 * 4))
+		return (0);
+	if (sbc_load_bits_crc(sbc, 8) != SYNCWORD)
+		return (0);
+	if (sbc_load_bits_crc(sbc, 8) != config)
+		return (0);
+	(void)sbc_load_bits_crc(sbc, 8);/* bitpool */
+	(void)sbc_load_bits_crc(sbc, 8);/* CRC */
+
+	if (cfg->chmode == MODE_JOINT) {
+		if (sbc->bands == 8)
+			sbc->join = sbc_load_bits_crc(sbc, 8);
+		else if (sbc->bands == 4)
+			sbc->join = sbc_load_bits_crc(sbc, 4);
+		else
+			sbc->join = 0;
+	} else {
+		sbc->join = 0;
+	}
+
+	for (i = 0; i < sbc->channels; i++) {
+		for (j = 0; j < sbc->bands; j++)
+			sbc->scalefactor[i][j] = sbc_load_bits_crc(sbc, 4);
+	}
+
+	/* check 8-bit CRC */
+	printf("CRC = 0x%02x\n", sbc->crc & 0xFF);
+
+	calc_bitneed(cfg);
+
+	i = 0;
+	for (block = 0; block < sbc->blocks; block++) {
+		for (chan = 0; chan < sbc->channels; chan++) {
+			for (sb = 0; sb < sbc->bands; sb++) {
+				if (sbc->bits[chan][sb] == 0) {
+					i++;
+					continue;
+				}
+				sbc->output[i++] =
+				    sbc_load_bits_crc(sbc, sbc->bits[chan][sb]);
+			}
+		}
+	}
+
+	sbc_decode(cfg);
+
+	sbc->rem_off = 0;
+	sbc->rem_len = sbc->blocks * sbc->channels * sbc->bands;
+
 	return ((sbc->bitoffset + 7) / 8);
 }

@@ -59,11 +59,15 @@ struct sbc_encode {
 	int32_t	output[256];
 	int16_t	music_data[256];
 	uint8_t	data[1024];
+	uint8_t *rem_data_ptr;
+	int	rem_data_len;
+	int	rem_data_frames;
 	int	bits[2][8];
 	int32_t	left[80];
 	int32_t	right[80];
 	int32_t	samples[16][2][8];
 	uint32_t rem_len;
+	uint32_t rem_off;
 	uint32_t bitoffset;
 	uint32_t maxoffset;
 	uint32_t crc;
@@ -72,7 +76,7 @@ struct sbc_encode {
 	uint8_t	channels;
 	uint8_t	bands;
 	uint8_t	blocks;
-	uint8_t join;
+	uint8_t	join;
 };
 
 #endif					/* _SBC_ENCODE_H_ */

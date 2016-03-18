@@ -99,6 +99,7 @@ struct bt_config {
 	uint8_t	mtu_data[65536];
 };
 
-size_t	sbc_make_frame(struct bt_config *);
+size_t	sbc_encode_frame(struct bt_config *);
+size_t	sbc_decode_frame(struct bt_config *, int);
 
 #endif					/* _BACKEND_BT_H_ */

@@ -656,17 +656,80 @@ static int
 bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
 	struct bt_config *cfg = pbe->arg;
+	struct sbc_header *phdr = (struct sbc_header *)cfg->mtu_data;
+	struct sbc_encode *sbc = cfg->handle.sbc_enc;
+	int old_len = len;
+	int delta;
 	int err;
 	int i;
 
-	do {
-		err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
-	} while (err < 0 && errno == EAGAIN);
+	switch (cfg->blocks) {
+	case BLOCKS_4:
+		sbc->blocks = 4;
+		break;
+	case BLOCKS_8:
+		sbc->blocks = 8;
+		break;
+	case BLOCKS_12:
+		sbc->blocks = 12;
+		break;
+	default:
+		sbc->blocks = 16;
+		break;
+	}
 
-	if (err < 0)
-		return (-1);
+	switch (cfg->bands) {
+	case BANDS_4:
+		sbc->bands = 4;
+		break;
+	default:
+		sbc->bands = 8;
+		break;
+	}
 
-	return (-1);
+	if (cfg->chmode != MODE_MONO) {
+		sbc->channels = 2;
+	} else {
+		sbc->channels = 1;
+	}
+
+	while (1) {
+		delta = len & ~1;
+		if (delta > (int)(2 * sbc->rem_len))
+			delta = (2 * sbc->rem_len);
+
+		/* copy out samples, if any */
+		memcpy(ptr, (char *)sbc->music_data + sbc->rem_off, delta);
+		len -= delta;
+		sbc->rem_off += delta / 2;
+		sbc->rem_len -= delta / 2;
+		if (len == 0)
+			break;
+
+		if (sbc->rem_len == 0 &&
+		    sbc->rem_data_frames != 0) {
+			err = sbc_decode_frame(cfg, sbc->rem_data_len * 8);
+			sbc->rem_data_frames--;
+			sbc->rem_data_ptr += err;
+			sbc->rem_data_len -= err;
+			continue;
+		}
+		do {
+			err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
+		} while (err < 0 && errno == EAGAIN);
+
+		if (err < 0)
+			return (-1);
+
+		/* verify RTP header */
+		if (err < (int)sizeof(*phdr) || phdr->id != 0x80)
+			continue;
+
+		sbc->rem_data_frames = phdr->numFrames;
+		sbc->rem_data_ptr = (uint8_t *)(phdr + 1);
+		sbc->rem_data_len = err - sizeof(*phdr);
+	}
+	return (old_len);
 }
 
 static int
@@ -745,7 +808,7 @@ bt_play_sbc_transfer(struct voss_backend *pbe, void *ptr, int len)
 			else
 				sbc->channels = 2;
 
-			pkt_len = sbc_make_frame(cfg);
+			pkt_len = sbc_encode_frame(cfg);
 
 	retry:
 			if (cfg->mtu_offset == 0) {
