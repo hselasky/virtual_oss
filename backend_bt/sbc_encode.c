@@ -45,45 +45,10 @@
 #include "sbc_coeffs.h"
 #include "backend_bt.h"
 
-int	join = 0;
-
 #define	SYNCWORD	0x9c
 #define	ABS(x)		(((x) < 0) ? -(x) : (x))
 #define	BIT30		(1U << 30)
 #define	BM(x)		((1ULL << (x)) - 1ULL)
-
-struct a2dp_frame_header {
-	uint8_t	syncword;
-	uint8_t	config;
-	uint8_t	bitpool;
-	uint8_t	crc;
-};
-
-struct a2dp_frame_header_joint {
-	uint8_t	syncword;
-	uint8_t	config;
-	uint8_t	bitpool;
-	uint8_t	crc;
-	uint8_t	joint;
-};
-
-struct a2dp_frame_mono {
-	struct a2dp_frame_header header;
-	uint8_t	scale[4];
-	uint8_t	samples[256];
-};
-
-struct a2dp_frame_joint {
-	struct a2dp_frame_header_joint header;
-	uint8_t	scale[8];
-	uint8_t	samples[256];
-};
-
-struct a2dp_frame {
-	struct a2dp_frame_header header;
-	uint8_t	scale[8];
-	uint8_t	samples[256];
-};
 
 /* Loudness offset allocations. */
 static const int loudnessoffset8[4][8] = {
@@ -408,7 +373,9 @@ sbc_encode(struct bt_config *cfg)
 	calc_scalefactors(sbc);
 
 	if (cfg->chmode == MODE_JOINT)
-		join = calc_scalefactors_joint(sbc);
+		sbc->join = calc_scalefactors_joint(sbc);
+	else
+		sbc->join = 0;
 
 	calc_bitneed(cfg);
 
@@ -470,9 +437,9 @@ sbc_make_frame(struct bt_config *cfg)
 
 	if (cfg->chmode == MODE_JOINT) {
 		if (sbc->bands == 8)
-			sbc_store_bits_crc(sbc, 8, join);
+			sbc_store_bits_crc(sbc, 8, sbc->join);
 		else if (sbc->bands == 4)
-			sbc_store_bits_crc(sbc, 4, join);
+			sbc_store_bits_crc(sbc, 4, sbc->join);
 	}
 	for (i = 0; i < sbc->channels; i++) {
 		for (j = 0; j < sbc->bands; j++)

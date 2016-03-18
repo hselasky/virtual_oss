@@ -36,6 +36,9 @@
 
 #define	DEFAULT_MAXBPOOL 80
 
+/*
+ * SBC header format
+ */
 struct sbc_header {
 	uint8_t	id;
 	uint8_t	id2;
@@ -69,6 +72,7 @@ struct sbc_encode {
 	uint8_t	channels;
 	uint8_t	bands;
 	uint8_t	blocks;
+	uint8_t join;
 };
 
 #endif					/* _SBC_ENCODE_H_ */
