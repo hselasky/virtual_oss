@@ -112,18 +112,21 @@
 #define	mediaCodecMpeg1			0x01
 #define	mediaCodecMpeg2			0x02
 
+#define	SBC_CODEC_ID			0x0
+#define	mediaTypeAudio			0x0
+
 struct bt_config;
 
-int	avdtpSendCommand(int, uint8_t, uint8_t, uint8_t *, size_t);
-int	avdtpCheckResponse(int, int *, int, int *, uint8_t *, size_t *);
-int	avdtpDiscover(int, int, struct bt_config *);
-int	avdtpGetCapabilities(int, int, uint8_t, uint8_t *, size_t *);
-int	avdtpAutoConfig(int, int, uint8_t, struct bt_config *);
-int	avdtpSetConfiguration(int, int, uint8_t, uint8_t *, size_t);
-int	avdtpOpen(int, int, uint8_t);
-int	avdtpStart(int, int, uint8_t);
-int	avdtpClose(int, int, uint8_t);
-int	avdtpSuspend(int, int, uint8_t);
-int	avdtpAbort(int, int, uint8_t);
+int	avdtpSendAccept(int, uint8_t, uint8_t);
+int	avdtpSendReject(int, uint8_t, uint8_t);
+int	avdtpSendDiscResponseAudio(int, uint8_t, uint8_t, uint8_t);
+int	avdtpDiscover(int, struct bt_config *);
+int	avdtpSetConfiguration(int, uint8_t, uint8_t *, int);
+int	avdtpOpen(int, uint8_t);
+int	avdtpStart(int, uint8_t);
+int	avdtpClose(int, uint8_t);
+int	avdtpSuspend(int, uint8_t);
+int	avdtpAbort(int, uint8_t);
+int	avdtpAutoConfig(int, uint8_t, struct bt_config *);
 
 #endif					/* _AVDTP_SIGNAL_H_ */

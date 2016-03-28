@@ -74,8 +74,8 @@ bt_close(struct voss_backend *pbe)
 	struct bt_config *cfg = pbe->arg;
 
 	if (cfg->hc > 0) {
-		avdtpAbort(cfg->hc, cfg->hc, cfg->sep);
-		avdtpClose(cfg->hc, cfg->hc, cfg->sep);
+		avdtpAbort(cfg->hc, cfg->sep);
+		avdtpClose(cfg->hc, cfg->sep);
 		close(cfg->hc);
 		cfg->hc = -1;
 	}
@@ -429,15 +429,15 @@ retry:
 		DPRINTF("Could not connect to HC\n");
 		goto error;
 	}
-	if (avdtpDiscover(cfg->hc, cfg->hc, cfg)) {
+	if (avdtpDiscover(cfg->hc, cfg)) {
 		DPRINTF("DISCOVER FAILED\n");
 		goto error;
 	}
-	if (avdtpAutoConfig(cfg->hc, cfg->hc, cfg->sep, cfg)) {
+	if (avdtpAutoConfig(cfg->hc, cfg->sep, cfg)) {
 		DPRINTF("AUTOCONFIG FAILED\n");
 		goto error;
 	}
-	if (avdtpOpen(cfg->hc, cfg->hc, cfg->sep)) {
+	if (avdtpOpen(cfg->hc, cfg->sep)) {
 		DPRINTF("OPEN FAILED\n");
 		goto error;
 	}
@@ -474,7 +474,7 @@ retry:
 		DPRINTF("Could not set low water mark\n");
 		goto error;
 	}
-	if (avdtpStart(cfg->hc, cfg->hc, cfg->sep)) {
+	if (avdtpStart(cfg->hc, cfg->sep)) {
 		DPRINTF("START FAILED\n");
 		goto error;
 	}
