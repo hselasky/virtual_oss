@@ -626,29 +626,18 @@ virtual_oss_process(void *arg)
 			/* Get output delay in bytes */
 			tx_be->delay(tx_be, &blocks);
 
-			/* Convert delay into frames */
-			if (blocks > 0)
-				blocks /= (int)buffer_dsp_tx_size;
-			else
-				blocks = 1;
-
 			/*
 			 * Simple fix for jitter: Repeat data when too
 			 * little. Skip data when too much. This
 			 * should not happen during normal operation.
 			 */
-			switch (blocks) {
-			case 0:
-				blocks = 2;
-				break;
-			case 1:
-			case 2:
-				blocks = 1;
-				break;
-			default:
-				blocks = 0;
-				break;
-			}
+			if (blocks == 0)
+				blocks = 2;	/* buffer is empty */
+			else if (blocks > (4 * buffer_dsp_tx_size))
+				blocks = 0;	/* too much data */
+			else
+				blocks = 1;	/* normal */
+
 			len = 0;
 			while (blocks--) {
 				off = 0;
