@@ -148,14 +148,15 @@ oss_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 static void
 oss_rec_delay(struct voss_backend *pbe, int *pdelay)
 {
-	*pdelay = -1;
+	if (ioctl(pbe->fd, FIONREAD, pdelay) != 0)
+		*pdelay = -1;
 }
 
 static void
 oss_play_delay(struct voss_backend *pbe, int *pdelay)
 {
-	*pdelay = -1;
-	(void)ioctl(pbe->fd, SNDCTL_DSP_GETODELAY, pdelay);
+	if (ioctl(pbe->fd, SNDCTL_DSP_GETODELAY, pdelay) != 0)
+		*pdelay = -1;
 }
 
 struct voss_backend voss_backend_oss_rec = {

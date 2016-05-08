@@ -35,6 +35,18 @@
 #include "virtual_int.h"
 #include "virtual_backend.h"
 
+static void
+virtual_oss_nice_delay(void)
+{
+  	uint64_t delay;
+
+	delay = voss_dsp_samples;
+	delay *= 1000000000ULL;
+	delay /= voss_dsp_sample_rate;
+
+	usleep(delay / 2);
+}
+
 void   *
 virtual_oss_process(void *arg)
 {
@@ -58,6 +70,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_max_size;
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
+	int nice_delay = 0;
 	int blocks;
 	int volume;
 	int x_off;
@@ -119,6 +132,15 @@ virtual_oss_process(void *arg)
 			/* Check if DSP device should be re-opened */
 			if (voss_dsp_rx_refresh || voss_dsp_tx_refresh)
 				break;
+
+			if (nice_delay)
+				virtual_oss_nice_delay();
+
+			/* Get input delay in bytes */
+			rx_be->delay(rx_be, &blocks);
+
+			/* Avoid feeding data too fast */
+			nice_delay = (blocks >= (2 * buffer_dsp_rx_size));
 
 			off = 0;
 			len = 0;
