@@ -28,6 +28,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <err.h>
+#include <time.h>
 
 #include <sys/queue.h>
 #include <sys/types.h>
@@ -35,8 +36,8 @@
 #include "virtual_int.h"
 #include "virtual_backend.h"
 
-static void
-virtual_oss_nice_delay(void)
+static uint64_t
+virtual_oss_delay(void)
 {
   	uint64_t delay;
 
@@ -44,7 +45,19 @@ virtual_oss_nice_delay(void)
 	delay *= 1000000000ULL;
 	delay /= voss_dsp_sample_rate;
 
-	usleep(delay / 2);
+	return (delay);
+}
+
+static uint64_t
+virtual_oss_timestamp(void)
+{
+	struct timespec ts;
+	uint64_t nsec;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
+	return (nsec);
 }
 
 void   *
@@ -70,7 +83,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_max_size;
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
-	int nice_delay = 0;
+	uint64_t nice_timeout = 0;
 	int blocks;
 	int volume;
 	int x_off;
@@ -128,19 +141,21 @@ virtual_oss_process(void *arg)
 		    tx_chn * (voss_dsp_bits / 8);
 
 		while (1) {
+			uint64_t delta_time;
 
 			/* Check if DSP device should be re-opened */
 			if (voss_dsp_rx_refresh || voss_dsp_tx_refresh)
 				break;
 
-			if (nice_delay)
-				virtual_oss_nice_delay();
+			delta_time = nice_timeout - virtual_oss_timestamp();
 
-			/* Get input delay in bytes */
-			rx_be->delay(rx_be, &blocks);
+			/* Don't service more than 2x sample rate */
+			nice_timeout = virtual_oss_delay() / 2;
+			if (delta_time <= nice_timeout)
+				usleep(delta_time);
 
-			/* Avoid feeding data too fast */
-			nice_delay = (blocks >= (2 * buffer_dsp_rx_size));
+			/* Compute next timeout */
+			nice_timeout += virtual_oss_timestamp();
 
 			off = 0;
 			len = 0;
