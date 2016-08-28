@@ -1260,11 +1260,12 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.val = 128 | (128 << 8);
 		break;
 	case SNDCTL_DSP_GETPLAYVOL:
-		data.val = (pvc->tx_volume & 0x00FF) |
-		    ((pvc->tx_volume << 8) & 0xFF00);
+		temp = (pvc->tx_volume * 100) / 128;
+		data.val = (temp & 0x00FF) |
+		    ((temp << 8) & 0xFF00);
 		break;
 	case SNDCTL_DSP_SETPLAYVOL:
-		pvc->tx_volume = (data.val & 0xFF);
+		pvc->tx_volume = ((data.val & 0xFF) * 128) / 100;
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
 	case SNDCTL_DSP_CURRENT_OPTR:
