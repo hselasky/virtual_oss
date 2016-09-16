@@ -258,7 +258,7 @@ avdtpDiscoverAndConfig(struct bt_config *cfg)
 		cfg->aacMode2 = aacMode2;
 		if (!(info.buffer_data[offset] & DISCOVER_SEP_IN_USE)) {
 			/* try to configure SBC */
-		  	retval = avdtpAutoConfig(cfg);
+			retval = avdtpAutoConfig(cfg);
 			if (retval == 0)
 				break;
 		}
