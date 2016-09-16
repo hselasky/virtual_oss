@@ -52,6 +52,8 @@ struct avdtpGetResponseInfo {
 	uint8_t	signalId;
 };
 
+static int avdtpAutoConfig(struct bt_config *);
+
 static int
 avdtpGetResponse(int fd, struct avdtpGetResponseInfo *info)
 {
@@ -233,23 +235,35 @@ avdtpSendDiscResponseAudio(int fd, uint8_t trans,
 }
 
 int
-avdtpDiscover(int fd, struct bt_config *cfg)
+avdtpDiscoverAndConfig(struct bt_config *cfg)
 {
 	struct avdtpGetResponseInfo info;
 	uint16_t offset;
+	uint8_t chmode = cfg->chmode;
+	uint8_t aacMode1 = cfg->aacMode1;
+	uint8_t aacMode2 = cfg->aacMode2;
 	int retval;
 
-	retval = avdtpSendSyncCommand(fd, &info, AVDTP_DISCOVER, 0,
+	retval = avdtpSendSyncCommand(cfg->hc, &info, AVDTP_DISCOVER, 0,
 	    NULL, 0, NULL, 0);
 	if (retval)
 		return (retval);
+
+	retval = EBUSY;
 	for (offset = 2; offset + 2 <= info.buffer_len; offset += 2) {
 		cfg->sep = info.buffer_data[offset] >> 2;
 		cfg->media_Type = info.buffer_data[offset + 1] >> 4;
-		if (!(info.buffer_data[offset] & DISCOVER_SEP_IN_USE))
-			return (0);
+		cfg->chmode = chmode;
+		cfg->aacMode1 = aacMode1;
+		cfg->aacMode2 = aacMode2;
+		if (!(info.buffer_data[offset] & DISCOVER_SEP_IN_USE)) {
+			/* try to configure SBC */
+		  	retval = avdtpAutoConfig(cfg);
+			if (retval == 0)
+				break;
+		}
 	}
-	return (ENOMEM);
+	return (retval);
 }
 
 static int
@@ -324,8 +338,8 @@ avdtpAbort(int fd, uint8_t sep)
 	    &address, 1, NULL, 0));
 }
 
-int
-avdtpAutoConfig(int fd, uint8_t sep, struct bt_config *cfg)
+static int
+avdtpAutoConfig(struct bt_config *cfg)
 {
 	struct avdtpGetResponseInfo info;
 	uint8_t freqmode;
@@ -342,7 +356,7 @@ avdtpAutoConfig(int fd, uint8_t sep, struct bt_config *cfg)
 	int retval;
 	int i;
 
-	retval = avdtpGetCapabilities(fd, sep, &info);
+	retval = avdtpGetCapabilities(cfg->hc, cfg->sep, &info);
 	if (retval) {
 		DPRINTF("Cannot get capabilities\n");
 		return (retval);
@@ -403,7 +417,7 @@ retry:
 			0x8, 0x0, 0x02, 0x80, aacMode1, aacMode2, aacBitrate3,
 		aacBitrate4, aacBitrate5};
 
-		if (avdtpSetConfiguration(fd, sep, config, sizeof(config)) == 0) {
+		if (avdtpSetConfiguration(cfg->hc, cfg->sep, config, sizeof(config)) == 0) {
 			cfg->codec = CODEC_AAC;
 			return (0);
 		}
@@ -452,7 +466,7 @@ retry:
 		uint8_t config[10] = {mediaTransport, 0x0, mediaCodec, 0x6,
 		0x0, 0x0, freqmode, blk_len_sb_alloc, supBitpoolMin, supBitpoolMax};
 
-		if (avdtpSetConfiguration(fd, sep, config, sizeof(config)) == 0) {
+		if (avdtpSetConfiguration(cfg->hc, cfg->sep, config, sizeof(config)) == 0) {
 			cfg->codec = CODEC_SBC;
 			return (0);
 		}

@@ -429,12 +429,8 @@ retry:
 		DPRINTF("Could not connect to HC\n");
 		goto error;
 	}
-	if (avdtpDiscover(cfg->hc, cfg)) {
+	if (avdtpDiscoverAndConfig(cfg)) {
 		DPRINTF("DISCOVER FAILED\n");
-		goto error;
-	}
-	if (avdtpAutoConfig(cfg->hc, cfg->sep, cfg)) {
-		DPRINTF("AUTOCONFIG FAILED\n");
 		goto error;
 	}
 	if (avdtpOpen(cfg->hc, cfg->sep)) {

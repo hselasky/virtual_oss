@@ -120,13 +120,12 @@ struct bt_config;
 int	avdtpSendAccept(int, uint8_t, uint8_t);
 int	avdtpSendReject(int, uint8_t, uint8_t);
 int	avdtpSendDiscResponseAudio(int, uint8_t, uint8_t, uint8_t);
-int	avdtpDiscover(int, struct bt_config *);
+int	avdtpDiscoverAndConfig(struct bt_config *);
 int	avdtpSetConfiguration(int, uint8_t, uint8_t *, int);
 int	avdtpOpen(int, uint8_t);
 int	avdtpStart(int, uint8_t);
 int	avdtpClose(int, uint8_t);
 int	avdtpSuspend(int, uint8_t);
 int	avdtpAbort(int, uint8_t);
-int	avdtpAutoConfig(int, uint8_t, struct bt_config *);
 
 #endif					/* _AVDTP_SIGNAL_H_ */
