@@ -28,7 +28,7 @@
 
 .PATH: . backend_oss backend_bt backend_null
 
-VERSION=1.0.8
+VERSION=1.1.0
 PROG=virtual_oss
 MAN=
 PACKAGE=${PROG}-${VERSION}
