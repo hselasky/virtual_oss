@@ -75,7 +75,7 @@ help:
 	@echo "Targets are: all, install, clean, package, help"
 
 package: clean
-	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8]
+	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch]
 	rm -rf ${PACKAGE}
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
