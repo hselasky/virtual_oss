@@ -30,7 +30,7 @@
 
 VERSION=1.1.0
 PROG=virtual_oss
-MAN=
+MAN=virtual_oss.8
 PACKAGE=${PROG}-${VERSION}
 PTHREAD_LIBS?= -lpthread
 PREFIX?=        /usr/local
@@ -75,7 +75,7 @@ help:
 	@echo "Targets are: all, install, clean, package, help"
 
 package: clean
-	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch]
+	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8]
 	rm -rf ${PACKAGE}
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}

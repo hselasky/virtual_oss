@@ -1,0 +1,150 @@
+.\"
+.\" Copyright (c) 2016 Hans Petter Selasky <hselasky@freebsd.org>
+.\"
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\"
+.Dd September 23, 2016
+.Dt VIRTUAL_OSS 8
+.Os FreeBSD
+.Sh NAME
+.Nm virtual_oss
+.Nd daemon to multiplex and demultiplex an OSS device
+.Sh SYNOPSIS
+.Nm
+.Op Fl h
+.Sh DESCRIPTION
+.Nm
+is an audio mixing application that multiplexes and demultiplexes a
+single OSS device into multiple customizable OSS compatible devices
+using character devices from userspace. These devices can be used to
+record played back audio and mix the individual channels in multiple
+ways.
+.Pp
+.Nm 
+requires the 
+.Xr cuse4bsd 3
+or
+.Xr cuse 3
+kernel module. To load the driver as a
+module at boot time, place onf of the following lines in
+.Xr loader.conf 5 :
+.Pp
+       # FreeBSD < 11
+       cuse4bsd_load="YES"
+       # FreeBSD >= 11
+       cuse_load="YES"
+.Pp
+The following options are available:
+.Bl -tag -width indent
+.It Fl h
+Print help text showing available options.
+.El
+.Sh EXAMPLES
+Split a 2-channel OSS compatible sound device into multiple subdevices:
+.Pp
+.Bd -literal -offset indent
+virtual_oss \\
+	-S \\
+	-c 2 -r 48000 -b 16 -s 768 -f /dev/dspX \\
+	-a 0 -b 16 -c 2 -m 0,0,1,1 -d vdsp.zyn \\
+	-a 0 -b 16 -c 2 -m 0,0,1,1 -d vdsp.fld \\
+	-a 0 -b 16 -c 2 -m 0,0,1,1 -d dsp \\
+	-a 0 -b 16 -c 2 -m 0,0,1,1 -w vdsp.jack.wav -d vdsp.jack \\
+	-a 0 -b 16 -c 2 -m 0,0,1,1 -w vdsp.rec.wav -l vdsp.rec \\
+	-M i,0,0,0,1,0 \\
+	-M i,0,0,0,1,0 \\
+	-M i,0,0,0,1,0 \\
+	-M i,0,0,0,1,0 \\
+	-t vdsp.ctl
+.Ed
+.Pp
+Split an 8-channel 24-bit OSS compatible sound device into multiple subdevices:
+.Bd -literal -offset indent
+sysctl dev.pcm.X.rec.vchanformat=s24le:7.1
+sysctl dev.pcm.X.rec.vchanrate=48000
+sysctl dev.pcm.X.play.vchanformat=s24le:7.1
+sysctl dev.pcm.X.play.vchanrate=48000
+
+mixer -f /dev/mixerX -s vol 100
+mixer -f /dev/mixerX -s pcm 100
+
+virtual_oss \\
+	-S \\
+	-i 8 \\
+	-g 1,1 \\
+	-C 16 -c 8 -r 48000 -b 32 -s 768 -f /dev/dspX \\
+	-a 12 -b 16 -c 2 -m 0,4,1,5 -d dsp \\
+	-a 12 -b 16 -c 2 -m 8,8,9,9 -d vdsp \\
+	-a 13 -b 16 -c 2 -m 10,10,11,11 -d vdsp.fld \\
+	-a 0 -b 32 -c 4 -m 4,2,5,3,6,4,7,5 -d vdsp.jack \\
+	-a -3 -b 32 -c 2 -m 14,14,15,15 -d vdsp.zyn.base \\
+	-a -3 -b 32 -c 2 -m 14,14,15,15 -d vdsp.zyn.synth \\
+	-e 0,1 \\
+	-a 0 -b 32 -c 8 -m 0,8,1,9,2,8,3,9,4,8,5,9,6,8,7,9 -w vdsp.rec.mic.wav -d vdsp.rec.mic \\
+	-a 0 -b 32 -c 2 -m 0,8,1,9 -w vdsp.rec.master.wav -d vdsp.master.mic \\
+	-a 0 -b 32 -c 2 -m 10,10,11,11 -w vdsp.rec.fld.wav -l vdsp.rec.fld \\
+	-a 0 -b 32 -c 2 -m 12,12,13,13 -w vdsp.rec.jack.wav -l vdsp.rec.jack \\
+	-a 0 -b 32 -c 2 -m 14,14,15,15 -w vdsp.rec.zyn.wav -l vdsp.rec.zyn \\
+	-M o,8,0,0,0,0 \\
+	-M o,9,1,0,0,0 \\
+	-M o,10,0,0,0,0 \\
+	-M o,11,1,0,0,0 \\
+	-M o,12,0,0,0,0 \\
+	-M o,13,1,0,0,0 \\
+	-M o,14,0,0,0,0 \\
+	-M o,15,1,0,0,0 \\
+	-M i,14,14,0,1,0 \\
+	-M i,15,15,0,1,0 \\
+	-t vdsp.ctl
+
+.Ed
+.Pp
+Connect to a bluetooth audio headset, playback only:
+.Bd -literal -offset indent
+virtual_oss \\
+	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-R /dev/null -P /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
+.Ed
+.Pp
+Connect to a bluetooth audio headset, playback and recording:
+.Bd -literal -offset indent
+virtual_oss \\
+	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-f /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
+.Ed
+.Pp
+.Sh NOTES
+All character devices are created using the 0666 mode which gives
+everyone in the system access.
+.Sh FILES
+.Sh SEE ALSO
+.Xr cuse 3
+and
+.Xr cuse4bsd 3
+.Sh AUTHORS
+.Nm
+was written by
+.An Hans Petter Selasky hselasky@freebsd.org .
+.Pp
