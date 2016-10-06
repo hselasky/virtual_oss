@@ -151,8 +151,10 @@ virtual_oss_process(void *arg)
 
 			/* Don't service more than 2x sample rate */
 			nice_timeout = virtual_oss_delay() / 2;
-			if (delta_time <= nice_timeout)
-				usleep(delta_time);
+			if (delta_time >= 1000 && delta_time <= nice_timeout) {
+				/* convert from ns to us */
+				usleep(delta_time / 1000);
+			}
 
 			/* Compute next timeout */
 			nice_timeout += virtual_oss_timestamp();
