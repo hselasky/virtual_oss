@@ -211,7 +211,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x];
+					shift = pvc->profile->rx_shift[x] +
+					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 
 					if (pvc->profile->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
@@ -252,7 +253,7 @@ virtual_oss_process(void *arg)
 				    pvc->channels, samples);
 
 				/* Update limiter */
-				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
+				fmt_max = (1LL << ((8 * vclient_sample_bytes(pvc)) - 1)) - 1LL;
 				for (x = 0; x != VMAX_CHAN; x++) {
 					while ((pvc->profile->rx_peak_value[x] >>
 					    pvc->profile->limiter) > fmt_max) {
@@ -267,7 +268,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_temp,
-				    pvb->buf_start, vclient_bufsize(pvc),
+				    pvb->buf_start, vclient_bufsize_internal(pvc),
 				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
@@ -302,7 +303,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_import(pvc->format, pvb->buf_start,
-				    vclient_bufsize(pvc), buffer_data);
+				    vclient_bufsize_internal(pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
 				    pvc->channels, samples);
@@ -311,8 +312,9 @@ virtual_oss_process(void *arg)
 
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
-					shift = pvc->profile->tx_shift[x] - 7;
-					shift_orig = pvc->profile->tx_shift[x];
+					shift_orig = pvc->profile->tx_shift[x] +
+					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
@@ -375,7 +377,8 @@ virtual_oss_process(void *arg)
 				if (pvb == NULL || pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start, vclient_bufsize(pvc), buffer_data);
+				format_import(pvc->format, pvb->buf_start,
+				    vclient_bufsize_internal(pvc), buffer_data);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
 				    pvc->channels, samples);
@@ -384,8 +387,9 @@ virtual_oss_process(void *arg)
 
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
-					shift = pvc->profile->tx_shift[x] - 7;
-					shift_orig = pvc->profile->tx_shift[x];
+					shift_orig = pvc->profile->tx_shift[x] +
+					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
@@ -570,7 +574,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x];
+					shift = pvc->profile->rx_shift[x] +
+					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 
 					if (pvc->profile->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
@@ -611,7 +616,7 @@ virtual_oss_process(void *arg)
 				    pvc->channels, samples);
 
 				/* Update limiter */
-				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
+				fmt_max = (1LL << ((8 * vclient_sample_bytes(pvc)) - 1)) - 1LL;
 				for (x = 0; x != VMAX_CHAN; x++) {
 					while ((pvc->profile->rx_peak_value[x] >>
 					    pvc->profile->limiter) > fmt_max) {
@@ -626,7 +631,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				format_export(pvc->format, buffer_monitor,
-				    pvb->buf_start, vclient_bufsize(pvc),
+				    pvb->buf_start, vclient_bufsize_internal(pvc),
 				    fmt_limit, pvc->channels);
 
 				vblock_remove(pvb, &pvc->rx_free);
