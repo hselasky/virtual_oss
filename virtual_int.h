@@ -48,6 +48,12 @@
 #define	VPREFERRED_UBE_AFMT \
   (AFMT_U8 | AFMT_U16_BE | AFMT_U24_BE | AFMT_U32_BE)
 
+#define	VSUPPORTED_AFMT \
+  (AFMT_S16_BE | AFMT_S16_LE | AFMT_U16_BE | AFMT_U16_LE | \
+  AFMT_S24_BE | AFMT_S24_LE | AFMT_U24_BE | AFMT_U24_LE | \
+  AFMT_S32_BE | AFMT_S32_LE | AFMT_U32_BE | AFMT_U32_LE | \
+  AFMT_U8 | AFMT_S8)
+
 struct virtual_profile;
 
 #if 0
@@ -102,7 +108,6 @@ struct virtual_profile {
 	uint8_t	bits;
 	uint8_t	channels;
 	uint8_t	limiter;
-	uint32_t bufsize;
 	uint32_t rec_delay;
 	int fd_sta;
 };
@@ -120,7 +125,6 @@ struct virtual_resample {
 	int64_t *scratch_in_buf;
   	int64_t *scratch_out_buf;
 	uint32_t in_offset;
-	uint32_t channels;
 };
 
 struct virtual_client {
@@ -146,6 +150,9 @@ struct virtual_client {
 	int	tx_volume;
 	int	type;		/* VTYPE_XXX */
 	int	sample_rate;
+	int	buffer_size_set:1;
+	int	buffer_frags_set:1;
+	int	padding:30;
 };
 
 struct virtual_monitor {
@@ -181,7 +188,6 @@ extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
 extern uint32_t voss_dsp_rx_fmt;
 extern uint32_t voss_dsp_tx_fmt;
-extern uint32_t voss_dsp_max_frags;
 extern uint8_t voss_libsamplerate_enable;
 extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
@@ -198,7 +204,8 @@ extern void atomic_wakeup(void);
 extern vblock_t *vblock_peek(vblock_head_t *);
 extern void vblock_insert(vblock_t *, vblock_head_t *);
 extern void vblock_remove(vblock_t *, vblock_head_t *);
-extern uint32_t vclient_bufsize(vclient_t *);
+extern uint32_t vclient_sample_bytes(vclient_t *);
+extern uint32_t vclient_bufsize_internal(vclient_t *);
 extern uint32_t vclient_bufsize_scaled(vclient_t *);
 
 extern int64_t vclient_noise(vclient_t *, int64_t, int8_t);
