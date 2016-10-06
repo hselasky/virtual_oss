@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2016 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -211,8 +211,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x] +
-					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+					shift = pvc->profile->rx_shift[x] -
+					    pvc->profile->bits + (vclient_sample_bytes(pvc) * 8);
 
 					if (pvc->profile->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
@@ -574,8 +574,8 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x] +
-					    pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+					shift = pvc->profile->rx_shift[x] -
+					    pvc->profile->bits + (vclient_sample_bytes(pvc) * 8);
 
 					if (pvc->profile->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
