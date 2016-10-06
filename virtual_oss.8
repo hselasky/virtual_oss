@@ -135,6 +135,13 @@ virtual_oss \\
 	-f /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
 .Ed
 .Pp
+Create recording device which outputs a WAV-formatted file:
+.Bd -literal -offset indent
+virtual_oss \\
+	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-f /dev/dspX -w dsp.wav -d dsp
+.Ed
+.Pp
 .Sh NOTES
 All character devices are created using the 0666 mode which gives
 everyone in the system access.
