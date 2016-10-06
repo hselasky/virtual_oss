@@ -216,7 +216,7 @@ extern uint32_t format_best(uint32_t);
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);
 extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t, const uint8_t *, uint8_t);
 extern int64_t format_max(uint32_t);
-extern void format_maximum(const int64_t *, int64_t *, uint32_t, uint32_t);
+extern void format_maximum(const int64_t *, int64_t *, uint32_t, uint32_t, int8_t);
 extern void format_remix(int64_t *, uint32_t, uint32_t, uint32_t);
 extern void format_silence(uint32_t, uint8_t *, uint32_t);
 
