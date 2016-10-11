@@ -275,9 +275,10 @@ format_max(uint32_t fmt)
 }
 
 void
-format_maximum(const int64_t *src, int64_t *dst, uint32_t ch, uint32_t len, int8_t shift)
+format_maximum(const int64_t *src, int64_t *dst, uint32_t ch,
+    uint32_t samples, int8_t shift)
 {
-	const int64_t *end = src + len;
+	const int64_t *end = src + (samples * ch);
 	int64_t max[ch];
 	int64_t temp;
 	uint32_t x;
@@ -338,8 +339,6 @@ format_remix(int64_t *buffer_data, uint32_t in_chans,
 			dst += out_chans;
 			src += in_chans;
 		}
-
-
 	}
 }
 
