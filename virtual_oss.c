@@ -176,18 +176,15 @@ virtual_oss_process(void *arg)
 			format_import(rx_fmt, buffer_dsp,
 			    buffer_dsp_rx_size, buffer_data);
 
+			samples = voss_dsp_samples;
+			src_chans = voss_mix_channels;
+
 			/* Compute master input peak values */
 
 			format_maximum(buffer_data, voss_input_peak,
 			    rx_chn, samples, 0);
 
-			format_remix(buffer_data,
-			    rx_chn,
-			    voss_mix_channels,
-			    voss_dsp_samples);
-
-			samples = voss_dsp_samples;
-			src_chans = voss_mix_channels;
+			format_remix(buffer_data, rx_chn, src_chans, samples);
 
 			atomic_lock();
 
