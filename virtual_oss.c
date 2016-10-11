@@ -179,7 +179,7 @@ virtual_oss_process(void *arg)
 			/* Compute master input peak values */
 
 			format_maximum(buffer_data, voss_input_peak,
-			    rx_chn, voss_dsp_samples, 0);
+			    rx_chn, samples, 0);
 
 			format_remix(buffer_data,
 			    rx_chn,
@@ -285,7 +285,7 @@ virtual_oss_process(void *arg)
 			/* -- 2.0 -- Run audio delay locator */
 
 			if (voss_ad_enabled != 0) {
-				y = (voss_dsp_samples * voss_mix_channels);
+				y = (samples * voss_mix_channels);
 				for (x = 0; x != y; x += voss_mix_channels) {
 					buffer_temp[x + voss_ad_output_channel] +=
 					    voss_ad_getput_sample(buffer_data
@@ -645,15 +645,12 @@ virtual_oss_process(void *arg)
 
 			atomic_wakeup();
 
-			format_remix(buffer_temp,
-			    voss_mix_channels,
-			    tx_chn,
-			    voss_dsp_samples);
+			format_remix(buffer_temp, voss_mix_channels, tx_chn, samples);
 
 			/* Compute master output peak values */
 
 			format_maximum(buffer_temp, voss_output_peak,
-			    tx_chn, voss_dsp_samples, 0);
+			    tx_chn, samples, 0);
 
 			/* Update limiter */
 			fmt_max = format_max(tx_fmt);
