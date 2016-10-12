@@ -293,7 +293,7 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
 	if (!bt_aton(devname, &info.raddr)) {
 		struct hostent *he = NULL;
 
-		if ((he = bt_gethostbyname(optarg)) == NULL) {
+		if ((he = bt_gethostbyname(devname)) == NULL) {
 			DPRINTF("Could not get host by name\n");
 			goto error;
 		}
