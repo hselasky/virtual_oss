@@ -252,7 +252,7 @@ virtual_oss_process(void *arg)
 				    pvc->channels, samples, shift_fmt);
 
 				/* Update limiter */
-				fmt_max = (1LL << ((8 * vclient_sample_bytes(pvc)) - 1)) - 1LL;
+				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
 				for (x = 0; x != VMAX_CHAN; x++) {
 					while ((pvc->profile->rx_peak_value[x] >>
 					    pvc->profile->limiter) > fmt_max) {
@@ -618,7 +618,7 @@ virtual_oss_process(void *arg)
 				    pvc->channels, samples, shift_fmt);
 
 				/* Update limiter */
-				fmt_max = (1LL << ((8 * vclient_sample_bytes(pvc)) - 1)) - 1LL;
+				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
 				for (x = 0; x != VMAX_CHAN; x++) {
 					while ((pvc->profile->rx_peak_value[x] >>
 					    pvc->profile->limiter) > fmt_max) {
