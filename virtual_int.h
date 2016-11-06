@@ -122,6 +122,8 @@ struct virtual_block {
 struct virtual_resample {
 	SRC_DATA data;
 	SRC_STATE *state;
+	float *data_in;
+	float *data_out;
 	int64_t *scratch_in_buf;
   	int64_t *scratch_out_buf;
 	uint32_t in_offset;

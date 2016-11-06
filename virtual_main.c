@@ -275,8 +275,8 @@ vresample_free(vresample_t *pvr)
 {
 	if (pvr->state != NULL)
 		src_delete(pvr->state);
-	free(pvr->data.data_in);
-	free(pvr->data.data_out);
+	free(pvr->data_in);
+	free(pvr->data_out);
 	free(pvr->scratch_in_buf);
 	free(pvr->scratch_out_buf);
 	memset(pvr, 0, sizeof(*pvr));
@@ -294,11 +294,11 @@ vresample_setup(vclient_t *pvc, vresample_t *pvr,
 	pvr->state = src_new(SRC_SINC_BEST_QUALITY, pvc->channels, &code);
 	if (pvr->state == NULL)
 		goto error;
-	pvr->data.data_in = malloc(sizeof(float) * in_samples);
-	if (pvr->data.data_in == NULL)
+	pvr->data_in = malloc(sizeof(float) * in_samples);
+	if (pvr->data_in == NULL)
 		goto error;
-	pvr->data.data_out = malloc(sizeof(float) * out_samples);
-	if (pvr->data.data_out == NULL)
+	pvr->data_out = malloc(sizeof(float) * out_samples);
+	if (pvr->data_out == NULL)
 		goto error;
 	pvr->scratch_in_buf = malloc(sizeof(int64_t) * samples);
 	if (pvr->scratch_in_buf == NULL)
@@ -307,8 +307,11 @@ vresample_setup(vclient_t *pvc, vresample_t *pvr,
 	if (pvr->scratch_out_buf == NULL)
 		goto error;
 	pvr->in_offset = 0;
+	pvr->data.data_in = pvr->data_in;
+	pvr->data.data_out = pvr->data_out;
 	return (0);
 error:
+	vresample_free(pvr);
 	return (CUSE_ERR_NO_MEMORY);
 }
 
@@ -569,7 +572,7 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 		/* compute total number of samples */
 		y = pvr->in_offset * pvc->channels;
 		for (x = 0; x != y; x++)
-			pvr->data.data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
+			pvr->data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
 
 		/* setup parameters for transform */
 		pvr->data.input_frames = pvr->in_offset;
@@ -583,7 +586,7 @@ vclient_read_copy_out(vclient_t *pvc, void *src, void *peer_ptr,
 		/* compute total number of output samples */
 		y = pvr->data.output_frames_gen * pvc->channels;
 		for (x = 0; x != y; x++)
-			pvr->scratch_in_buf[x] = pvr->data.data_out[x] * (8.0 * 0x10000000);
+			pvr->scratch_in_buf[x] = pvr->data_out[x] * (8.0 * 0x10000000);
 
 		/* compute total number of output bytes */
 		delta_out = y * samp_size;
@@ -967,7 +970,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			/* compute total number of samples */
 			y = pvr->in_offset * pvc->channels;
 			for (x = 0; x != y; x++)
-				pvr->data.data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
+				pvr->data_in[x] = pvr->scratch_out_buf[x] / (8.0 * 0x10000000);
 
 			/* setup parameters for transform */
 			pvr->data.input_frames = pvr->in_offset;
@@ -982,7 +985,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			/* compute total number of output samples */
 			y = pvr->data.output_frames_gen * pvc->channels;
 			for (x = 0; x != y; x++)
-				pvr->scratch_in_buf[x] = pvr->data.data_out[x] * (8.0 * 0x10000000);
+				pvr->scratch_in_buf[x] = pvr->data_out[x] * (8.0 * 0x10000000);
 
 			/* compute total number of output bytes */
 			delta = y * samp_size;
