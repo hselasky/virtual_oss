@@ -1029,6 +1029,33 @@ vclient_set_channels(vclient_t *pvc, int channels)
 	return (vclient_setup_buffers(pvc, 0, 0, channels, 0, 0));
 }
 
+/* greatest common divisor, Euclid equation */
+static uint64_t
+vclient_gcd_64(uint64_t a, uint64_t b)
+{
+	uint64_t an;
+	uint64_t bn;
+
+	while (b != 0) {
+		an = b;
+		bn = a % b;
+		a = an;
+		b = bn;
+	}
+	return (a);
+}
+
+static uint64_t
+vclient_scale(uint64_t value, uint64_t mul, uint64_t div)
+{
+	uint64_t gcd = vclient_gcd_64(mul, div);
+
+	mul /= gcd;
+	div /= gcd;
+
+	return ((value * mul) / div);
+}
+
 static int
 vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
     unsigned long cmd, void *peer_data)
@@ -1050,8 +1077,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	vclient_t *pvc;
 	vblock_t *pvb;
 
-	uint64_t rem;
-	uint64_t div;
+	uint64_t bytes;
 
 	int len;
 	int error;
@@ -1300,31 +1326,22 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_CURRENT_IPTR:
 	case SNDCTL_DSP_CURRENT_OPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		/* compute sample ratio */
-		rem = voss_dsp_sample_rate % pvc->sample_rate;
-		div = voss_dsp_sample_rate / pvc->sample_rate;
-		/* compute division error */
-		rem *= (voss_dsp_blocks - pvc->start_block);
-		rem /= pvc->sample_rate;
-		/* compute output samples */
-		data.oss_count.samples = (voss_dsp_blocks - pvc->start_block - rem) *
-		    (voss_dsp_samples / div) * pvc->channels;
+		/* compute input/output samples */
+		data.oss_count.samples =
+		    vclient_scale((voss_dsp_blocks - pvc->start_block) * voss_dsp_samples,
+		    pvc->sample_rate, voss_dsp_sample_rate) * pvc->channels;
 		break;
 	case SNDCTL_DSP_GETOPTR:
 	case SNDCTL_DSP_GETIPTR:
 		memset(&data.oss_count_info, 0, sizeof(data.oss_count_info));
-		/* compute sample ratio */
-		rem = voss_dsp_sample_rate % pvc->sample_rate;
-		div = voss_dsp_sample_rate / pvc->sample_rate;
-		/* compute division error */
-		rem *= (voss_dsp_blocks - pvc->start_block);
-		rem /= pvc->sample_rate;
-		/* compute output samples */
-		rem = (voss_dsp_blocks - pvc->start_block - rem) *
-		    (voss_dsp_samples / div) * pvc->channels * vclient_sample_bytes(pvc);
-		data.oss_count_info.bytes = rem;
-		data.oss_count_info.blocks = rem / pvc->buffer_size;
-		data.oss_count_info.ptr = rem;
+		/* compute input/output bytes */
+		bytes =
+		    vclient_scale((voss_dsp_blocks - pvc->start_block) * voss_dsp_samples,
+		    pvc->sample_rate, voss_dsp_sample_rate) * pvc->channels *
+		    vclient_sample_bytes(pvc);
+		data.oss_count_info.bytes = bytes;
+		data.oss_count_info.blocks = bytes / pvc->buffer_size;
+		data.oss_count_info.ptr = bytes;
 		break;
 	case SNDCTL_DSP_HALT_OUTPUT:
 		pvc->tx_enabled = 0;
