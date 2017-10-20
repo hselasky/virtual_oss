@@ -191,6 +191,7 @@ extern uint32_t voss_dsp_bits;
 extern uint32_t voss_dsp_rx_fmt;
 extern uint32_t voss_dsp_tx_fmt;
 extern uint8_t voss_libsamplerate_enable;
+extern uint8_t voss_libsamplerate_quality;
 extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
 extern char voss_dsp_rx_device[VMAX_STRING];

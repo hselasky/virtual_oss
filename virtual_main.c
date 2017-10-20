@@ -291,7 +291,7 @@ vresample_setup(vclient_t *pvc, vresample_t *pvr,
 
 	if (pvr->state != NULL)
 		return (0);
-	pvr->state = src_new(SRC_SINC_BEST_QUALITY, pvc->channels, &code);
+	pvr->state = src_new(voss_libsamplerate_quality, pvc->channels, &code);
 	if (pvr->state == NULL)
 		goto error;
 	pvr->data_in = malloc(sizeof(float) * in_samples);
@@ -1518,6 +1518,7 @@ uint32_t voss_dsp_rx_fmt;
 uint32_t voss_dsp_tx_fmt;
 uint64_t voss_dsp_blocks;
 uint8_t	voss_libsamplerate_enable;
+uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;
 
 static int voss_dsp_perm = 0666;
@@ -1576,7 +1577,8 @@ usage(void)
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
 	    "\t" "-s <samples> \\\n"
-	    "\t" "-S \\\n"
+	    "\t" "-S # enable automatic resampling using libsamplerate \\\n"
+	    "\t" "-Q <0,1,2> # quality of resampling 0=best,1=medium,2=fastest (default) \\\n"
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
 	    "\t" "-i <rtprio> \\\n"
@@ -1756,7 +1758,7 @@ parse_options(int narg, char **pparg, int is_main)
 	struct rtprio rtp;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:R:ST:";
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:";
 	else
 		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
 
@@ -1968,6 +1970,20 @@ parse_options(int narg, char **pparg, int is_main)
 			break;
 		case 'S':
 			voss_libsamplerate_enable = 1;
+			break;
+		case 'Q':
+			c = atoi(optarg);
+			switch (c) {
+			case 0:
+				voss_libsamplerate_quality = SRC_SINC_BEST_QUALITY;
+				break;
+			case 1:
+				voss_libsamplerate_quality = SRC_SINC_MEDIUM_QUALITY;
+				break;
+			default:
+				voss_libsamplerate_quality = SRC_SINC_FASTEST;
+				break;
+			}
 			break;
 		case 's':
 			if (voss_dsp_samples != 0)
