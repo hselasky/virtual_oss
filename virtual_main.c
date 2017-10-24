@@ -1260,7 +1260,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		temp = temp / pvc->buffer_size;
 		if (temp > data.buf_info.fragstotal)
 			temp = data.buf_info.fragstotal;
-		data.buf_info.fragments = temp;
+		data.buf_info.fragments = temp + 1;
 		data.buf_info.bytes = temp * pvc->buffer_size;
 		break;
 	case SNDCTL_DSP_GETCAPS:
