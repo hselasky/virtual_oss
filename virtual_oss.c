@@ -48,7 +48,7 @@ virtual_oss_delay(void)
 	return (delay);
 }
 
-static uint64_t
+uint64_t
 virtual_oss_timestamp(void)
 {
 	struct timespec ts;
@@ -85,6 +85,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
 	uint64_t nice_timeout = 0;
+	uint64_t last_timestamp;
 	int blocks;
 	int volume;
 	int x_off;
@@ -158,7 +159,8 @@ virtual_oss_process(void *arg)
 			}
 
 			/* Compute next timeout */
-			nice_timeout += virtual_oss_timestamp();
+			last_timestamp = virtual_oss_timestamp();
+			nice_timeout += last_timestamp;
 
 			off = 0;
 			len = 0;
@@ -201,6 +203,8 @@ virtual_oss_process(void *arg)
 
 			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
 
+				/* update timestamp */
+				pvc->last_ts = last_timestamp;
 				dst_chans = pvc->channels;
 				pvb = vblock_peek(&pvc->rx_free);
 
@@ -372,6 +376,8 @@ virtual_oss_process(void *arg)
 
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
+				/* update timestamp */
+				pvc->last_ts = last_timestamp;
 				pvb = vblock_peek(&pvc->tx_ready);
 
 				if (pvb == NULL || pvc->tx_enabled == 0)

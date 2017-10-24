@@ -139,6 +139,7 @@ struct virtual_client {
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
 	uint64_t start_block;
+	uint64_t last_ts;
 	uint32_t buffer_frags;
 	uint32_t buffer_size;
 	uint32_t rec_delay;
@@ -239,5 +240,8 @@ extern double voss_ad_getput_sample(double);
 
 /* Add audio options prototype */
 extern void voss_add_options(char *);
+
+/* Get current timestamp */
+uint64_t virtual_oss_timestamp(void);
 
 #endif					/* _VIRTUAL_INT_H_ */
