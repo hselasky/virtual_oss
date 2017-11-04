@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2016 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2017 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1552,6 +1552,7 @@ uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;
 
 static int voss_dsp_perm = 0666;
+static int voss_do_background;
 
 uint32_t voss_dsp_rx_refresh;
 uint32_t voss_dsp_tx_refresh;
@@ -1606,6 +1607,7 @@ usage(void)
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
+	    "\t" "-B # run in background \\\n"
 	    "\t" "-s <samples> \\\n"
 	    "\t" "-S # enable automatic resampling using libsamplerate \\\n"
 	    "\t" "-Q <0,1,2> # quality of resampling 0=best,1=medium,2=fastest (default) \\\n"
@@ -1788,7 +1790,7 @@ parse_options(int narg, char **pparg, int is_main)
 	struct rtprio rtp;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:";
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:B";
 	else
 		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
 
@@ -1800,6 +1802,9 @@ parse_options(int narg, char **pparg, int is_main)
 
 	while ((c = getopt(narg, pparg, optstr)) != -1) {
 		switch (c) {
+		case 'B':
+			voss_do_background = 1;
+			break;
 		case 'C':
 			if (voss_mix_channels != 0) {
 				return ("The -C argument may only be used once");
@@ -2241,6 +2246,10 @@ main(int argc, char **argv)
 
 	if (voss_dsp_samples > (voss_dsp_sample_rate / 4))
 		errx(EX_USAGE, "Too many buffer samples given by -s argument");
+
+	/* check if daemon mode is requested */
+	if (voss_do_background != 0 && daemon(0, 0) != 0)
+		errx(EX_SOFTWARE, "Cannot become daemon");
 
 	/* setup audio delay unit */
 	voss_ad_init(voss_dsp_sample_rate);
