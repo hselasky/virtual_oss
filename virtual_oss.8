@@ -1,5 +1,5 @@
 .\"
-.\" Copyright (c) 2016 Hans Petter Selasky <hselasky@freebsd.org>
+.\" Copyright (c) 2017 Hans Petter Selasky <hselasky@freebsd.org>
 .\"
 .\" All rights reserved.
 .\"
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd September 23, 2016
+.Dd November 4, 2017
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -56,10 +56,61 @@ module at boot time, place onf of the following lines in
        # FreeBSD >= 11
        cuse_load="YES"
 .Pp
+All channel numbers start at zero.
+Left channel is zero and right channel is one.
+.Pp
 The following options are available:
 .Bl -tag -width indent
+.It Fl B
+Run program in background.
+.It Fl S
+Enable automatic DSP rate resampling.
+.It Fl Q Ar quality
+Set resampling quality: 0=best, 1=mediam and 2=fastest (default).
+.It Fl b Ar bits
+Set sample-depth in bits for the proceeding commands.
+.It Fl r Ar rate
+Set default sample-rate for the proceeding commands.
+.It Fl i Ar priority
+Set real-time priority.
+.It Fl a Ar amp
+Set default DSP device amplification as power of two value.
+.It Fl g Ar groups
+Set default DSP device group.
+Useful when a channel is limited to identify stereo pairs.
+.It Fl p Ar polarity
+Set default polarity of DSP device.
+.It Fl e Ar mute
+Set default mute state of DSP device.
+.It Fl m Ar channels
+Set default channel mapping of DSP device.
+.It Fl C Ar num
+Set maximum number of mix channels.
+.It Fl c Ar num
+Set mix channels for the proceeding commands.
+.It Fl M Ar filter
+Add a monitoring filter.
+.It Fl t Ar devname
+Set control device name.
+.It Fl P Ar devname
+Set playback DSP device only.
+Specifying /dev/null is magic and means no playback device.
+.It Fl R Ar devname
+Set recording DSP device only.
+Specifying /dev/null is magic and means no recording device.
+.It Fl f Ar devname
+Set both playback and recording DSP device
+.It Fl T Ar devname
+Install entry in /dev/sndstat.
+.It Fl w Ar name
+Create a WAV file format compatible companion device by given name.
+This option should be specified before the -d and -l options.
+.It Fl d Ar name
+Create an OSS device by given name.
+.It Fl l Ar name
+Create a loopback OSS device by given name.
 .It Fl h
-Print help text showing available options.
+Show usage and all available options.
 .El
 .Sh EXAMPLES
 Split a 2-channel OSS compatible sound device into multiple subdevices:
