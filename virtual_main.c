@@ -206,6 +206,8 @@ vclient_bufsize_consumed(vclient_t *pvc)
 	samples_scaled = (delta * (uint64_t)pvc->sample_rate) / 1000000000ULL;
 	if (samples_scaled < 0)
 		samples_scaled = 0;
+	else if (samples_scaled > voss_dsp_samples)
+		samples_scaled = voss_dsp_samples;
 	retval = pvc->channels * samples_scaled * vclient_sample_bytes(pvc);
 	if (retval < 0)
 		retval = 0;

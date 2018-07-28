@@ -159,8 +159,7 @@ virtual_oss_process(void *arg)
 			}
 
 			/* Compute next timeout */
-			last_timestamp = virtual_oss_timestamp();
-			nice_timeout += last_timestamp;
+			nice_timeout += virtual_oss_timestamp();
 
 			off = 0;
 			len = 0;
@@ -188,6 +187,9 @@ virtual_oss_process(void *arg)
 
 			format_remix(buffer_data, rx_chn, src_chans, samples);
 
+			/* Refresh timestamp */
+			last_timestamp = virtual_oss_timestamp();
+			
 			atomic_lock();
 
 			voss_dsp_blocks++;
