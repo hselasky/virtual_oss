@@ -171,7 +171,7 @@ vring_read_linear(struct virtual_ring *pvr, uint8_t *dst, size_t total)
 	size_t buf_len;
 	size_t sum = 0;
 
-	if (total < vring_total_read_len(pvr))
+	if (total > vring_total_read_len(pvr))
 		return (0);
 
 	while (total != 0) {
