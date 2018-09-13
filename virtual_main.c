@@ -954,6 +954,8 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			}
 			continue;
 		}
+		if ((int)buf_len > len)
+			buf_len = len;
 
 		pvc->tx_busy = 1;
 		atomic_unlock();
