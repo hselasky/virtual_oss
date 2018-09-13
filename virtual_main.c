@@ -798,8 +798,8 @@ vclient_import_write_locked(vclient_t *pvc)
 	size_t src_mod;
 	uint8_t x;
 
-	dst_mod = pvc->channels * vclient_sample_bytes(pvc);
-	src_mod = pvc->channels * 8;
+	dst_mod = pvc->channels * 8;
+	src_mod = pvc->channels * vclient_sample_bytes(pvc);
 
 	for (x = 0; x != pvc->channels; x++)
 		fmt_limit[x] = pvc->profile->limiter;
