@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2018 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -163,8 +163,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.io_info.rx_pol = pvp->rx_pol[chan] ? 1 : 0;
 		data.io_info.tx_pol = pvp->tx_pol[chan] ? 1 : 0;
 		data.io_info.bits = pvp->bits;
-		data.io_info.rx_delay = pvp->rec_delay /
-		    (pvp->channels * (pvp->bits / 8));
+		data.io_info.rx_delay = pvp->rec_delay;
 		data.io_info.rx_delay_limit = voss_dsp_sample_rate;
 		break;
 	case VIRTUAL_OSS_SET_DEV_INFO:
@@ -188,8 +187,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvp->tx_mute[chan] = data.io_info.tx_mute ? 1 : 0;
 		pvp->rx_pol[chan] = data.io_info.rx_pol ? 1 : 0;
 		pvp->tx_pol[chan] = data.io_info.tx_pol ? 1 : 0;
-		pvp->rec_delay = data.io_info.rx_delay *
-		    (pvp->channels * (pvp->bits / 8));
+		pvp->rec_delay = data.io_info.rx_delay;
 		break;
 	case VIRTUAL_OSS_GET_INPUT_MON_INFO:
 		pvm = vmonitor_by_index(data.mon_info.number,

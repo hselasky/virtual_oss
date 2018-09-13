@@ -64,7 +64,6 @@ void   *
 virtual_oss_process(void *arg)
 {
 	vclient_t *pvc;
-	vblock_t *pvb;
 	vmonitor_t *pvm;
 	struct voss_backend *rx_be = voss_rx_backend;
 	struct voss_backend *tx_be = voss_tx_backend;
@@ -82,6 +81,7 @@ virtual_oss_process(void *arg)
 	int shift_orig;
 	int shift_fmt;
 	int buffer_dsp_max_size;
+	int buffer_dsp_rx_sample_size;
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
 	uint64_t nice_timeout = 0;
@@ -130,8 +130,8 @@ virtual_oss_process(void *arg)
 		    &rx_chn, &rx_fmt) < 0)
 			continue;
 
-		buffer_dsp_rx_size = voss_dsp_samples *
-		    rx_chn * (voss_dsp_bits / 8);
+		buffer_dsp_rx_sample_size = rx_chn * (voss_dsp_bits / 8);
+		buffer_dsp_rx_size = voss_dsp_samples * buffer_dsp_rx_sample_size;
 
 		tx_fmt = voss_dsp_tx_fmt;
 		tx_chn = voss_dsp_max_channels;
@@ -161,30 +161,25 @@ virtual_oss_process(void *arg)
 			/* Compute next timeout */
 			nice_timeout += virtual_oss_timestamp();
 
-			off = 0;
-			len = 0;
-
-			while (off < (int)buffer_dsp_rx_size) {
-				len = rx_be->transfer(rx_be, buffer_dsp + off,
-				    buffer_dsp_rx_size - off);
-				if (len <= 0)
-					break;
-				off += len;
-			}
-			if (len <= 0)
+			/* Read in samples */			 
+			len = rx_be->transfer(rx_be, buffer_dsp, buffer_dsp_rx_size);
+			if (len < 0)
 				break;
+			if (len % buffer_dsp_rx_sample_size)
+				break;
+			if (len == 0)
+				continue;
 
-			format_import(rx_fmt, buffer_dsp,
-			    buffer_dsp_rx_size, buffer_data);
+			/* Convert to 64-bit samples */
+			format_import(rx_fmt, buffer_dsp, len, buffer_data);
 
-			samples = voss_dsp_samples;
+			samples = len / buffer_dsp_rx_sample_size;
 			src_chans = voss_mix_channels;
 
 			/* Compute master input peak values */
+			format_maximum(buffer_data, voss_input_peak, rx_chn, samples, 0);
 
-			format_maximum(buffer_data, voss_input_peak,
-			    rx_chn, samples, 0);
-
+			/* Remix format */
 			format_remix(buffer_data, rx_chn, src_chans, samples);
 
 			/* Refresh timestamp */
@@ -198,17 +193,16 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_data,
 				    8 * samples * src_chans);
 			}
+
 			/*
 			 * -- 1 -- Distribute input samples to all
 			 * client devices
 			 */
-
 			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
 
 				/* update timestamp */
 				pvc->last_ts = last_timestamp;
 				dst_chans = pvc->channels;
-				pvb = vblock_peek(&pvc->rx_free);
 
 				if (dst_chans > src_chans)
 					continue;
@@ -265,19 +259,12 @@ virtual_oss_process(void *arg)
 						pvc->profile->limiter++;
 					}
 				}
-				for (x = 0; x != VMAX_CHAN; x++)
-					fmt_limit[x] = pvc->profile->limiter;
-
-				if (pvb == NULL || pvc->rx_enabled == 0 ||
-				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
+				if (pvc->rx_enabled == 0)
 					continue;
 
-				format_export(pvc->format, buffer_temp,
-				    pvb->buf_start, vclient_bufsize_internal(pvc),
-				    fmt_limit, pvc->channels);
-
-				vblock_remove(pvb, &pvc->rx_free);
-				vblock_insert(pvb, &pvc->rx_ready);
+				/* store data into ring buffer */
+				vring_write_linear(&pvc->rx_ring[0],
+				    (uint8_t *)buffer_temp, 8 * samples * dst_chans);
 			}
 
 			/* fill main output buffer with silence */
@@ -295,27 +282,27 @@ virtual_oss_process(void *arg)
 					    [x + voss_ad_input_channel]);
 				}
 			}
+
 			/*
 			 * -- 2.1 -- Load output samples from all client
 			 * devices
 			 */
-
 			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
 
-				pvb = vblock_peek(&pvc->tx_ready);
-
-				if (pvb == NULL || pvc->tx_enabled == 0)
+				if (pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start,
-				    vclient_bufsize_internal(pvc), buffer_data);
+				dst_chans = pvc->channels;
+
+				/* read data from ring buffer */
+				if (vring_read_linear(&pvc->tx_ring[0],
+				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
-				    pvc->channels, samples, shift_fmt);
-
-				dst_chans = pvc->channels;
+				    dst_chans, samples, shift_fmt);
 
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
@@ -326,8 +313,8 @@ virtual_oss_process(void *arg)
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
-						if (x_off >= pvc->channels)
-							x_off -= pvc->channels;
+						if (x_off >= dst_chans)
+							x_off -= dst_chans;
 
 						if (pvc->profile->tx_pol[x]) {
 							if (shift < 0) {
@@ -366,34 +353,31 @@ virtual_oss_process(void *arg)
 						}
 					}
 				}
-
-				vblock_remove(pvb, &pvc->tx_ready);
-				vblock_insert(pvb, &pvc->tx_free);
 			}
 
 			/*
 			 * -- 2.2 -- Load output samples from all loopback
 			 * devices
 			 */
-
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
 				/* update timestamp */
 				pvc->last_ts = last_timestamp;
-				pvb = vblock_peek(&pvc->tx_ready);
 
-				if (pvb == NULL || pvc->tx_enabled == 0)
+				if (pvc->tx_enabled == 0)
 					continue;
 
-				format_import(pvc->format, pvb->buf_start,
-				    vclient_bufsize_internal(pvc), buffer_data);
+				dst_chans = pvc->channels;
+
+				/* read data from ring buffer */
+				if (vring_read_linear(&pvc->tx_ring[0],
+				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 				
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
-				    pvc->channels, samples, shift_fmt);
-
-				dst_chans = pvc->channels;
+				    dst_chans, samples, shift_fmt);
 
 				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
 					src = pvc->profile->tx_dst[x];
@@ -404,8 +388,8 @@ virtual_oss_process(void *arg)
 					if (pvc->profile->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
-						if (x_off >= pvc->channels)
-							x_off -= pvc->channels;
+						if (x_off >= dst_chans)
+							x_off -= dst_chans;
 
 						if (pvc->profile->tx_pol[x]) {
 							if (shift < 0) {
@@ -444,9 +428,6 @@ virtual_oss_process(void *arg)
 						}
 					}
 				}
-
-				vblock_remove(pvb, &pvc->tx_ready);
-				vblock_insert(pvb, &pvc->tx_free);
 			}
 
 			/* -- 3 -- Check for input monitoring */
@@ -512,6 +493,7 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_temp,
 				    8 * samples * src_chans);
 			}
+
 			/* -- 4 -- Check for output monitoring */
 
 			TAILQ_FOREACH(pvm, &virtual_monitor_output, entry) {
@@ -576,7 +558,6 @@ virtual_oss_process(void *arg)
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
 				dst_chans = pvc->channels;
-				pvb = vblock_peek(&pvc->rx_free);
 
 				if (dst_chans > src_chans)
 					continue;
@@ -636,16 +617,12 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != VMAX_CHAN; x++)
 					fmt_limit[x] = pvc->profile->limiter;
 
-				if (pvb == NULL || pvc->rx_enabled == 0 ||
-				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
+				if (pvc->rx_enabled == 0)
 					continue;
 
-				format_export(pvc->format, buffer_monitor,
-				    pvb->buf_start, vclient_bufsize_internal(pvc),
-				    fmt_limit, pvc->channels);
-
-				vblock_remove(pvb, &pvc->rx_free);
-				vblock_insert(pvb, &pvc->rx_ready);
+				/* store data into ring buffer */
+				vring_write_linear(&pvc->rx_ring[0],
+				    (uint8_t *)buffer_monitor, 8 * samples * dst_chans);
 			}
 
 			atomic_wakeup();

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2018 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -64,12 +64,6 @@ typedef TAILQ_ENTRY(virtual_profile) vprofile_entry_t;
 typedef TAILQ_HEAD(, virtual_profile) vprofile_head_t;
 typedef struct virtual_profile vprofile_t;
 
-struct virtual_block;
-
-typedef TAILQ_ENTRY(virtual_block) vblock_entry_t;
-typedef TAILQ_HEAD(, virtual_block) vblock_head_t;
-typedef struct virtual_block vblock_t;
-
 struct virtual_client;
 
 typedef TAILQ_ENTRY(virtual_client) vclient_entry_t;
@@ -112,11 +106,11 @@ struct virtual_profile {
 	int fd_sta;
 };
 
-struct virtual_block {
-	vblock_entry_t entry;
+struct virtual_ring {
 	uint8_t *buf_start;
-	uint32_t buf_size;
-	uint32_t buf_pos;
+	uint32_t pos_read;
+	uint32_t total_size;
+	uint32_t len_write;
 };
 
 struct virtual_resample {
@@ -124,17 +118,12 @@ struct virtual_resample {
 	SRC_STATE *state;
 	float *data_in;
 	float *data_out;
-	int64_t *scratch_in_buf;
-  	int64_t *scratch_out_buf;
-	uint32_t in_offset;
 };
 
 struct virtual_client {
 	vclient_entry_t entry;
-	vblock_head_t rx_ready;
-	vblock_head_t rx_free;
-	vblock_head_t tx_ready;
-	vblock_head_t tx_free;
+	struct virtual_ring rx_ring[2];
+  	struct virtual_ring tx_ring[2];
 	vresample_t rx_resample;
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
@@ -205,9 +194,19 @@ extern void atomic_unlock(void);
 extern void atomic_wait(void);
 extern void atomic_wakeup(void);
 
-extern vblock_t *vblock_peek(vblock_head_t *);
-extern void vblock_insert(vblock_t *, vblock_head_t *);
-extern void vblock_remove(vblock_t *, vblock_head_t *);
+extern int vring_alloc(struct virtual_ring *, size_t);
+extern void vring_free(struct virtual_ring *);
+extern void vring_reset(struct virtual_ring *);
+extern void vring_get_read(struct virtual_ring *, uint8_t **, size_t *);
+extern void vring_get_write(struct virtual_ring *, uint8_t **, size_t *);
+extern void vring_inc_read(struct virtual_ring *, size_t);
+extern void vring_inc_write(struct virtual_ring *, size_t);
+extern size_t vring_total_read_len(struct virtual_ring *);
+extern size_t vring_total_write_len(struct virtual_ring *);
+extern size_t vring_write_linear(struct virtual_ring *, const uint8_t *, size_t);
+extern size_t vring_read_linear(struct virtual_ring *, uint8_t *, size_t);
+extern size_t vring_write_zero(struct virtual_ring *, size_t);
+
 extern uint32_t vclient_sample_bytes(vclient_t *);
 extern uint32_t vclient_bufsize_internal(vclient_t *);
 extern uint32_t vclient_bufsize_scaled(vclient_t *);

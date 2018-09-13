@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
+#include <poll.h>
 
 #include <sys/queue.h>
 #include <sys/filio.h>
@@ -73,7 +74,8 @@ oss_close(struct voss_backend *pbe)
 }
 
 static int
-oss_open(struct voss_backend *pbe, const char *devname, int samplerate, int *pchannels, int *pformat, int attr)
+oss_open(struct voss_backend *pbe, const char *devname, int samplerate,
+    int *pchannels, int *pformat, int attr, int fionbio)
 {
 	int temp;
 	int err;
@@ -83,8 +85,7 @@ oss_open(struct voss_backend *pbe, const char *devname, int samplerate, int *pch
 		warn("Could not open DSP device '%s'", devname);
 		return (-1);
 	}
-	temp = 0;
-	err = ioctl(pbe->fd, FIONBIO, &temp);
+	err = ioctl(pbe->fd, FIONBIO, &fionbio);
 	if (err < 0) {
 		warn("Could not set blocking mode on DSP");
 		goto error;
@@ -123,19 +124,25 @@ static int
 oss_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
-	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_RDONLY));
+	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_RDONLY, 1));
 }
 
 static int
 oss_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int *pchannels, int *pformat)
 {
-	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_WRONLY));
+	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_WRONLY, 0));
 }
 
 static int
 oss_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
+	struct pollfd fds = { .fd = pbe->fd, .events = POLLIN | POLLRDNORM };
+	int err;
+
+	err = poll(&fds, 1, 0);
+	if (err < 1)
+		return (-1);
 	return (read(pbe->fd, ptr, len));
 }
 

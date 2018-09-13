@@ -45,6 +45,7 @@ virtual_ctl.c \
 virtual_format.c \
 virtual_main.c \
 virtual_oss.c \
+virtual_ring.c \
 backend_oss.c \
 backend_null.c
 
