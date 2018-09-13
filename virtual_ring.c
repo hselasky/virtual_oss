@@ -119,6 +119,7 @@ vring_inc_read(struct virtual_ring *pvr, size_t len)
 {
 
 	pvr->pos_read += len;
+	pvr->len_write -= len;
 }
 
 void
