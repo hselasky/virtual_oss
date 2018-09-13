@@ -1523,7 +1523,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
-	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 1024 -f /dev/dsp3 \\\n"
+	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 100.0ms -f /dev/dsp3 \\\n"
 	    "\t" "-P /dev/dsp3 -R /dev/dsp1 \\\n"
 	    "\t" "-T /dev/sndstat \\\n"
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d dsp100.0 \\\n"
@@ -1531,7 +1531,7 @@ usage(void)
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
 	    "\t" "-B # run in background \\\n"
-	    "\t" "-s <samples> \\\n"
+	    "\t" "-s <samples> or <milliseconds>ms \\\n"
 	    "\t" "-S # enable automatic resampling using libsamplerate \\\n"
 	    "\t" "-Q <0,1,2> # quality of resampling 0=best,1=medium,2=fastest (default) \\\n"
 	    "\t" "-b <bits> \\\n"
