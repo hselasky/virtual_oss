@@ -269,7 +269,7 @@ done:
 }
 
 static int
-bt_open(struct voss_backend *pbe, const char *devname, int samplerate,
+bt_open(struct voss_backend *pbe, const char *devname, int samplerate, int bufsize,
     int *pchannels, int *pformat, struct bt_config *cfg,
     int service_class)
 {
@@ -498,14 +498,14 @@ error:
 
 static int
 bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat)
+    int bufsize, int *pchannels, int *pformat)
 {
 	struct bt_config *cfg = pbe->arg;
 	int retval;
 
 	memset(cfg, 0, sizeof(*cfg));
 
-	retval = bt_open(pbe, devname, samplerate, pchannels, pformat,
+	retval = bt_open(pbe, devname, samplerate, bufsize, pchannels, pformat,
 	    cfg, SDP_SERVICE_CLASS_AUDIO_SOURCE);
 	if (retval != 0)
 		return (retval);
@@ -514,14 +514,14 @@ bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
 
 static int
 bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat)
+    int bufsize, int *pchannels, int *pformat)
 {
 	struct bt_config *cfg = pbe->arg;
 	int retval;
 
 	memset(cfg, 0, sizeof(*cfg));
 
-	retval = bt_open(pbe, devname, samplerate, pchannels, pformat,
+	retval = bt_open(pbe, devname, samplerate, bufsize, pchannels, pformat,
 	    cfg, SDP_SERVICE_CLASS_AUDIO_SINK);
 	if (retval != 0)
 		return (retval);

@@ -45,7 +45,7 @@ null_close(struct voss_backend *pbe)
 
 static int
 null_open(struct voss_backend *pbe, const char *devname,
-    int samplerate, int *pchannels, int *pformat)
+    int samplerate, int bufsize, int *pchannels, int *pformat)
 {
 	int value[3];
 	int i;

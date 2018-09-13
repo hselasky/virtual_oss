@@ -326,7 +326,12 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	if (channels > 0)
 		pvc->channels = channels;
 
+	mod = pvc->channels * vclient_sample_bytes(pvc);
+	
 	if (size > 0) {
+		size += mod - 1;
+		size -= size % mod;
+
 		pvc->buffer_size = size;
 		pvc->buffer_size_set = 1;
 	} else if (pvc->buffer_size_set == 0)
@@ -358,7 +363,6 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	   (uint64_t)voss_dsp_sample_rate - 1) / (uint64_t)voss_dsp_sample_rate;
 
 	/* align buffer size */
-	mod = pvc->channels * vclient_sample_bytes(pvc);
 	bufsize_internal += mod - 1;
 	bufsize_internal -= bufsize_internal % mod;
 

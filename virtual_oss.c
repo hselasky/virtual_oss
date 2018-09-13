@@ -127,7 +127,7 @@ virtual_oss_process(void *arg)
 		rx_fmt = voss_dsp_rx_fmt;
 		rx_chn = voss_dsp_max_channels;
 		if (rx_be->open(rx_be, voss_dsp_rx_device, voss_dsp_sample_rate,
-		    &rx_chn, &rx_fmt) < 0)
+		    buffer_dsp_max_size - voss_dsp_max_channels * (voss_dsp_bits / 8), &rx_chn, &rx_fmt) < 0)
 			continue;
 
 		buffer_dsp_rx_sample_size = rx_chn * (voss_dsp_bits / 8);
@@ -136,7 +136,7 @@ virtual_oss_process(void *arg)
 		tx_fmt = voss_dsp_tx_fmt;
 		tx_chn = voss_dsp_max_channels;
 		if (tx_be->open(tx_be, voss_dsp_tx_device, voss_dsp_sample_rate,
-		    &tx_chn, &tx_fmt) < 0)
+		    buffer_dsp_max_size, &tx_chn, &tx_fmt) < 0)
 			continue;
 
 		buffer_dsp_tx_size = voss_dsp_samples *

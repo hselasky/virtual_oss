@@ -27,7 +27,7 @@
 #define	_VIRTUAL_BACKEND_H_
 
 struct voss_backend {
-	int (*open)(struct voss_backend *, const char *, int, int *, int *);
+	int (*open)(struct voss_backend *, const char *, int, int, int *, int *);
 	void (*close)(struct voss_backend *);
 	int (*transfer)(struct voss_backend *, void *, int);
 	void (*delay)(struct voss_backend *, int *);

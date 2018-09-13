@@ -75,7 +75,7 @@ oss_close(struct voss_backend *pbe)
 
 static int
 oss_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat, int attr, int fionbio)
+    int bufsize, int *pchannels, int *pformat, int attr, int fionbio)
 {
 	int temp;
 	int err;
@@ -113,6 +113,13 @@ oss_open(struct voss_backend *pbe, const char *devname, int samplerate,
 		warn("Could not set sample rate to %d / %d Hz", temp, samplerate);
 		goto error;
 	}
+
+	temp = bufsize;
+	err = ioctl(pbe->fd, SNDCTL_DSP_SETBLKSIZE, &temp);
+	if (err < 0) {
+		warn("Could not set block size to %d", temp);
+		goto error;
+	}
 	return (0);
 error:
 	close(pbe->fd);
@@ -122,16 +129,16 @@ error:
 
 static int
 oss_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat)
+    int bufsize, int *pchannels, int *pformat)
 {
-	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_RDONLY, 1));
+	return (oss_open(pbe, devname, samplerate, bufsize, pchannels, pformat, O_RDONLY, 0));
 }
 
 static int
 oss_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
-    int *pchannels, int *pformat)
+    int bufsize, int *pchannels, int *pformat)
 {
-	return (oss_open(pbe, devname, samplerate, pchannels, pformat, O_WRONLY, 0));
+	return (oss_open(pbe, devname, samplerate, bufsize, pchannels, pformat, O_WRONLY, 0));
 }
 
 static int
