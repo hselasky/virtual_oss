@@ -1711,6 +1711,7 @@ parse_options(int narg, char **pparg, int is_main)
 	const char *optstr;
 	struct virtual_profile profile;
 	struct rtprio rtp;
+	float samples_ms;
 
 	if (is_main)
 		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:B";
@@ -1948,7 +1949,17 @@ parse_options(int narg, char **pparg, int is_main)
 				return ("-s option may only be used once");
 			if (profile.bits == 0 || profile.channels == 0)
 				return ("-s option requires -b and -c options");
-			voss_dsp_samples = atoi(optarg);
+			if (strlen(optarg) > 2 &&
+			    sscanf(optarg, "%f", &samples_ms) == 1 &&
+			    strcmp(optarg + strlen(optarg) - 2, "ms") == 0) {
+				if (voss_dsp_sample_rate == 0)
+					return ("-s <X>ms option requires -r option");
+				if (samples_ms < 0.125 || samples_ms >= 1000.0)
+					return ("-s <X>ms option has invalid value");
+				voss_dsp_samples = voss_dsp_sample_rate * samples_ms / 1000.0;
+			} else {
+				voss_dsp_samples = atoi(optarg);
+			}
 			if (voss_dsp_samples >= (1U << 24))
 				return ("-s option requires a non-zero positive value");
 			break;
