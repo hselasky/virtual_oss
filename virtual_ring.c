@@ -78,10 +78,7 @@ vring_get_read(struct virtual_ring *pvr, uint8_t **pptr, size_t *plen)
 		return;
 	}
 	delta = pvr->total_size - pvr->pos_read;
-	if (delta == 0) {
-		pvr->pos_read = 0;
-		delta = pvr->len_write;
-	} else if (delta > pvr->len_write)
+	if (delta > pvr->len_write)
 		delta = pvr->len_write;
 
 	*pptr = pvr->buf_start + pvr->pos_read;
@@ -120,6 +117,10 @@ vring_inc_read(struct virtual_ring *pvr, size_t len)
 
 	pvr->pos_read += len;
 	pvr->len_write -= len;
+
+	/* check for wrap-around */
+	if (pvr->pos_read == pvr->total_size)
+		pvr->pos_read = 0;
 }
 
 void
