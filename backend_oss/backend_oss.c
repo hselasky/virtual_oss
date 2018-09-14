@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2015-2018 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -96,6 +96,7 @@ oss_open(struct voss_backend *pbe, const char *devname, int samplerate,
 		goto error;
 	}
 	temp = *pchannels;
+	bufsize /= temp;	/* get buffer size per channel */
 	do {
 		err = ioctl(pbe->fd, SOUND_PCM_WRITE_CHANNELS, &temp);
 	} while (err < 0 && --temp > 0);
@@ -114,7 +115,7 @@ oss_open(struct voss_backend *pbe, const char *devname, int samplerate,
 		goto error;
 	}
 
-	temp = bufsize;
+	temp = bufsize * (*pchannels);
 	err = ioctl(pbe->fd, SNDCTL_DSP_SETBLKSIZE, &temp);
 	if (err < 0) {
 		warn("Could not set block size to %d", temp);
