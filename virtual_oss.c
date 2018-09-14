@@ -81,6 +81,7 @@ virtual_oss_process(void *arg)
 	int shift_orig;
 	int shift_fmt;
 	int buffer_dsp_max_size;
+	int buffer_dsp_half_size;
 	int buffer_dsp_rx_sample_size;
 	int buffer_dsp_rx_size;
 	int buffer_dsp_tx_size;
@@ -101,6 +102,8 @@ virtual_oss_process(void *arg)
 	uint8_t fmt_limit[VMAX_CHAN];
 
 	buffer_dsp_max_size = voss_dsp_samples *
+	    voss_dsp_max_channels * (voss_dsp_bits / 8);
+	buffer_dsp_half_size = (voss_dsp_samples / 2) *
 	    voss_dsp_max_channels * (voss_dsp_bits / 8);
 
 	buffer_dsp = malloc(buffer_dsp_max_size);
@@ -126,8 +129,9 @@ virtual_oss_process(void *arg)
 
 		rx_fmt = voss_dsp_rx_fmt;
 		rx_chn = voss_dsp_max_channels;
+
 		if (rx_be->open(rx_be, voss_dsp_rx_device, voss_dsp_sample_rate,
-		    buffer_dsp_max_size - voss_dsp_max_channels * (voss_dsp_bits / 8), &rx_chn, &rx_fmt) < 0)
+		    buffer_dsp_half_size, &rx_chn, &rx_fmt) < 0)
 			continue;
 
 		buffer_dsp_rx_sample_size = rx_chn * (voss_dsp_bits / 8);
@@ -614,9 +618,6 @@ virtual_oss_process(void *arg)
 						pvc->profile->limiter++;
 					}
 				}
-				for (x = 0; x != VMAX_CHAN; x++)
-					fmt_limit[x] = pvc->profile->limiter;
-
 				if (pvc->rx_enabled == 0)
 					continue;
 
