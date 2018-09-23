@@ -319,6 +319,7 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 {
 	size_t bufsize_internal;
 	size_t bufsize_min;
+	size_t mod_internal;
 	size_t mod;
 	int bufsize;
 	int frags_internal;
@@ -345,6 +346,7 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 		pvc->channels = channels;
 
 	mod = pvc->channels * vclient_sample_bytes(pvc);
+	mod_internal = pvc->channels * 8;
 
 	if (size > 0) {
 		size += mod - 1;
@@ -390,8 +392,8 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	bufsize_internal *= 2ULL;
 
 	/* align buffer size */
-	bufsize_internal += 7;
-	bufsize_internal -= bufsize_internal % 8;
+	bufsize_internal += (mod_internal - 1);
+	bufsize_internal -= (bufsize_internal % mod_internal);
 
 	/* allocate new buffers */
 	if (vring_alloc(&pvc->rx_ring[0], bufsize_internal))
