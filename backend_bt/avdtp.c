@@ -2,7 +2,7 @@
 
 /*-
  * Copyright (c) 2015-2016 Nathanial Sloss <nathanialsloss@yahoo.com.au>
- * Copyright (c) 2016 Hans Petter Selasky <hps@selasky.org>
+ * Copyright (c) 2016-2019 Hans Petter Selasky <hps@selasky.org>
  * All rights reserved.
  *
  *		This software is dedicated to the memory of -
@@ -49,7 +49,7 @@ struct avdtpGetResponseInfo {
 	uint8_t	buffer_data[512];
 	uint16_t buffer_len;
 	uint8_t	trans;
-	uint8_t	signalId;
+	uint8_t	signalID;
 };
 
 static int avdtpAutoConfig(struct bt_config *);
@@ -67,7 +67,7 @@ avdtpGetResponse(int fd, struct avdtpGetResponseInfo *info)
 		return (255);
 
 	info->trans = (info->buffer_data[0] & TRANSACTIONLABEL) >> TRANSACTIONLABEL_S;
-	info->signalId = (info->buffer_data[1] & SIGNALID_MASK);
+	info->signalID = (info->buffer_data[1] & SIGNALID_MASK);
 	info->buffer_len = len;
 
 	return (info->buffer_data[0] & MESSAGETYPE);
@@ -118,9 +118,12 @@ retry:
 		if (info->trans != trans)
 			goto retry;
 		retval = EINVAL;
-		goto done;
+		break;
 	case COMMAND:
-		goto retry;
+		retval = avdtpSendReject(fd, info->trans, info->signalID);
+		if (retval == 0)
+			goto retry;
+		break;
 	default:
 		retval = ENXIO;
 		break;
@@ -235,7 +238,7 @@ avdtpSendDiscResponseAudio(int fd, uint8_t trans,
 }
 
 int
-avdtpDiscoverAndConfig(struct bt_config *cfg)
+avdtpDiscoverAndConfig(struct bt_config *cfg, bool isSink)
 {
 	struct avdtpGetResponseInfo info;
 	uint16_t offset;
@@ -256,12 +259,19 @@ avdtpDiscoverAndConfig(struct bt_config *cfg)
 		cfg->chmode = chmode;
 		cfg->aacMode1 = aacMode1;
 		cfg->aacMode2 = aacMode2;
-		if (!(info.buffer_data[offset] & DISCOVER_SEP_IN_USE)) {
-			/* try to configure SBC */
-			retval = avdtpAutoConfig(cfg);
-			if (retval == 0)
-				break;
+		if (info.buffer_data[offset] & DISCOVER_SEP_IN_USE)
+			continue;
+		if (info.buffer_data[offset + 1] & DISCOVER_IS_SINK) {
+			if (!isSink)
+				continue;
+		} else {
+			if (isSink)
+				continue;
 		}
+		/* try to configure SBC */
+		retval = avdtpAutoConfig(cfg);
+		if (retval == 0)
+			return (0);
 	}
 	return (retval);
 }

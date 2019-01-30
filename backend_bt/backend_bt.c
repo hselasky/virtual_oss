@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2015-2019 Hans Petter Selasky. All rights reserved.
  * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>. All rights reserved.
  * Copyright (c) 2006 Itronix Inc. All rights reserved.
  *
@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
+#define	L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include <sdp.h>
 
@@ -133,8 +134,7 @@ bt_rec_close(struct voss_backend *pbe)
 	return (bt_close(pbe));
 }
 
-static const uint32_t bt_attrs[] =
-{
+static const uint32_t bt_attrs[] = {
 	SDP_ATTR_RANGE(SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST,
 	    SDP_ATTR_PROTOCOL_DESCRIPTOR_LIST),
 };
@@ -236,7 +236,7 @@ bt_query(struct l2cap_info *info, uint16_t service_class)
 	memset(values, 0, sizeof(values));
 
 	ss = sdp_open(&info->laddr, &info->raddr);
-	if (sdp_error(ss) != 0) {
+	if (ss == NULL || sdp_error(ss) != 0) {
 		DPRINTF("Could not open SDP\n");
 		return (psm);
 	}
@@ -271,7 +271,7 @@ done:
 static int
 bt_open(struct voss_backend *pbe, const char *devname, int samplerate, int bufsize,
     int *pchannels, int *pformat, struct bt_config *cfg,
-    int service_class)
+    int service_class, int isSink)
 {
 	struct sockaddr_l2cap addr;
 	struct l2cap_info info;
@@ -299,10 +299,6 @@ bt_open(struct voss_backend *pbe, const char *devname, int samplerate, int bufsi
 		}
 		bdaddr_copy(&info.raddr, (bdaddr_t *)he->h_addr);
 	}
-#if 0
-	if (!bt_devaddr(XXX, &info.laddr))
-		DPRINTF("Could not get local device address\n");
-#endif
 retry:
 	switch (samplerate) {
 	case 8000:
@@ -405,6 +401,7 @@ retry:
 		goto error;
 	}
 	l2cap_psm = bt_query(&info, service_class);
+	DPRINTF("PSM=0x%02x\n", l2cap_psm);
 	if (l2cap_psm < 0) {
 		DPRINTF("PSM not found\n");
 		goto error;
@@ -429,7 +426,7 @@ retry:
 		DPRINTF("Could not connect to HC\n");
 		goto error;
 	}
-	if (avdtpDiscoverAndConfig(cfg)) {
+	if (avdtpDiscoverAndConfig(cfg, isSink)) {
 		DPRINTF("DISCOVER FAILED\n");
 		goto error;
 	}
@@ -496,6 +493,12 @@ error:
 	return (-1);
 }
 
+static void
+bt_init_cfg(struct bt_config *cfg)
+{
+	memset(cfg, 0, sizeof(*cfg));
+}
+
 static int
 bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int bufsize, int *pchannels, int *pformat)
@@ -503,10 +506,10 @@ bt_rec_open(struct voss_backend *pbe, const char *devname, int samplerate,
 	struct bt_config *cfg = pbe->arg;
 	int retval;
 
-	memset(cfg, 0, sizeof(*cfg));
+	bt_init_cfg(cfg);
 
 	retval = bt_open(pbe, devname, samplerate, bufsize, pchannels, pformat,
-	    cfg, SDP_SERVICE_CLASS_AUDIO_SOURCE);
+	    cfg, SDP_SERVICE_CLASS_AUDIO_SOURCE, 0);
 	if (retval != 0)
 		return (retval);
 	return (0);
@@ -519,10 +522,10 @@ bt_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
 	struct bt_config *cfg = pbe->arg;
 	int retval;
 
-	memset(cfg, 0, sizeof(*cfg));
+	bt_init_cfg(cfg);
 
 	retval = bt_open(pbe, devname, samplerate, bufsize, pchannels, pformat,
-	    cfg, SDP_SERVICE_CLASS_AUDIO_SINK);
+	    cfg, SDP_SERVICE_CLASS_AUDIO_SINK, 1);
 	if (retval != 0)
 		return (retval);
 

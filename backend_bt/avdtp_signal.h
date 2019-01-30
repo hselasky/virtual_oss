@@ -34,7 +34,9 @@
 #ifndef _AVDTP_SIGNAL_H_
 #define	_AVDTP_SIGNAL_H_
 
-#include <sys/types.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 /* Our endpoint. */
 #define	INTSEP				8
 
@@ -62,6 +64,7 @@
 #define	MESSAGETYPE			0x03
 #define	SIGNALIDENTIFIER		0x3f
 #define	DISCOVER_SEP_IN_USE		0x02
+#define	DISCOVER_IS_SINK		0x08
 
 /* Packet Types */
 #define	singlePacket			0x0
@@ -120,7 +123,7 @@ struct bt_config;
 int	avdtpSendAccept(int, uint8_t, uint8_t);
 int	avdtpSendReject(int, uint8_t, uint8_t);
 int	avdtpSendDiscResponseAudio(int, uint8_t, uint8_t, uint8_t);
-int	avdtpDiscoverAndConfig(struct bt_config *);
+int	avdtpDiscoverAndConfig(struct bt_config *, bool);
 int	avdtpSetConfiguration(int, uint8_t, uint8_t *, int);
 int	avdtpOpen(int, uint8_t);
 int	avdtpStart(int, uint8_t);
