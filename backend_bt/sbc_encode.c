@@ -675,11 +675,6 @@ sbc_decode_frame(struct bt_config *cfg, int bits)
 			sbc->scalefactor[i][j] = sbc_load_bits_crc(sbc, 4);
 	}
 
-#if 0
-	/* check 8-bit CRC */
-	printf("CRC = 0x%02x\n", sbc->crc & 0xFF);
-#endif
-
 	calc_bitneed(cfg);
 
 	i = 0;
