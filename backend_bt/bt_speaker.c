@@ -138,8 +138,8 @@ struct bt_audio_connection {
 	int	oss_fd;
 	int	playing;
 	int	buffer_len;
-	uint8_t	buffer[65536];
-#define JITTER_LEN  16384
+	uint8_t	buffer[131072];
+#define JITTER_LEN  65536
 };
 
 static void
