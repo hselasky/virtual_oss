@@ -35,7 +35,7 @@
 #include "sbc_encode.h"
 
 struct bt_config {
-  	uint8_t	sep;
+	uint8_t	sep;			/* SEID of the peer */
 	uint8_t	media_Type;
 	uint8_t	chmode;
 #define	MODE_STEREO	2
@@ -97,9 +97,20 @@ struct bt_config {
 
 	/* scratch buffer */
 	uint8_t	mtu_data[65536];
+
+	/* acceptor state */
+	int8_t	acceptor_state;
+#define	acpInitial 1
+#define	acpConfigurationSet 2
+#define	acpStreamOpened 3
+#define	acpStreamStarted 4
+#define	acpStreamSuspended 5
+#define	acpStreamClosed 6
 };
 
 size_t	sbc_encode_frame(struct bt_config *);
 size_t	sbc_decode_frame(struct bt_config *, int);
+
+int	bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block);
 
 #endif					/* _BACKEND_BT_H_ */

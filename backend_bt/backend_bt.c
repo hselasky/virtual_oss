@@ -651,10 +651,9 @@ av_error_0:
 	return (0);
 }
 
-static int
-bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
+int
+bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block)
 {
-	struct bt_config *cfg = pbe->arg;
 	struct sbc_header *phdr = (struct sbc_header *)cfg->mtu_data;
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	int old_len = len;
@@ -713,10 +712,19 @@ bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 			sbc->rem_data_len -= err;
 			continue;
 		}
+		/* TODO: Support fragmented SBC frames */
 		do {
 			err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
-		} while (err < 0 && errno == EAGAIN);
+		} while (may_block && err < 0 && errno == EAGAIN);
 
+		if (!may_block) {
+			if (err == 0) {
+				break;
+			} else if (err < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					break;
+			}
+		}
 		if (err < 0)
 			return (-1);
 
@@ -728,7 +736,13 @@ bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 		sbc->rem_data_ptr = (uint8_t *)(phdr + 1);
 		sbc->rem_data_len = err - sizeof(*phdr);
 	}
-	return (old_len);
+	return (old_len - len);
+}
+
+static int
+bt_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
+{
+	return (bt_receive(pbe->arg, ptr, len, 1));
 }
 
 static int
