@@ -488,17 +488,15 @@ sbc_decode(struct bt_config *cfg)
 			for (i = (sbc->bands * 20) - 1; i >= (sbc->bands * 2); i--)
 				V[i] = V[i - (sbc->bands * 2)];
 			for (k = 0; k < sbc->bands * 2; k++) {
-				V[k] = 0;
+				int64_t vk = 0;
 				for (i = 0; i < sbc->bands; i++) {
 					if (sbc->bands == 8) {
-						V[k] += cosdecdata8[i][k]
-						    * S[i];
+						vk += (int64_t)cosdecdata8[i][k] * (int64_t)S[i];
 					} else {
-						V[k] += cosdecdata4[i][k]
-						    * S[i];
+						vk += (int64_t)cosdecdata4[i][k] * (int64_t)S[i];
 					}
 				}
-				V[k] /= SIMULTI;
+				V[k] = (vk / SIMULTI);
 			}
 			for (i = 0; i <= 4; i++) {
 				for (k = 0; k < sbc->bands; k++) {
