@@ -50,9 +50,11 @@ backend_oss.c \
 backend_null.c
 
 .if defined(HAVE_BLUETOOTH)
-SRCS += backend_bt.c avdtp.c sbc_encode.c
+SRCS += backend_bt.c avdtp.c sbc_encode.c bt_speaker.c
 CFLAGS += -DHAVE_BLUETOOTH
 LDFLAGS += -lbluetooth -lsdp
+LINKS += ${BINDIR}virtual_oss ${BINDIR}/virtual_bt_speaker
+MAN += virtual_bt_speaker.8
 .endif
 
 .if defined(HAVE_FFMPEG)
