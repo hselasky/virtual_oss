@@ -132,10 +132,14 @@ stop_listen(struct bt_audio_receiver *r)
 }
 
 struct bt_audio_connection {
-	struct bt_audio_receiver *r;
-	struct sockaddr_l2cap peer_addr;
-	struct bt_config cfg;
+	struct	bt_audio_receiver *r;
+	struct	sockaddr_l2cap peer_addr;
+	struct	bt_config cfg;
 	int	oss_fd;
+	int	playing;
+	int	buffer_len;
+	uint8_t	buffer[65536];
+#define JITTER_LEN  16384
 };
 
 static void
@@ -155,7 +159,7 @@ static struct bt_audio_connection *
 wait_for_connection(struct bt_audio_receiver *r)
 {
 	struct bt_audio_connection *c =
-	malloc(sizeof(struct bt_audio_connection));
+	    malloc(sizeof(struct bt_audio_connection));
 	socklen_t addrlen;
 
 	memset(c, 0, sizeof(*c));
@@ -320,39 +324,58 @@ process_connection(struct bt_audio_connection *c)
 			}
 		}
 		if (pfd[2].revents != 0) {
-			uint8_t data[65536];
 			int len;
-
-			if ((len = bt_receive(&c->cfg, data, sizeof(data), 0)) < 0) {
+			if ((len = bt_receive(&c->cfg, c->buffer + c->buffer_len,
+					sizeof(c->buffer) - c->buffer_len, 0)) < 0) {
 				return;
 			}
-			if (c->oss_fd < 0 && time(NULL) != oss_attempt) {
-				message("Trying to open dsp\n");
-				setup_oss(c);
-				oss_attempt = time(NULL);
-			}
-			if (c->oss_fd > -1) {
-				uint8_t *end = data + len;
-				uint8_t *ptr = data;
-
-				while (ptr != end) {
-					int written = write(c->oss_fd, ptr, end - ptr);
-
-					if (written < 0) {
-						if (errno != EINTR && errno != EAGAIN)
-							break;
-						written = 0;
-					}
-					ptr += written;
-				}
-				if (ptr != end) {
-					message("Not all written, closing dsp\n");
-					close(c->oss_fd);
-					c->oss_fd = -1;
+			c->buffer_len += len;
+			/* If we have not yet started playing, make sure we have
+			 * enough data in our buffer to avoid jitter. If we are
+			 * suspended but still have incoming data, we play it
+			 * now instead of postponing until resume. */
+			if (c->playing || c->buffer_len > JITTER_LEN ||
+			    c->cfg.acceptor_state == acpStreamSuspended) {
+				if (c->oss_fd < 0 && time(NULL) != oss_attempt) {
+					message("Trying to open dsp\n");
+					setup_oss(c);
 					oss_attempt = time(NULL);
 				}
+				if (c->oss_fd > -1) {
+					uint8_t *end = c->buffer + c->buffer_len;
+					uint8_t *ptr = c->buffer;
+
+					while (ptr != end) {
+						int written = write(c->oss_fd, ptr, end - ptr);
+
+						if (written < 0) {
+							if (errno != EINTR && errno != EAGAIN)
+								break;
+							written = 0;
+						}
+						ptr += written;
+					}
+					if (ptr != end) {
+						message("Not all written, closing dsp\n");
+						close(c->oss_fd);
+						c->oss_fd = -1;
+						c->playing = 0;
+						oss_attempt = time(NULL);
+					} else {
+						c->playing = 1;
+					}
+				} else {
+					c->playing = 0;
+				}
+				/* Regardless whether we were successful or not,
+				 * clear the buffer. */
+				c->buffer_len = 0;
 			}
 		}
+		/* If we are suspended, we clear playing state, so on the next
+		 * resume we again fill in the jitter buffer. */
+		if (c->cfg.acceptor_state == acpStreamSuspended)
+			c->playing = 0;
 	}
 }
 
