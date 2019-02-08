@@ -39,6 +39,7 @@
 
 /* Our endpoint. */
 #define	INTSEP				8
+#define	ACPSEP				8
 
 /* AVDTP signals. */
 
@@ -130,5 +131,10 @@ int	avdtpStart(int, uint8_t);
 int	avdtpClose(int, uint8_t);
 int	avdtpSuspend(int, uint8_t);
 int	avdtpAbort(int, uint8_t);
+
+/* Return < 0 if error, processed signal otherwise. */
+int	avdtpACPHandlePacket(struct bt_config *cfg);
+/* Free state allocated in avdtpACPHandlePacket(), if any. */
+void	avdtpACPFree(struct bt_config *cfg);
 
 #endif					/* _AVDTP_SIGNAL_H_ */
