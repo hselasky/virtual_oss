@@ -1,11 +1,10 @@
 # $NetBSD$
 
-USE_FORT?= yes	# network client
-WARNS?=	4
+WARNS?=	3
 
 PROG=		cosdata
 SRCS=		cosdata.c
-NO_MAN=		true
+MAN=
 
 DPADD+=		${LIBMATH}
 LDADD+=		-lm
