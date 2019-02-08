@@ -655,7 +655,8 @@ sbc_decode_frame(struct bt_config *cfg, int bits)
 		return (0);
 	if (sbc_load_bits_crc(sbc, 8) != config)
 		return (0);
-	(void)sbc_load_bits_crc(sbc, 8);/* bitpool */
+	cfg->bitpool = sbc_load_bits_crc(sbc, 8);
+
 	(void)sbc_load_bits_crc(sbc, 8);/* CRC */
 
 	if (cfg->chmode == MODE_JOINT) {
@@ -673,11 +674,6 @@ sbc_decode_frame(struct bt_config *cfg, int bits)
 		for (j = 0; j < sbc->bands; j++)
 			sbc->scalefactor[i][j] = sbc_load_bits_crc(sbc, 4);
 	}
-
-#if 0
-	/* check 8-bit CRC */
-	printf("CRC = 0x%02x\n", sbc->crc & 0xFF);
-#endif
 
 	calc_bitneed(cfg);
 
