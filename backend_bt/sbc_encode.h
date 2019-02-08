@@ -35,7 +35,7 @@
 #define	_SBC_ENCODE_H_
 
 #define	MIN_BITPOOL     2
-#define	DEFAULT_MAXBPOOL 253
+#define	DEFAULT_MAXBPOOL 250
 
 /*
  * SBC header format
