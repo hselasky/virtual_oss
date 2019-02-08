@@ -430,7 +430,7 @@ sbc_decode(struct bt_config *cfg)
 
 	for (chan = 0; chan < sbc->channels; chan++) {
 		for (sb = 0; sb < sbc->bands; sb++) {
-			levels[chan][sb] = (1 << sbc->bits[chan][sb]);
+			levels[chan][sb] = (1 << sbc->bits[chan][sb]) - 1;
 			delta[chan][sb] = (2 << sbc->scalefactor[chan][sb]);
 		}
 	}
@@ -442,10 +442,10 @@ sbc_decode(struct bt_config *cfg)
 				if (sbc->bits[chan][sb] == 0) {
 					audioout = 0;
 				} else {
-					audioout = (((((sbc->output[i]
+					audioout = ((((sbc->output[i]
 					    * 2) + 1) * delta[chan][sb]) /
 					    levels[chan][sb]) -
-					    (1 * delta[chan][sb]));
+					    delta[chan][sb];
 				}
 				sbc->output[i++] = audioout;
 			}
