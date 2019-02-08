@@ -655,7 +655,8 @@ sbc_decode_frame(struct bt_config *cfg, int bits)
 		return (0);
 	if (sbc_load_bits_crc(sbc, 8) != config)
 		return (0);
-	(void)sbc_load_bits_crc(sbc, 8);/* bitpool */
+	cfg->bitpool = sbc_load_bits_crc(sbc, 8);
+
 	(void)sbc_load_bits_crc(sbc, 8);/* CRC */
 
 	if (cfg->chmode == MODE_JOINT) {
