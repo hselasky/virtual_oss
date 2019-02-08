@@ -698,6 +698,7 @@ bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block)
 
 		/* copy out samples, if any */
 		memcpy(ptr, (char *)sbc->music_data + sbc->rem_off, delta);
+		ptr += delta;
 		len -= delta;
 		sbc->rem_off += delta / 2;
 		sbc->rem_len -= delta / 2;
