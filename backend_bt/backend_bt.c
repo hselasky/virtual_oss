@@ -423,7 +423,7 @@ retry:
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.raddr);
 	addr.l2cap_psm = l2cap_psm;
 	if (connect(cfg->hc, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		DPRINTF("Could not connect to HC\n");
+		DPRINTF("Could not connect to HC: %d\n", errno);
 		goto error;
 	}
 	if (avdtpDiscoverAndConfig(cfg, isSink)) {
@@ -452,7 +452,7 @@ retry:
 	bdaddr_copy(&addr.l2cap_bdaddr, &info.raddr);
 	addr.l2cap_psm = l2cap_psm;
 	if (connect(cfg->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		DPRINTF("Could not connect\n");
+		DPRINTF("Could not connect: %d\n", errno);
 		goto error;
 	}
 	getsockopt(cfg->fd, SOL_L2CAP, SO_L2CAP_OMTU, &cfg->mtu, &mtusize);
