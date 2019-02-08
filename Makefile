@@ -53,7 +53,7 @@ backend_null.c
 SRCS += backend_bt.c avdtp.c sbc_encode.c bt_speaker.c
 CFLAGS += -DHAVE_BLUETOOTH
 LDFLAGS += -lbluetooth -lsdp
-LINKS += ${BINDIR}virtual_oss ${BINDIR}/virtual_bt_speaker
+LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_bt_speaker
 MAN += virtual_bt_speaker.8
 .endif
 
