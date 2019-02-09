@@ -431,7 +431,7 @@ sbc_decode(struct bt_config *cfg)
 	for (chan = 0; chan < sbc->channels; chan++) {
 		for (sb = 0; sb < sbc->bands; sb++) {
 			levels[chan][sb] = (1 << sbc->bits[chan][sb]) - 1;
-			delta[chan][sb] = (2 << sbc->scalefactor[chan][sb]);
+			delta[chan][sb] = (1 << sbc->scalefactor[chan][sb]);
 		}
 	}
 
