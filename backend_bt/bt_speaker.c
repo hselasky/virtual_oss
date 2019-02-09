@@ -238,7 +238,7 @@ setup_oss(struct bt_audio_connection *c)
 		message("SNDCTL_DSP_SETFMT failed\n");
 		goto err;
 	}
-	v = (4 << 16) | 15;		/* 4 fragments of 32k each */
+	v = (2 << 16) | 15;		/* 2 fragments of 32k each */
 	if (ioctl(c->oss_fd, SNDCTL_DSP_SETFRAGMENT, &v) < 0) {
 		message("SNDCTL_DSP_SETFRAGMENT failed\n");
 		goto err;
@@ -334,7 +334,51 @@ process_connection(struct bt_audio_connection *c)
 			if (c->oss_fd > -1) {
 				uint8_t *end = data + len;
 				uint8_t *ptr = data;
+				unsigned delay;
+				unsigned jitter_limit;
 
+				switch (c->cfg.freq) {
+				case FREQ_16K:
+					jitter_limit = (16000 / 20);
+					break;
+				case FREQ_32K:
+					jitter_limit = (32000 / 20);
+					break;
+				case FREQ_44_1K:
+					jitter_limit = (44100 / 20);
+					break;
+				default:
+					jitter_limit = (48000 / 20);
+					break;
+				}
+
+				if (c->cfg.chmode == MODE_MONO) {
+					if (len >= 2 &&
+					    ioctl(c->oss_fd, SNDCTL_DSP_GETODELAY, &delay) == 0 &&
+					    delay < (jitter_limit * 2)) {
+						uint8_t jitter[jitter_limit * 4] __aligned(4);
+						int x;
+
+						/* repeat last sample */
+						for (x = 0; x != sizeof(jitter); x++)
+							jitter[x] = ptr[x % 2];
+
+						write(c->oss_fd, jitter, sizeof(jitter));
+					}
+				} else {
+					if (len >= 4 &&
+					    ioctl(c->oss_fd, SNDCTL_DSP_GETODELAY, &delay) == 0 &&
+					    delay < (jitter_limit * 4)) {
+						uint8_t jitter[jitter_limit * 8] __aligned(4);
+						int x;
+
+						/* repeat last sample */
+						for (x = 0; x != sizeof(jitter); x++)
+							jitter[x] = ptr[x % 4];
+
+						write(c->oss_fd, jitter, sizeof(jitter));
+					}
+				}
 				while (ptr != end) {
 					int written = write(c->oss_fd, ptr, end - ptr);
 
