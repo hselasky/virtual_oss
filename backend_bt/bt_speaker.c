@@ -326,7 +326,9 @@ process_connection(struct bt_audio_connection *c)
 			if ((len = bt_receive(&c->cfg, data, sizeof(data), 0)) < 0) {
 				return;
 			}
-			if (c->oss_fd < 0 && time(NULL) != oss_attempt) {
+			if (c->cfg.acceptor_state != acpStreamSuspended &&
+			    c->oss_fd < 0 &&
+			    time(NULL) != oss_attempt) {
 				message("Trying to open dsp\n");
 				setup_oss(c);
 				oss_attempt = time(NULL);
@@ -396,6 +398,12 @@ process_connection(struct bt_audio_connection *c)
 					oss_attempt = time(NULL);
 				}
 			}
+		}
+
+		if (c->cfg.acceptor_state == acpStreamSuspended &&
+		    c->oss_fd > -1) {
+			close(c->oss_fd);
+			c->oss_fd = -1;
 		}
 	}
 }
