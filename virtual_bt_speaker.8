@@ -36,9 +36,12 @@
 .Op Fl h
 .Sh DESCRIPTION
 .Nm
-provides bluetooth speaker functionality. It receives connections from
-bluetooth devices that stream music, and forwards the received stream to the
-given OSS device.
+provides bluetooth speaker functionality.
+It receives connections from bluetooth devices that stream music, and
+forwards the received stream to the given OSS device.
+This utility depends on
+.Xr sdpd 8
+running in the background.
 .Pp
 The following options are available:
 .Bl -tag -width indent
@@ -47,9 +50,12 @@ Run program in background.
 .It Fl d Ar devname
 OSS device to play the received streams.
 .It Fl p Ar socketpath
-Path to SDP control socket. Default is to use default location.
+Path to SDP control socket.
+Default is to use default location.
 .It Fl i Ar priority
 Set real-time priority.
+.It Fl h
+Show usage.
 .El
 .Sh EXAMPLES
 .Bd -literal -offset indent
@@ -59,6 +65,8 @@ virtual_bt_speaker -d /dev/dspX
 .Sh NOTES
 .Sh FILES
 .Sh SEE ALSO
+.Xr sdpd 8
+and
 .Xr virtual_oss 8
 .Sh AUTHORS
 .Nm
