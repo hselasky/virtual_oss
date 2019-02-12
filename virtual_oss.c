@@ -60,6 +60,48 @@ virtual_oss_timestamp(void)
 	return (nsec);
 }
 
+static size_t
+client_read_linear(struct virtual_client* pvc, struct virtual_ring *pvr,
+    uint8_t* dst, size_t total)
+{
+	size_t total_read = 0;
+	pvc->sync_busy = 1;
+	while (1) {
+		size_t read = vring_read_linear(pvr, dst, total);
+		total_read += read;
+		dst += read;
+		total -= read;
+		if (!pvc->profile->synchronized || pvc->closing ||
+		    total == 0 )
+			break;
+		atomic_wait();
+	}
+	pvc->sync_busy = 0;
+	atomic_wakeup();
+	return total_read;
+}
+
+static size_t
+client_write_linear(struct virtual_client* pvc, struct virtual_ring *pvr,
+    uint8_t* src, size_t total)
+{
+	size_t total_written = 0;
+	pvc->sync_busy = 1;
+	while (1) {
+		size_t written = vring_write_linear(pvr, src, total);
+		total_written += written;
+		src += written;
+		total -= written;
+		if (!pvc->profile->synchronized || pvc->closing ||
+		    total == 0)
+			break;
+		atomic_wait();
+	}
+	pvc->sync_busy = 0;
+	atomic_wakeup();
+	return total_written;
+}
+
 void   *
 virtual_oss_process(void *arg)
 {
@@ -165,7 +207,7 @@ virtual_oss_process(void *arg)
 			/* Compute next timeout */
 			nice_timeout += virtual_oss_timestamp();
 
-			/* Read in samples */			 
+			/* Read in samples */
 			len = rx_be->transfer(rx_be, buffer_dsp, buffer_dsp_rx_size);
 			if (len < 0)
 				break;
@@ -267,8 +309,8 @@ virtual_oss_process(void *arg)
 					continue;
 
 				/* store data into ring buffer */
-				vring_write_linear(&pvc->rx_ring[0],
-				    (uint8_t *)buffer_temp, 8 * samples * dst_chans);
+				client_write_linear(pvc, &pvc->rx_ring[0], (uint8_t *)buffer_temp,
+				    8 * samples * dst_chans);
 			}
 
 			/* fill main output buffer with silence */
@@ -299,8 +341,8 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->channels;
 
 				/* read data from ring buffer */
-				if (vring_read_linear(&pvc->tx_ring[0],
-				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+				if (client_read_linear(pvc, &pvc->tx_ring[0], (uint8_t *)buffer_data,
+				    8 * samples * dst_chans) == 0)
 					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
@@ -374,8 +416,8 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->channels;
 
 				/* read data from ring buffer */
-				if (vring_read_linear(&pvc->tx_ring[0],
-				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+				if (client_read_linear(pvc, &pvc->tx_ring[0], (uint8_t *)buffer_data,
+					8 * samples * dst_chans) == 0)
 					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
@@ -622,8 +664,8 @@ virtual_oss_process(void *arg)
 					continue;
 
 				/* store data into ring buffer */
-				vring_write_linear(&pvc->rx_ring[0],
-				    (uint8_t *)buffer_monitor, 8 * samples * dst_chans);
+				client_write_linear(pvc, &pvc->rx_ring[0], (uint8_t *)buffer_monitor,
+				    8 * samples * dst_chans);
 			}
 
 			atomic_wakeup();

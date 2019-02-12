@@ -71,6 +71,9 @@ Set resampling quality: 0=best, 1=medium and 2=fastest (default).
 Set sample-depth in bits for the proceeding commands.
 .It Fl r Ar rate
 Set default sample-rate for the proceeding commands.
+.It Fl s Ar size
+Set default buffer size. Size is specified as <samples> or
+<milliseconds>ms.
 .It Fl i Ar priority
 Set real-time priority.
 .It Fl a Ar amp
@@ -90,6 +93,9 @@ Set maximum number of mix channels.
 Set mix channels for the proceeding commands.
 .It Fl M Ar filter
 Add a monitoring filter.
+.It Fl x
+Mark the created device as synchronized: virtual_oss will wait until all
+clients read/write enough data to avoid buffer underruns.
 .It Fl t Ar devname
 Set control device name.
 .It Fl P Ar devname
@@ -191,6 +197,14 @@ Create recording device which outputs a WAV-formatted file:
 virtual_oss \\
 	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
 	-f /dev/dspX -w dsp.wav -d dsp
+.Ed
+.Pp
+Create a device dsp.virtual mixes data written by all clients and outputs the
+result for further processing into dsp.virtual_out:
+.Bd -literal -offset indent
+virtual_oss \\
+	-S -Q 0 -b 16 -c 2 -r 96000 -s 100ms -i 20 \\
+	-f /dev/null -d dsp.virtual -x -l dsp.virtual_out
 .Ed
 .Pp
 .Sh NOTES

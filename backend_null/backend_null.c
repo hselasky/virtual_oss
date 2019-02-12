@@ -84,7 +84,8 @@ null_wait(void)
 static int
 null_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	null_wait();
+	if (!voss_has_synchronization)
+		null_wait();
 	memset(ptr, 0, len);
 	return (len);
 }

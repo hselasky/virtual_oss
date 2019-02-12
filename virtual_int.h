@@ -104,6 +104,8 @@ struct virtual_profile {
 	uint8_t	limiter;
 	uint32_t rec_delay;
 	int fd_sta;
+	int synchronized:1;
+	int padding:31;
 };
 
 struct virtual_ring {
@@ -144,7 +146,9 @@ struct virtual_client {
 	int	sample_rate;
 	int	buffer_size_set:1;
 	int	buffer_frags_set:1;
-	int	padding:30;
+	int	sync_busy:1;
+	int	closing:1;
+	int	padding:28;
 };
 
 struct virtual_monitor {
@@ -184,6 +188,7 @@ extern uint8_t voss_libsamplerate_enable;
 extern uint8_t voss_libsamplerate_quality;
 extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
+extern int voss_has_synchronization;
 extern char voss_dsp_rx_device[VMAX_STRING];
 extern char voss_dsp_tx_device[VMAX_STRING];
 extern char voss_ctl_device[VMAX_STRING];

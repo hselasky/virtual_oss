@@ -479,6 +479,11 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 		return (CUSE_ERR_INVALID);
 
 	atomic_lock();
+	pvc->closing = 1;
+	while (pvc->sync_busy) {
+		atomic_wakeup();
+		atomic_wait();
+	}
 	TAILQ_REMOVE(pvc->profile->pvc_head, pvc, entry);
 	atomic_unlock();
 
@@ -678,6 +683,7 @@ vclient_export_read_locked(vclient_t *pvc)
 
 			vring_inc_read(&pvc->rx_ring[0], src_len);
 			vring_inc_write(&pvc->rx_ring[1], dst_len);
+			atomic_wakeup();
 		}
 	} else {
 		vresample_t *pvr = &pvc->rx_resample;
@@ -750,6 +756,7 @@ vclient_export_read_locked(vclient_t *pvc)
 			/* check if no data was moved */
 			if (src_len == 0 && dst_len == 0)
 				break;
+			atomic_wakeup();
 		}
 	}
 	return (0);
@@ -872,6 +879,7 @@ vclient_import_write_locked(vclient_t *pvc)
 
 			vring_inc_read(&pvc->tx_ring[1], src_len);
 			vring_inc_write(&pvc->tx_ring[0], dst_len);
+			atomic_wakeup();
 		}
 	} else {
 		vresample_t *pvr = &pvc->rx_resample;
@@ -947,6 +955,7 @@ vclient_import_write_locked(vclient_t *pvc)
 			/* check if no data was moved */
 			if (src_len == 0 && dst_len == 0)
 				break;
+			atomic_wakeup();
 		}
 	}
 }
@@ -1516,6 +1525,7 @@ uint64_t voss_dsp_blocks;
 uint8_t	voss_libsamplerate_enable;
 uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;
+int	voss_has_synchronization = 0;
 
 static int voss_dsp_perm = 0666;
 static int voss_do_background;
@@ -1544,6 +1554,7 @@ voss_rx_backend_refresh(void)
 #endif
 	} else {
 		voss_rx_backend = &voss_backend_oss_rec;
+		voss_has_synchronization = 1;
 	}
 }
 
@@ -1559,6 +1570,7 @@ voss_tx_backend_refresh(void)
 #endif
 	} else {
 		voss_tx_backend = &voss_backend_oss_play;
+		voss_has_synchronization = 1;
 	}
 }
 
@@ -1579,6 +1591,7 @@ usage(void)
 	    "\t" "-Q <0,1,2> # quality of resampling 0=best,1=medium,2=fastest (default) \\\n"
 	    "\t" "-b <bits> \\\n"
 	    "\t" "-r <rate> \\\n"
+	    "\t" "-x \\\n"
 	    "\t" "-i <rtprio> \\\n"
 	    "\t" "-a <amp -63..63> \\\n"
 	    "\t" "-g <ch0grp,ch1grp...chnNgrp> \\\n"
@@ -1695,6 +1708,9 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 
 	voss_dups++;
 
+	if (pvp->synchronized)
+		voss_has_synchronization = 1;
+	pvp->synchronized = 0;
 	/* need new names next time */
 	memset(pvp->oss_name, 0, sizeof(pvp->oss_name));
 	memset(pvp->wav_name, 0, sizeof(pvp->wav_name));
@@ -1757,7 +1773,7 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:B";
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:Bx";
 	else
 		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
 
@@ -2125,6 +2141,9 @@ parse_options(int narg, char **pparg, int is_main)
 			} else {
 				return ("Invalid -M parameter");
 			}
+			break;
+		case 'x':
+			profile.synchronized = 1;
 			break;
 		default:
 			if (is_main)
