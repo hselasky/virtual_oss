@@ -1,5 +1,3 @@
-/* $NetBSD$ */
-
 /*-
  * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * All rights reserved.
@@ -43,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "sbc_coeffs.h"
 #include "backend_bt.h"
@@ -50,7 +49,7 @@
 #define	SYNCWORD	0x9c
 #define	ABS(x)		(((x) < 0) ? -(x) : (x))
 #define	BIT30		(1U << 30)
-#define	BM(x)		((1ULL << (x)) - 1ULL)
+#define	BM(x)		((1LL << (x)) - 1LL)
 
 /* Loudness offset allocations. */
 static const int loudnessoffset8[4][8] = {
@@ -70,7 +69,7 @@ static const int loudnessoffset4[4][4] = {
 static uint8_t
 calc_scalefactors_joint(struct sbc_encode *sbc)
 {
-	int32_t sb_j[16][2];
+	float sb_j[16][2];
 	uint32_t x;
 	uint32_t y;
 	uint8_t block;
@@ -82,16 +81,16 @@ calc_scalefactors_joint(struct sbc_encode *sbc)
 	for (sb = 0; sb != sbc->bands - 1; sb++) {
 		for (block = 0; block < sbc->blocks; block++) {
 			sb_j[block][0] = (sbc->samples[block][0][sb] +
-			    sbc->samples[block][1][sb]) / 2;
+			    sbc->samples[block][1][sb]) / 2.0f;
 			sb_j[block][1] = (sbc->samples[block][0][sb] -
-			    sbc->samples[block][1][sb]) / 2;
+			    sbc->samples[block][1][sb]) / 2.0f;
 		}
 
 		x = 1 << 15;
 		y = 1 << 15;
 		for (block = 0; block < sbc->blocks; block++) {
-			x |= ABS(sb_j[block][0]);
-			y |= ABS(sb_j[block][1]);
+			x |= (uint32_t)ABS(sb_j[block][0]);
+			y |= (uint32_t)ABS(sb_j[block][1]);
 		}
 
 		lz = 1;
@@ -134,7 +133,7 @@ calc_scalefactors(struct sbc_encode *sbc)
 			uint8_t lx = 1;
 
 			for (block = 0; block != sbc->blocks; block++)
-				x |= ABS(sbc->samples[block][ch][sb]);
+				x |= (uint32_t)ABS(sbc->samples[block][ch][sb]);
 
 			while (!(x & BIT30)) {
 				lx++;
@@ -303,13 +302,14 @@ sbc_encode(struct bt_config *cfg)
 {
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
 	const int16_t *input = sbc->music_data;
-	int64_t delta[2][8];
-	int64_t levels[2][8];
-	int64_t S;
-	int32_t *X;
-	int32_t Z[80];
-	int32_t Y[80];
-	int32_t audioout;
+	float delta[2][8];
+	float levels[2][8];
+	float mask[2][8];
+	float S;
+	float *X;
+	float Z[80];
+	float Y[80];
+	float audioout;
 	int16_t left[8];
 	int16_t right[8];
 	int16_t *data;
@@ -360,14 +360,12 @@ sbc_encode(struct bt_config *cfg)
 				S = 0;
 				for (k = 0; k < sbc->bands * 2; k++) {
 					if (sbc->bands == 8) {
-						S += (int64_t)cosdata8[i][k] *
-						    (int64_t)Y[k];
+						S += cosdata8[i][k] * Y[k];
 					} else {
-						S += (int64_t)cosdata4[i][k] *
-						    (int64_t)Y[k];
+						S += cosdata4[i][k] * Y[k];
 					}
 				}
-				sbc->samples[block][chan][i] = S / SIMULTI;
+				sbc->samples[block][chan][i] = S * (1 << 15);
 			}
 		}
 	}
@@ -383,10 +381,13 @@ sbc_encode(struct bt_config *cfg)
 
 	for (chan = 0; chan < sbc->channels; chan++) {
 		for (sb = 0; sb < sbc->bands; sb++) {
-			levels[chan][sb] = BM(sbc->bits[chan][sb]) <<
-			    (15 - sbc->scalefactor[chan][sb]);
+			if (sbc->bits[chan][sb] == 0)
+				continue;
+			mask[chan][sb] = BM(sbc->bits[chan][sb]);
+			levels[chan][sb] = mask[chan][sb] *
+			    (1LL << (15 - sbc->scalefactor[chan][sb]));
 			delta[chan][sb] =
-			    1 << (sbc->scalefactor[chan][sb] + 16);
+			    (1LL << (sbc->scalefactor[chan][sb] + 16));
 		}
 	}
 
@@ -396,9 +397,15 @@ sbc_encode(struct bt_config *cfg)
 			for (sb = 0; sb < sbc->bands; sb++) {
 				if (sbc->bits[chan][sb] == 0)
 					continue;
+				audioout = (levels[chan][sb] *
+				    (delta[chan][sb] + sbc->samples[block][chan][sb]));
+				audioout /= (1LL << 32);
 
-				audioout = (levels[chan][sb] * (delta[chan][sb] +
-				    sbc->samples[block][chan][sb])) >> 32;
+				audioout = roundf(audioout);
+
+				/* range check */
+				if (audioout > mask[chan][sb])
+					audioout = mask[chan][sb];
 
 				sbc->output[numsamples++] = audioout;
 			}
@@ -411,16 +418,16 @@ static void
 sbc_decode(struct bt_config *cfg)
 {
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
-	int64_t delta[2][8];
-	int64_t levels[2][8];
-	int64_t audioout;
-	int64_t *X;
-	int32_t *V;
-	int64_t left[160];
-	int64_t right[160];
-	int64_t U[160];
-	int64_t W[160];
-	int64_t S[8];
+	float delta[2][8];
+	float levels[2][8];
+	float audioout;
+	float *X;
+	float *V;
+	float left[160];
+	float right[160];
+	float U[160];
+	float W[160];
+	float S[8];
 	int position;
 	int block;
 	int chan;
@@ -442,10 +449,9 @@ sbc_decode(struct bt_config *cfg)
 				if (sbc->bits[chan][sb] == 0) {
 					audioout = 0;
 				} else {
-					audioout = ((((sbc->output[i]
-					    * 2) + 1) * delta[chan][sb]) /
-					    levels[chan][sb]) -
-					    delta[chan][sb];
+					audioout =
+					  ((((sbc->output[i] * 2.0f) + 1.0f) * delta[chan][sb]) /
+					  levels[chan][sb]) - delta[chan][sb];
 				}
 				sbc->output[i++] = audioout;
 			}
@@ -458,13 +464,13 @@ sbc_decode(struct bt_config *cfg)
 			for (sb = 0; sb < sbc->bands; sb++) {
 				if (sbc->join & (1 << (sbc->bands - sb - 1))) {
 					audioout = sbc->output[i];
-					sbc->output[i] = (2 * sbc->output[i]) + (2 *
-					    sbc->output[i + sbc->bands]);
+					sbc->output[i] = (2.0f * sbc->output[i]) +
+					    (2.0f * sbc->output[i + sbc->bands]);
 					sbc->output[i + sbc->bands] =
-					    (int32_t)(2 * audioout) - (2 *
-					    sbc->output[i + sbc->bands]);
-					sbc->output[i] /= 2;
-					sbc->output[i + sbc->bands] /= 2;
+					    (2.0f * audioout) -
+					    (2.0f * sbc->output[i + sbc->bands]);
+					sbc->output[i] /= 2.0f;
+					sbc->output[i + sbc->bands] /= 2.0f;
 				}
 				i++;
 			}
@@ -488,15 +494,15 @@ sbc_decode(struct bt_config *cfg)
 			for (i = (sbc->bands * 20) - 1; i >= (sbc->bands * 2); i--)
 				V[i] = V[i - (sbc->bands * 2)];
 			for (k = 0; k < sbc->bands * 2; k++) {
-				int64_t vk = 0;
+				float vk = 0;
 				for (i = 0; i < sbc->bands; i++) {
 					if (sbc->bands == 8) {
-						vk += (int64_t)cosdecdata8[i][k] * (int64_t)S[i];
+						vk += cosdecdata8[i][k] * S[i];
 					} else {
-						vk += (int64_t)cosdecdata4[i][k] * (int64_t)S[i];
+						vk += cosdecdata4[i][k] * S[i];
 					}
 				}
-				V[k] = (vk / SIMULTI);
+				V[k] = vk;
 			}
 			for (i = 0; i <= 4; i++) {
 				for (k = 0; k < sbc->bands; k++) {
@@ -510,29 +516,26 @@ sbc_decode(struct bt_config *cfg)
 			}
 			for (i = 0; i < sbc->bands * 10; i++) {
 				if (sbc->bands == 4) {
-					W[i] = U[i] *
-					    (sbc_coeffs4[i] * -4);
+					W[i] = U[i] * (sbc_coeffs4[i] * -4.0f);
 				} else if (sbc->bands == 8) {
-					W[i] = U[i] *
-					    (sbc_coeffs8[i] * -8);
+					W[i] = U[i] * (sbc_coeffs8[i] * -8.0f);
 				} else {
 					W[i] = 0;
 				}
 			}
 
 			for (k = 0; k < sbc->bands; k++) {
-				int offset = k + (block * sbc->bands);
+				unsigned int offset = k + (block * sbc->bands);
 
 				X[offset] = 0;
 				for (i = 0; i < 10; i++) {
-					X[offset] += W[k + (i *
-					    sbc->bands)];
+					X[offset] += W[k + (i * sbc->bands)];
 				}
-				X[offset] /= COEFFSMULTI;
-				if (X[offset] > 32767)
-					X[offset] = 32767;
-				else if (X[offset] < -32767)
-					X[offset] = -32767;
+
+				if (X[offset] > 32767.0)
+					X[offset] = 32767.0;
+				else if (X[offset] < -32767.0)
+					X[offset] = -32767.0;
 			}
 		}
 	}
@@ -595,8 +598,7 @@ sbc_encode_frame(struct bt_config *cfg)
 				if (sbc->bits[chan][sb] == 0)
 					continue;
 
-				sbc_store_bits_crc(sbc, sbc->bits[chan][sb],
-				    sbc->output[i++]);
+				sbc_store_bits_crc(sbc, sbc->bits[chan][sb], sbc->output[i++]);
 			}
 		}
 	}
