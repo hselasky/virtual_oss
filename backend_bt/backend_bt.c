@@ -1013,7 +1013,7 @@ bt_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 	case CODEC_SBC:
 		return (bt_play_sbc_transfer(pbe, ptr, len));
 #ifdef HAVE_FFMPEG
-	case CODEC_AAC_LC:
+	case CODEC_AAC:
 		return (bt_play_aac_transfer(pbe, ptr, len));
 #endif
 	default:
