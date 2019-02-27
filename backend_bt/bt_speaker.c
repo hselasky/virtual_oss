@@ -172,7 +172,6 @@ wait_for_connection(struct bt_audio_receiver *r)
 		close_connection(c);
 		return NULL;
 	}
-	c->cfg.mtu = 32000;
 	c->cfg.sep = 0;			/* to be set later */
 	c->cfg.media_Type = mediaTypeAudio;
 	c->cfg.chmode = MODE_DUAL;
@@ -300,16 +299,23 @@ process_connection(struct bt_audio_connection *c)
 
 			if (c->cfg.fd < 0) {
 				if (c->cfg.acceptor_state == acpStreamOpened) {
+				  	socklen_t mtusize = sizeof(uint16_t);
 					c->cfg.fd = fd;
 
-					int temp = c->cfg.mtu * 2;
+					if (getsockopt(c->cfg.fd, SOL_L2CAP, SO_L2CAP_IMTU, &c->cfg.mtu, &mtusize) == -1) {
+						message("Could not get MTU size\n");
+						return;
+					}
 
-					if (setsockopt(c->cfg.fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
+					int temp = c->cfg.mtu * 32;
+
+					if (setsockopt(c->cfg.fd, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(temp)) == -1) {
 						message("Could not set send buffer size\n");
 						return;
 					}
-					temp = c->cfg.mtu;
-					if (setsockopt(c->cfg.fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
+
+					temp = 1;
+					if (setsockopt(c->cfg.fd, SOL_SOCKET, SO_RCVLOWAT, &temp, sizeof(temp)) == -1) {
 						message("Could not set low water mark\n");
 						return;
 					}
