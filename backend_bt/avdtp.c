@@ -204,7 +204,10 @@ avdtpSendCapabilitiesResponseSBCForACP(int fd, int trans)
 	    (1 << (3 - MODE_JOINT)) |
 	    (1 << (3 - MODE_DUAL)) |
 	    (1 << (3 - MODE_MONO)) |
-	    (1 << (7 - FREQ_44_1K)) | (1 << (7 - FREQ_48K));
+	    (1 << (7 - FREQ_44_1K)) |
+	    (1 << (7 - FREQ_48K)) |
+	    (1 << (7 - FREQ_32K)) |
+	    (1 << (7 - FREQ_16K));
 	data[7] =
 	    (1 << (7 - BLOCKS_4)) |
 	    (1 << (7 - BLOCKS_8)) |
