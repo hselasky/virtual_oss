@@ -59,7 +59,7 @@ MAN += virtual_bt_speaker.8
 
 .if defined(HAVE_FFMPEG)
 CFLAGS += -DHAVE_FFMPEG
-LDFLAGS += -lavdevice
+LDFLAGS += -lavdevice -lavutil -lavcodec -lavresample -lavformat
 .endif
 
 .if defined(HAVE_CUSE)

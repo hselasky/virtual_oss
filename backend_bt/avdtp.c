@@ -184,32 +184,6 @@ done:
 	return (retval);
 }
 
-/* Returns 0 on success, < 0 on failure. */
-int
-avdtpSendCapabilitiesResponseSBC(int fd, int trans, uint8_t mySep,
-    struct bt_config *cfg)
-{
-	uint8_t data[10];
-
-	data[0] = mediaTransport;
-	data[1] = 0;
-	data[2] = mediaCodec;
-	data[3] = 0x6;
-	data[4] = mediaTypeAudio;
-	data[5] = SBC_CODEC_ID;
-	data[6] =
-	    (1 << (3 - MODE_STEREO)) |
-	    (1 << (3 - MODE_MONO)) | (1 << (3 - cfg->freq + 4));
-	data[7] =
-	    (1 << (3 - cfg->blocks + 4)) |
-	    (1 << (1 - cfg->bands + 2)) | (1 << cfg->allocm);
-	data[8] = MIN_BITPOOL;
-	data[9] = DEFAULT_MAXBPOOL;
-
-	return (avdtpSendPacket(fd, AVDTP_GET_CAPABILITIES, trans,
-	    RESPONSEACCEPT, data, sizeof(data), NULL, 0));
-}
-
 /*
  * Variant for acceptor role: We support any frequency, blocks, bands, and
  * allocation. Returns 0 on success, < 0 on failure.
@@ -230,7 +204,10 @@ avdtpSendCapabilitiesResponseSBCForACP(int fd, int trans)
 	    (1 << (3 - MODE_JOINT)) |
 	    (1 << (3 - MODE_DUAL)) |
 	    (1 << (3 - MODE_MONO)) |
-	    (1 << (7 - FREQ_44_1K)) | (1 << (7 - FREQ_48K));
+	    (1 << (7 - FREQ_44_1K)) |
+	    (1 << (7 - FREQ_48K)) |
+	    (1 << (7 - FREQ_32K)) |
+	    (1 << (7 - FREQ_16K));
 	data[7] =
 	    (1 << (7 - BLOCKS_4)) |
 	    (1 << (7 - BLOCKS_8)) |

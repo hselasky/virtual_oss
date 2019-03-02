@@ -57,16 +57,16 @@ struct sbc_header {
 };
 
 struct sbc_encode {
-	int32_t	output[256];
 	int16_t	music_data[256];
 	uint8_t	data[1024];
 	uint8_t *rem_data_ptr;
 	int	rem_data_len;
 	int	rem_data_frames;
 	int	bits[2][8];
-	int32_t	left[160];
-	int32_t	right[160];
-	int32_t	samples[16][2][8];
+  	float	output[256];
+	float	left[160];
+	float	right[160];
+	float	samples[16][2][8];
 	uint32_t rem_len;
 	uint32_t rem_off;
 	uint32_t bitoffset;

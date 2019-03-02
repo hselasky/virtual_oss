@@ -455,18 +455,38 @@ retry:
 		DPRINTF("Could not connect: %d\n", errno);
 		goto error;
 	}
-	getsockopt(cfg->fd, SOL_L2CAP, SO_L2CAP_OMTU, &cfg->mtu, &mtusize);
+	if (isSink) {
+		if (getsockopt(cfg->fd, SOL_L2CAP, SO_L2CAP_OMTU, &cfg->mtu, &mtusize) == -1) {
+			DPRINTF("Could not get MTU\n");
+			goto error;
+		}
+		temp = cfg->mtu * 2;
+		if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
+			DPRINTF("Could not set send buffer size\n");
+			goto error;
+		}
+		temp = cfg->mtu;
+		if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
+			DPRINTF("Could not set low water mark\n");
+			goto error;
+		}
+	} else {
+		if (getsockopt(cfg->fd, SOL_L2CAP, SO_L2CAP_IMTU, &cfg->mtu, &mtusize) == -1) {
+			DPRINTF("Could not get MTU\n");
+			goto error;
+		}
+		temp = cfg->mtu * 16;
+		if (setsockopt(cfg->fd, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(temp)) == -1) {
+			DPRINTF("Could not set receive buffer size\n");
+			goto error;
+		}
+		temp = 1;
+		if (setsockopt(cfg->fd, SOL_SOCKET, SO_RCVLOWAT, &temp, sizeof(temp)) == -1) {
+			DPRINTF("Could not set low water mark\n");
+			goto error;
+		}
+	}
 
-	temp = cfg->mtu * 2;
-	if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
-		DPRINTF("Could not set send buffer size\n");
-		goto error;
-	}
-	temp = cfg->mtu;
-	if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDLOWAT, &temp, sizeof(temp)) == -1) {
-		DPRINTF("Could not set low water mark\n");
-		goto error;
-	}
 	if (avdtpStart(cfg->hc, cfg->sep)) {
 		DPRINTF("START FAILED\n");
 		goto error;
@@ -1013,7 +1033,7 @@ bt_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 	case CODEC_SBC:
 		return (bt_play_sbc_transfer(pbe, ptr, len));
 #ifdef HAVE_FFMPEG
-	case CODEC_AAC_LC:
+	case CODEC_AAC:
 		return (bt_play_aac_transfer(pbe, ptr, len));
 #endif
 	default:
