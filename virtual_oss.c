@@ -165,7 +165,7 @@ virtual_oss_process(void *arg)
 			/* Compute next timeout */
 			nice_timeout += virtual_oss_timestamp();
 
-			/* Read in samples */			 
+			/* Read in samples */
 			len = rx_be->transfer(rx_be, buffer_dsp, buffer_dsp_rx_size);
 			if (len < 0)
 				break;
