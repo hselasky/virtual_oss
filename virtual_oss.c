@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2016 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -58,6 +58,62 @@ virtual_oss_timestamp(void)
 
 	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
 	return (nsec);
+}
+
+static size_t
+vclient_read_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
+    uint8_t *dst, size_t total)
+{
+	size_t total_read = 0;
+
+	pvc->sync_busy = 1;
+	while (1) {
+		size_t read = vring_read_linear(pvr, dst, total);
+
+		total_read += read;
+		dst += read;
+		total -= read;
+
+		if (!pvc->profile->synchronized || pvc->sync_wakeup ||
+		    total == 0) {
+			/* fill rest of buffer with silence, if any */
+			if (total_read != 0 && total != 0)
+				memset(dst, 0, total);
+			break;
+		}
+		atomic_wait();
+	}
+	pvc->sync_busy = 0;
+	if (pvc->sync_wakeup)
+		atomic_wakeup();
+
+	return (total_read);
+}
+
+static size_t
+vclient_write_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
+    const uint8_t *src, size_t total)
+{
+	size_t total_written = 0;
+
+	pvc->sync_busy = 1;
+	while (1) {
+		size_t written = vring_write_linear(pvr, src, total);
+
+		total_written += written;
+		src += written;
+		total -= written;
+
+		if (!pvc->profile->synchronized || pvc->sync_wakeup ||
+		    total == 0)
+			break;
+		atomic_wait();
+	}
+	pvc->sync_busy = 0;
+	if (pvc->sync_wakeup)
+		atomic_wakeup();
+
+	return (total_written);
 }
 
 void   *
@@ -267,7 +323,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				/* store data into ring buffer */
-				vring_write_linear(&pvc->rx_ring[0],
+				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    (uint8_t *)buffer_temp, 8 * samples * dst_chans);
 			}
 
@@ -299,7 +355,7 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->channels;
 
 				/* read data from ring buffer */
-				if (vring_read_linear(&pvc->tx_ring[0],
+				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
 				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
 					continue;
 
@@ -374,7 +430,7 @@ virtual_oss_process(void *arg)
 				dst_chans = pvc->channels;
 
 				/* read data from ring buffer */
-				if (vring_read_linear(&pvc->tx_ring[0],
+				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
 				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
 					continue;
 
@@ -622,7 +678,7 @@ virtual_oss_process(void *arg)
 					continue;
 
 				/* store data into ring buffer */
-				vring_write_linear(&pvc->rx_ring[0],
+				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    (uint8_t *)buffer_monitor, 8 * samples * dst_chans);
 			}
 

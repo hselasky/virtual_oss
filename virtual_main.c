@@ -451,10 +451,18 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 	cuse_dev_set_per_file_handle(pdev, pvc);
 
 	atomic_lock();
-	TAILQ_INSERT_TAIL(pvc->profile->pvc_head, pvc, entry);
+	/* only allow one synchronization source at a time */
+	if (pvc->profile->synchronized) {
+		if (voss_has_synchronization != 0)
+			error = CUSE_ERR_BUSY;
+		else
+			voss_has_synchronization = 1;
+	}
+	if (error == 0)
+		TAILQ_INSERT_TAIL(pvc->profile->pvc_head, pvc, entry);
 	atomic_unlock();
 
-	return (0);
+	return (error);
 }
 
 static int
@@ -479,6 +487,16 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 		return (CUSE_ERR_INVALID);
 
 	atomic_lock();
+	if (pvc->profile->synchronized) {
+		voss_has_synchronization = 0;
+
+		/* wait for virtual_oss_process(), if any */
+		while (pvc->sync_busy) {
+			pvc->sync_wakeup = 1;
+			atomic_wakeup();
+			atomic_wait();
+		}
+	}
 	TAILQ_REMOVE(pvc->profile->pvc_head, pvc, entry);
 	atomic_unlock();
 
@@ -752,6 +770,8 @@ vclient_export_read_locked(vclient_t *pvc)
 				break;
 		}
 	}
+	if (pvc->sync_busy)
+		atomic_wakeup();
 	return (0);
 }
 
@@ -949,6 +969,8 @@ vclient_import_write_locked(vclient_t *pvc)
 				break;
 		}
 	}
+	if (pvc->sync_busy)
+		atomic_wakeup();
 }
 
 static int
@@ -1516,6 +1538,7 @@ uint64_t voss_dsp_blocks;
 uint8_t	voss_libsamplerate_enable;
 uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;
+int	voss_has_synchronization;
 
 static int voss_dsp_perm = 0666;
 static int voss_do_background;
@@ -1573,6 +1596,7 @@ usage(void)
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d vdsp.0 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.1] -d vdsp.1 \\\n"
 	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -l vdsp.loopback \\\n"
+	    "\t" "-c 2 -m 0,0,1,1 [-w wav.loopback] -L vdsp.loopback \\\n"
 	    "\t" "-B # run in background \\\n"
 	    "\t" "-s <samples> or <milliseconds>ms \\\n"
 	    "\t" "-S # enable automatic resampling using libsamplerate \\\n"
@@ -1601,7 +1625,7 @@ usage(void)
 }
 
 static const char *
-dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
+dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int synchronized)
 {
 	vprofile_t *ptr;
 	struct cuse_dev *pdev;
@@ -1622,6 +1646,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute)
 
 	memcpy(ptr, pvp, sizeof(*ptr));
 
+	ptr->synchronized = synchronized;
 	ptr->fd_sta = -1;
 
 	for (x = 0; x != ptr->channels; x++) {
@@ -1757,9 +1782,9 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:s:t:h?P:Q:R:ST:B";
+		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?P:Q:R:ST:B";
 	else
-		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:s:P:R:";
+		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:L:s:P:R:";
 
 	virtual_cuse_init_profile(&profile, 1);
 
@@ -1947,10 +1972,11 @@ parse_options(int narg, char **pparg, int is_main)
 			if (val <= 0 || val >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1], 0);
 			if (ptr != NULL)
 				return (ptr);
 			break;
+		case 'L':
 		case 'l':
 			if (strlen(optarg) > VMAX_STRING - 1)
 				return ("Device name too long");
@@ -1966,7 +1992,7 @@ parse_options(int narg, char **pparg, int is_main)
 			if (val <= 0 || val >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1]);
+			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1], c == 'L');
 			if (ptr != NULL)
 				return (ptr);
 			break;

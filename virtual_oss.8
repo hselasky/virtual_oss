@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd February 8, 2019
+.Dd March 3, 2019
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -112,6 +112,9 @@ This option should be specified before the -d and -l options.
 Create an OSS device by given name.
 .It Fl l Ar name
 Create a loopback OSS device by given name.
+.It Fl L Ar name
+Create a loopback OSS device which acts as a master device.
+This option is used in conjunction with -f /dev/null .
 .It Fl h
 Show usage and all available options.
 .El
@@ -194,6 +197,15 @@ Create recording device which outputs a WAV-formatted file:
 virtual_oss \\
 	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
 	-f /dev/dspX -w dsp.wav -d dsp
+.Ed
+.Pp
+Create a device named dsp.virtual which mix the samples written by all
+clients and outputs the result for further processing into
+dsp.virtual_out:
+.Bd -literal -offset indent
+virtual_oss \\
+	-S -Q 0 -b 16 -c 2 -r 96000 -s 100ms -i 20 \\
+	-f /dev/null -d dsp.virtual -L dsp.virtual_out
 .Ed
 .Pp
 .Sh NOTES
