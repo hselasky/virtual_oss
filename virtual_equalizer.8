@@ -1,0 +1,114 @@
+.\"
+.\" Copyright (c) 2019 Google LLC, written by Richard Kralovic <riso@google.com>
+.\"
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\"
+.Dd March 8, 2019
+.Dt VIRTUAL_EQUALIZER 8
+.Os FreeBSD
+.Sh NAME
+.Nm virtual_equalizer
+.Nd audio equalizer
+.Sh SYNOPSIS
+.Nm
+.Op Fl h
+.Op Fl B
+.Op Fl i Ar devname
+.Op Fl o Ar devname
+.Op Fl r Ar rate
+.Op Fl b Ar block_size
+.Op Fl c Ar channels
+.Op Fl s Ar socketpath
+.Sh DESCRIPTION
+.Nm
+records audio from an input OSS device, applies given frequency response, and
+plays the result via an output OSS device. The design goal of this equalizer is
+to provide precise equalization for arbitrary requested frequency response at
+the expense of higher latency.
+.Pp
+Requested frequency response is configured via a control socket. A message sent
+to the socket consists of a single line for each control point. Each line
+consists of two numbers, frequency in Hz and requested amplification.
+Amplification between two consecutive control points is a linear interpolation
+of the given control point values.
+.Pp
+OSS input and output is done in 24 bit depth, internal processing is done in
+floating point (doubles). Since multiplication in frequency domain is
+convolution in time domain, a FIR filter is calculated via inverse FFT for the
+requested frequency response. To make the filter finite, it is windowed in time
+domain using a Hann window. The windowing actually modifies the frequency
+response - the actual response is a convolution of the requested response and
+spectrum of the window. This is, however, very close to the requested response.
+When not running on background, the actual response is displayed.
+.Pp
+The FIR filter is applied via multiplication in frequency domain. The FFT block
+size is configurable. With block size B, the windowing induces latency of B/2
+samples and FIR application via FFT induces latency of B samples. Buffer size
+of the output device is set to approx B/4 samples. Thes the total latency of
+the equalizer is approx 1.75*B samples.
+.Pp
+The following options are available:
+.Bl -tag -width indent
+.It Fl B
+Run program in background.
+.It Fl i Ar devname
+OSS device to record from.
+.It Fl o Ar devname
+OSS device to play to.
+.It Fl r Ar rate
+Sample rate in Hz (default 44100).
+.It Fl b Ar block_size
+Block size in samples (default 2048). Must be even.
+.It Fl c Ar channels
+Number of channels (default 2).
+.It Fl s Ar socketpath
+Path to control socket (default /tmp/equalizer.socket).
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+virtual_equalizer -i /dev/dsp.virtual_out -o /dev/dsp -r 48000 -b 4096 -B
+.Ed
+.Pp
+To pass only frequencies between 200Hz and 400Hz:
+.Bd -literal -offset indent
+nc -uU -w0 /tmp/equalizer.socket << EOF
+199 0.0
+200 1.0
+400 1.0
+401 0.0
+EOF
+.Ed
+.Pp
+.Sh NOTES
+On SIGINFO, recently played raw audio is dumped into
+/tmp/virtual_equalizer_dump_<num>.
+.Sh FILES
+.Sh SEE ALSO
+.Xr virtual_oss 8
+.Sh AUTHORS
+.Nm
+was written by
+.An Richard Kralovic riso@google.com .
+.Pp

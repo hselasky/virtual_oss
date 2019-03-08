@@ -57,6 +57,14 @@ LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_bt_speaker
 MAN += virtual_bt_speaker.8
 .endif
 
+.if defined(HAVE_FFTW)
+SRCS += virtual_equalizer.c
+CFLAGS += -DHAVE_FFTW
+LDFLAGS += -lfftw3
+LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_equalizer
+MAN += virtual_equalizer.8
+.endif
+
 .if defined(HAVE_FFMPEG)
 CFLAGS += -DHAVE_FFMPEG
 LDFLAGS += -lavdevice -lavutil -lavcodec -lavresample -lavformat

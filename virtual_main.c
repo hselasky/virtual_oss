@@ -52,6 +52,9 @@
 #ifdef HAVE_BLUETOOTH
 #include "backend_bt/bt_speaker.h"
 #endif
+#ifdef HAVE_FFTW
+#include "virtual_equalizer.h"
+#endif
 
 static pthread_mutex_t atomic_mtx;
 static pthread_cond_t atomic_cv;
@@ -2210,25 +2213,27 @@ done:
 	}
 }
 
-#ifdef HAVE_BLUETOOTH
 static int
-is_virtual_bt_speaker(const char *ptr)
+ends_with(const char *ptr, const char* name)
 {
-	const char name[] = "virtual_bt_speaker";
 	int len = strlen(ptr);
+	int name_len = strlen(name);
 
-	if (len < (sizeof(name) - 1))
+	if (len < name_len)
 		return (0);
-	return (strcmp(ptr + len - sizeof(name) + 1, name) == 0);
+	return (strcmp(ptr + len - name_len, name) == 0);
 }
-#endif
 
 int
 main(int argc, char **argv)
 {
 #ifdef HAVE_BLUETOOTH
-	if (argc > 0 && is_virtual_bt_speaker(argv[0]))
+	if (argc > 0 && ends_with(argv[0], "virtual_bt_speaker"))
 		return bt_speaker_main(argc, argv);
+#endif
+#ifdef HAVE_FFTW
+	if (argc > 0 && ends_with(argv[0], "virtual_equalizer"))
+		return equalizer_main(argc, argv);
 #endif
 
 	const char *ptrerr;
