@@ -39,7 +39,7 @@
 static uint64_t
 virtual_oss_delay(void)
 {
-  	uint64_t delay;
+	uint64_t delay;
 
 	delay = voss_dsp_samples;
 	delay *= 1000000000ULL;
@@ -62,13 +62,13 @@ virtual_oss_timestamp(void)
 
 static size_t
 vclient_read_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
-    uint8_t *dst, size_t total)
+    int64_t *dst, size_t total)
 {
 	size_t total_read = 0;
 
 	pvc->sync_busy = 1;
 	while (1) {
-		size_t read = vring_read_linear(pvr, dst, total);
+		size_t read = vring_read_linear(pvr, (uint8_t *)dst, 8 * total) / 8;
 
 		total_read += read;
 		dst += read;
@@ -78,7 +78,7 @@ vclient_read_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
 		    total == 0) {
 			/* fill rest of buffer with silence, if any */
 			if (total_read != 0 && total != 0)
-				memset(dst, 0, total);
+				memset(dst, 0, 8 * total);
 			break;
 		}
 		atomic_wait();
@@ -87,18 +87,22 @@ vclient_read_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
 	if (pvc->sync_wakeup)
 		atomic_wakeup();
 
+	vclient_tx_equalizer(pvc, dst, total_read);
+
 	return (total_read);
 }
 
 static size_t
 vclient_write_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
-    const uint8_t *src, size_t total)
+    int64_t *src, size_t total)
 {
 	size_t total_written = 0;
 
+	vclient_rx_equalizer(pvc, src, total);
+
 	pvc->sync_busy = 1;
 	while (1) {
-		size_t written = vring_write_linear(pvr, src, total);
+		size_t written = vring_write_linear(pvr, (uint8_t *)src, total * 8) / 8;
 
 		total_written += written;
 		src += written;
@@ -217,7 +221,6 @@ virtual_oss_process(void *arg)
 				/* convert from ns to us */
 				usleep(delta_time / 1000);
 			}
-
 			/* Compute next timeout */
 			nice_timeout += virtual_oss_timestamp();
 
@@ -244,7 +247,7 @@ virtual_oss_process(void *arg)
 
 			/* Refresh timestamp */
 			last_timestamp = virtual_oss_timestamp();
-			
+
 			atomic_lock();
 
 			voss_dsp_blocks++;
@@ -253,7 +256,6 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_data,
 				    8 * samples * src_chans);
 			}
-
 			/*
 			 * -- 1 -- Distribute input samples to all
 			 * client devices
@@ -324,7 +326,7 @@ virtual_oss_process(void *arg)
 
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
-				    (uint8_t *)buffer_temp, 8 * samples * dst_chans);
+				    buffer_temp, samples * dst_chans);
 			}
 
 			/* fill main output buffer with silence */
@@ -342,7 +344,6 @@ virtual_oss_process(void *arg)
 					    [x + voss_ad_input_channel]);
 				}
 			}
-
 			/*
 			 * -- 2.1 -- Load output samples from all client
 			 * devices
@@ -356,7 +357,7 @@ virtual_oss_process(void *arg)
 
 				/* read data from ring buffer */
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
-				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+				    buffer_data, samples * dst_chans) == 0)
 					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
@@ -431,11 +432,11 @@ virtual_oss_process(void *arg)
 
 				/* read data from ring buffer */
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
-				        (uint8_t *)buffer_data, 8 * samples * dst_chans) == 0)
+				    buffer_data, samples * dst_chans) == 0)
 					continue;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
-				
+
 				format_maximum(buffer_data, pvc->profile->tx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
@@ -553,7 +554,6 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_temp,
 				    8 * samples * src_chans);
 			}
-
 			/* -- 4 -- Check for output monitoring */
 
 			TAILQ_FOREACH(pvm, &virtual_monitor_output, entry) {
@@ -679,7 +679,7 @@ virtual_oss_process(void *arg)
 
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
-				    (uint8_t *)buffer_monitor, 8 * samples * dst_chans);
+				    buffer_monitor, samples * dst_chans);
 			}
 
 			atomic_wakeup();

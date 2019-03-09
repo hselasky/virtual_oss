@@ -268,6 +268,9 @@ vclient_free(vclient_t *pvc)
 	vresample_free(&pvc->rx_resample);
 	vresample_free(&pvc->tx_resample);
 
+	/* free equalizer */
+	vclient_eq_free(pvc);
+
 	/* free ring buffers */
 	vring_free(&pvc->rx_ring[0]);
 	vring_free(&pvc->rx_ring[1]);
@@ -330,6 +333,9 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	/* check we are not busy */
 	if (pvc->rx_busy || pvc->tx_busy)
 		return (CUSE_ERR_BUSY);
+
+	/* free equalizer */
+	vclient_eq_free(pvc);
 
 	/* free existing ring buffers */
 	vring_free(&pvc->rx_ring[0]);
@@ -407,12 +413,16 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 		goto err_2;
 	if (vring_alloc(&pvc->tx_ring[1], bufsize))
 		goto err_3;
+	if (vclient_eq_alloc(pvc))
+		goto err_4;
 
 	pvc->start_block = voss_dsp_blocks;
 	pvc->last_ts = virtual_oss_timestamp();
 
 	return (0);
 
+err_4:
+	vring_free(&pvc->tx_ring[1]);
 err_3:
 	vring_free(&pvc->tx_ring[0]);
 err_2:

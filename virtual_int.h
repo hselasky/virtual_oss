@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2018 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -89,6 +89,10 @@ struct virtual_profile {
 	char oss_name[VMAX_STRING];
 	char wav_name[VMAX_STRING];
 	vclient_head_t *pvc_head;
+	uint32_t rx_filter_size;
+	uint32_t tx_filter_size;
+	double *rx_filter_data;
+	double *tx_filter_data;
 	int64_t	rx_peak_value[VMAX_CHAN];
 	int64_t	tx_peak_value[VMAX_CHAN];
 	int8_t	rx_shift[VMAX_CHAN];
@@ -123,6 +127,12 @@ struct virtual_resample {
 
 struct virtual_client {
 	vclient_entry_t entry;
+	uint32_t tx_filter_offset;
+	uint32_t rx_filter_offset;
+	int64_t *tx_filter_in[VMAX_CHAN];
+	int64_t *rx_filter_in[VMAX_CHAN];
+	double *tx_filter_out[VMAX_CHAN];
+	double *rx_filter_out[VMAX_CHAN];
 	struct virtual_ring rx_ring[2];
   	struct virtual_ring tx_ring[2];
 	vresample_t rx_resample;
@@ -245,6 +255,15 @@ extern double voss_ad_getput_sample(double);
 extern void voss_add_options(char *);
 
 /* Get current timestamp */
-uint64_t virtual_oss_timestamp(void);
+extern uint64_t virtual_oss_timestamp(void);
+
+/* Fast array multiplication */
+extern void voss_x3_multiply_double(const int64_t *, const double *, double *, const size_t);
+
+/* Equalizer support */
+extern void vclient_tx_equalizer(struct virtual_client *, int64_t *, size_t);
+extern void vclient_rx_equalizer(struct virtual_client *, int64_t *, size_t);
+extern int vclient_eq_alloc(struct virtual_client *);
+extern void vclient_eq_free(struct virtual_client *);
 
 #endif					/* _VIRTUAL_INT_H_ */
