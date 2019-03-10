@@ -36,12 +36,15 @@ void
 vclient_tx_equalizer(struct virtual_client *pvc,
     int64_t *src, size_t total)
 {
+	double *f_data;
 	size_t channels;
 	size_t f_size;
 	size_t x;
 
 	f_size = pvc->profile->tx_filter_size;
-	if (f_size == 0 || total == 0)
+	f_data = pvc->profile->tx_filter_data;
+
+	if (f_size == 0 || f_data == NULL || total == 0)
 		return;
 
 	channels = pvc->channels;
@@ -76,8 +79,7 @@ vclient_tx_equalizer(struct virtual_client *pvc,
 				}
 				/* perform transform */
 				voss_x3_multiply_double(pvc->tx_filter_in[x],
-				    pvc->profile->tx_filter_data,
-				    pvc->tx_filter_out[x], f_size);
+				    f_data, pvc->tx_filter_out[x], f_size);
 			}
 			pvc->tx_filter_offset = 0;
 		}
@@ -90,12 +92,15 @@ void
 vclient_rx_equalizer(struct virtual_client *pvc,
     int64_t *src, size_t total)
 {
+	double *f_data;
 	size_t channels;
 	size_t f_size;
 	size_t x;
 
 	f_size = pvc->profile->rx_filter_size;
-	if (f_size == 0 || total == 0)
+	f_data = pvc->profile->rx_filter_data;
+
+	if (f_size == 0 || f_data == NULL || total == 0)
 		return;
 
 	channels = pvc->channels;
@@ -130,8 +135,7 @@ vclient_rx_equalizer(struct virtual_client *pvc,
 				}
 				/* perform transform */
 				voss_x3_multiply_double(pvc->rx_filter_in[x],
-				    pvc->profile->rx_filter_data,
-				    pvc->rx_filter_out[x], f_size);
+				    f_data, pvc->rx_filter_out[x], f_size);
 			}
 			pvc->rx_filter_offset = 0;
 		}

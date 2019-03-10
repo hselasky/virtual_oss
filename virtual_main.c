@@ -1626,6 +1626,8 @@ usage(void)
 	    "\t" "-M <monitorfilter> \\\n"
 	    "\t" "-M i,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
+	    "\t" "-F <rx_filter_samples> \\\n"
+	    "\t" "-G <tx_filter_samples> \\\n"
 	    "\t" "-t vdsp.ctl \n"
 	    "\t" "Left channel = 0\n"
 	    "\t" "Right channel = 1\n"
@@ -1734,6 +1736,10 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	memset(pvp->oss_name, 0, sizeof(pvp->oss_name));
 	memset(pvp->wav_name, 0, sizeof(pvp->wav_name));
 
+	/* need to set new filter sizes */
+	pvp->rx_filter_size = 0;
+	pvp->tx_filter_size = 0;
+	
 	return (NULL);
 }
 
@@ -1792,9 +1798,9 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?P:Q:R:ST:B";
+		optstr = "F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?P:Q:R:ST:B";
 	else
-		optstr = "w:e:p:a:c:b:f:g:m:M:d:l:L:s:P:R:";
+		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:P:R:";
 
 	virtual_cuse_init_profile(&profile, 1);
 
@@ -2161,6 +2167,20 @@ parse_options(int narg, char **pparg, int is_main)
 			} else {
 				return ("Invalid -M parameter");
 			}
+			break;
+		case 'F':
+			profile.rx_filter_size = atoi(optarg);
+			if ((profile.rx_filter_size - 1) & profile.rx_filter_size)
+				return ("Invalid -F parameter is not power of two");
+			else if (profile.rx_filter_size > VIRTUAL_OSS_FILTER_MAX)
+				return ("Invalid -F parameter is out of range");
+			break;
+		case 'G':
+			profile.tx_filter_size = atoi(optarg);
+			if ((profile.tx_filter_size - 1) & profile.tx_filter_size)
+				return ("Invalid -F parameter is not power of two");
+			else if (profile.tx_filter_size > VIRTUAL_OSS_FILTER_MAX)
+				return ("Invalid -F parameter is out of range");
 			break;
 		default:
 			if (is_main)
