@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2018 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -96,7 +96,8 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
 		struct virtual_oss_audio_delay_locator ad_locator;
-		char options[VIRTUAL_OSS_OPTIONS_MAX];
+		struct virtual_oss_fir_filter fir_filter;
+		char	options[VIRTUAL_OSS_OPTIONS_MAX];
 	}     data;
 
 	vprofile_t *pvp;
@@ -126,6 +127,10 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_DEV_PEAK:
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
+	case VIRTUAL_OSS_SET_RX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_GET_RX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_SET_TX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_GET_TX_DEV_FIR_FILTER:
 		pvp = vprofile_by_index(&virtual_profile_client_head, data.val);
 		break;
 	case VIRTUAL_OSS_GET_LOOP_INFO:
@@ -133,6 +138,10 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_GET_LOOP_PEAK:
 	case VIRTUAL_OSS_SET_LOOP_LIMIT:
 	case VIRTUAL_OSS_GET_LOOP_LIMIT:
+	case VIRTUAL_OSS_SET_RX_LOOP_FIR_FILTER:
+	case VIRTUAL_OSS_GET_RX_LOOP_FIR_FILTER:
+	case VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER:
+	case VIRTUAL_OSS_GET_TX_LOOP_FIR_FILTER:
 		pvp = vprofile_by_index(&virtual_profile_loopback_head, data.val);
 		break;
 	default:
@@ -417,15 +426,101 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_RST_AUDIO_DELAY_LOCATOR:
 		voss_ad_reset();
 		break;
+
 	case VIRTUAL_OSS_ADD_OPTIONS:
 		data.options[VIRTUAL_OSS_OPTIONS_MAX - 1] = 0;
 		voss_add_options(data.options);
+		break;
+
+	case VIRTUAL_OSS_GET_RX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_GET_RX_LOOP_FIR_FILTER:
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+		} else if (data.fir_filter.filter_data == NULL) {
+			data.fir_filter.filter_size = pvp->rx_filter_size;
+		} else if (data.fir_filter.filter_size != (int)pvp->rx_filter_size) {
+			error = CUSE_ERR_INVALID;
+		} else if (pvp->rx_filter_data == NULL) {
+			error = CUSE_ERR_NO_MEMORY;	/* filter disabled */
+		} else {
+			error = cuse_copy_out(pvp->rx_filter_data,
+			    data.fir_filter.filter_data,
+			    sizeof(pvp->rx_filter_data[0]) *
+			    data.fir_filter.filter_size);
+		}
+		break;
+
+	case VIRTUAL_OSS_GET_TX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_GET_TX_LOOP_FIR_FILTER:
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+		} else if (data.fir_filter.filter_data == NULL) {
+			data.fir_filter.filter_size = pvp->tx_filter_size;
+		} else if (data.fir_filter.filter_size != (int)pvp->tx_filter_size) {
+			error = CUSE_ERR_INVALID;
+		} else if (pvp->tx_filter_data == NULL) {
+			error = CUSE_ERR_NO_MEMORY;	/* filter disabled */
+		} else {
+			error = cuse_copy_out(pvp->tx_filter_data,
+			    data.fir_filter.filter_data,
+			    sizeof(pvp->tx_filter_data[0]) *
+			    data.fir_filter.filter_size);
+		}
+		break;
+
+	case VIRTUAL_OSS_SET_RX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_SET_RX_LOOP_FIR_FILTER:
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+		} else if (data.fir_filter.filter_data == NULL) {
+			free(pvp->rx_filter_data);
+			pvp->rx_filter_data = NULL;	/* disable filter */
+		} else if (data.fir_filter.filter_size != (int)pvp->rx_filter_size) {
+			error = CUSE_ERR_INVALID;
+		} else {
+			size_t size = sizeof(pvp->rx_filter_data[0]) * pvp->rx_filter_size;
+			if (pvp->rx_filter_data == NULL) {
+				pvp->rx_filter_data = malloc(size);
+				if (pvp->rx_filter_data == NULL)
+					error = CUSE_ERR_NO_MEMORY;
+				else
+					memset(pvp->rx_filter_data, 0, size);
+			}
+			if (pvp->rx_filter_data != NULL) {
+				error = cuse_copy_in(data.fir_filter.filter_data,
+				    pvp->rx_filter_data, size);
+			}
+		}
+		break;
+
+	case VIRTUAL_OSS_SET_TX_DEV_FIR_FILTER:
+	case VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER:
+		if (pvp == NULL) {
+			error = CUSE_ERR_INVALID;
+		} else if (data.fir_filter.filter_data == NULL) {
+			free(pvp->tx_filter_data);
+			pvp->tx_filter_data = NULL;	/* disable filter */
+		} else if (data.fir_filter.filter_size != (int)pvp->tx_filter_size) {
+			error = CUSE_ERR_INVALID;
+		} else {
+			size_t size = sizeof(pvp->tx_filter_data[0]) * pvp->tx_filter_size;
+			if (pvp->tx_filter_data == NULL) {
+				pvp->tx_filter_data = malloc(size);
+				if (pvp->tx_filter_data == NULL)
+					error = CUSE_ERR_NO_MEMORY;
+				else
+					memset(pvp->tx_filter_data, 0, size);
+			}
+			if (pvp->tx_filter_data != NULL) {
+				error = cuse_copy_in(data.fir_filter.filter_data,
+				    pvp->tx_filter_data, size);
+			}
+		}
 		break;
 	default:
 		error = CUSE_ERR_INVALID;
 		break;
 	}
-
 	atomic_unlock();
 
 	if (error == 0) {

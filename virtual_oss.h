@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,9 +29,10 @@
 #include <sys/ioccom.h>
 
 #define	VIRTUAL_OSS_NAME_MAX	32
-#define	VIRTUAL_OSS_VERSION 0x00010005
+#define	VIRTUAL_OSS_VERSION 0x00010006
 #define	VIRTUAL_OSS_LIMITER_MAX	64	/* exclusive */
 #define	VIRTUAL_OSS_OPTIONS_MAX	1024	/* bytes */
+#define	VIRTUAL_OSS_FILTER_MAX 65536	/* samples */
 
 #define	VIRTUAL_OSS_GET_VERSION		_IOR('O', 0, int)
 
@@ -48,8 +49,8 @@ struct virtual_oss_io_info {
 	int	tx_mute;
 	int	rx_pol;
 	int	tx_pol;
-	int	rx_delay;	/* in samples */
-	int	rx_delay_limit;	/* in samples */
+	int	rx_delay;		/* in samples */
+	int	rx_delay_limit;		/* in samples */
 };
 
 #define	VIRTUAL_OSS_GET_DEV_INFO	_IOWR('O', 1, struct virtual_oss_io_info)
@@ -141,9 +142,9 @@ struct virtual_oss_audio_delay_locator {
 	int	channel_output;
 	int	channel_input;
 	int	channel_last;
-	int	signal_output_level;		/* 2**n */
-	int	signal_input_delay;		/* in samples, roundtrip */
-	int	signal_delay_hz;		/* in samples, HZ */
+	int	signal_output_level;	/* 2**n */
+	int	signal_input_delay;	/* in samples, roundtrip */
+	int	signal_delay_hz;	/* in samples, HZ */
 	int	locator_enabled;
 };
 
@@ -155,7 +156,7 @@ struct virtual_oss_midi_delay_locator {
 	int	channel_output;
 	int	channel_input;
 	int	signal_delay;
-	int	signal_delay_hz;		/* in samples, HZ */
+	int	signal_delay_hz;	/* in samples, HZ */
 	int	locator_enabled;
 };
 
@@ -164,5 +165,20 @@ struct virtual_oss_midi_delay_locator {
 #define	VIRTUAL_OSS_RST_MIDI_DELAY_LOCATOR	_IO('O', 32)
 
 #define	VIRTUAL_OSS_ADD_OPTIONS			_IOWR('O', 33, char [VIRTUAL_OSS_OPTIONS_MAX])
+
+struct virtual_oss_fir_filter {
+	int	number;			/* must be first */
+	int	filter_size;
+	double *filter_data;
+};
+
+#define	VIRTUAL_OSS_GET_RX_DEV_FIR_FILTER	_IOWR('O', 34, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_SET_RX_DEV_FIR_FILTER	_IOWR('O', 35, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_GET_TX_DEV_FIR_FILTER	_IOWR('O', 36, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_SET_TX_DEV_FIR_FILTER	_IOWR('O', 37, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_GET_RX_LOOP_FIR_FILTER	_IOWR('O', 38, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_SET_RX_LOOP_FIR_FILTER	_IOWR('O', 39, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_GET_TX_LOOP_FIR_FILTER	_IOWR('O', 40, struct virtual_oss_fir_filter)
+#define	VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER	_IOWR('O', 41, struct virtual_oss_fir_filter)
 
 #endif					/* _VIRTUAL_OSS_H_ */
