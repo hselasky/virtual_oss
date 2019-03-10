@@ -1626,8 +1626,8 @@ usage(void)
 	    "\t" "-M <monitorfilter> \\\n"
 	    "\t" "-M i,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
-	    "\t" "-F <rx_filter_samples> \\\n"
-	    "\t" "-G <tx_filter_samples> \\\n"
+	    "\t" "-F <rx_filter_samples> or <milliseconds>ms \\\n"
+	    "\t" "-G <tx_filter_samples> or <milliseconds>ms \\\n"
 	    "\t" "-t vdsp.ctl \n"
 	    "\t" "Left channel = 0\n"
 	    "\t" "Right channel = 1\n"
@@ -2169,14 +2169,34 @@ parse_options(int narg, char **pparg, int is_main)
 			}
 			break;
 		case 'F':
-			profile.rx_filter_size = atoi(optarg);
+			if (strlen(optarg) > 2 &&
+			    sscanf(optarg, "%f", &samples_ms) == 1 &&
+			    strcmp(optarg + strlen(optarg) - 2, "ms") == 0) {
+				if (voss_dsp_sample_rate == 0)
+					return ("-F <X>ms option requires -r option");
+				if (samples_ms < 0.125 || samples_ms >= 1000.0)
+					return ("-F <X>ms option has invalid value");
+				profile.rx_filter_size = voss_dsp_sample_rate * samples_ms / 1000.0;
+			} else {
+				profile.rx_filter_size = atoi(optarg);
+			}
 			if ((profile.rx_filter_size - 1) & profile.rx_filter_size)
 				return ("Invalid -F parameter is not power of two");
 			else if (profile.rx_filter_size > VIRTUAL_OSS_FILTER_MAX)
 				return ("Invalid -F parameter is out of range");
 			break;
 		case 'G':
-			profile.tx_filter_size = atoi(optarg);
+			if (strlen(optarg) > 2 &&
+			    sscanf(optarg, "%f", &samples_ms) == 1 &&
+			    strcmp(optarg + strlen(optarg) - 2, "ms") == 0) {
+				if (voss_dsp_sample_rate == 0)
+					return ("-G <X>ms option requires -r option");
+				if (samples_ms < 0.125 || samples_ms >= 1000.0)
+					return ("-G <X>ms option has invalid value");
+				profile.tx_filter_size = voss_dsp_sample_rate * samples_ms / 1000.0;
+			} else {
+				profile.tx_filter_size = atoi(optarg);
+			}
 			if ((profile.tx_filter_size - 1) & profile.tx_filter_size)
 				return ("Invalid -F parameter is not power of two");
 			else if (profile.tx_filter_size > VIRTUAL_OSS_FILTER_MAX)

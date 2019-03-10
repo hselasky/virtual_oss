@@ -115,11 +115,11 @@ Create a loopback OSS device by given name.
 .It Fl L Ar name
 Create a loopback OSS device which acts as a master device.
 This option is used in conjunction with -f /dev/null .
-.It Fl F Ar samples
-Set receive filter size in number of samples for next device to be created.
+.It Fl F Ar size
+Set receive filter size in number of samples or <milliseconds>ms for the next device to be created.
 Number of samples must be power of two.
-.It Fl G Ar samples
-Set transmit filter size in number of samples for next device to be created.
+.It Fl G Ar size
+Set transmit filter size in number of samples or <milliseconds>ms for the next device to be created.
 Number of samples must be power of two.
 .It Fl h
 Show usage and all available options.
