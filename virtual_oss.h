@@ -181,4 +181,6 @@ struct virtual_oss_fir_filter {
 #define	VIRTUAL_OSS_GET_TX_LOOP_FIR_FILTER	_IOWR('O', 40, struct virtual_oss_fir_filter)
 #define	VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER	_IOWR('O', 41, struct virtual_oss_fir_filter)
 
+#define	VIRTUAL_OSS_GET_SAMPLE_RATE		_IOR('O', 42, int)
+  
 #endif					/* _VIRTUAL_OSS_H_ */

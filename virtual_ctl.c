@@ -517,6 +517,11 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			}
 		}
 		break;
+
+	case VIRTUAL_OSS_GET_SAMPLE_RATE:
+		data.val = voss_dsp_sample_rate;
+		break;
+
 	default:
 		error = CUSE_ERR_INVALID;
 		break;
