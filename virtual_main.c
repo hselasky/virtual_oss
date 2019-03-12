@@ -162,8 +162,8 @@ vclient_bufsize_consumed(vclient_t *pvc)
 	samples_scaled = (delta * (uint64_t)pvc->sample_rate) / 1000000000ULL;
 	if (samples_scaled < 0)
 		samples_scaled = 0;
-	else if (samples_scaled > voss_dsp_samples)
-		samples_scaled = voss_dsp_samples;
+	else if (samples_scaled > (int32_t)voss_dsp_samples)
+		samples_scaled = (int32_t)voss_dsp_samples;
 	retval = pvc->channels * samples_scaled * vclient_sample_bytes(pvc);
 	if (retval < 0)
 		retval = 0;
@@ -328,7 +328,6 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	size_t mod_internal;
 	size_t mod;
 	int bufsize;
-	int frags_internal;
 
 	/* check we are not busy */
 	if (pvc->rx_busy || pvc->tx_busy)
@@ -676,7 +675,7 @@ vclient_export_read_locked(vclient_t *pvc)
 	for (x = 0; x != pvc->channels; x++)
 		fmt_limit[x] = pvc->profile->limiter;
 
-	if (pvc->sample_rate == voss_dsp_sample_rate) {
+	if (pvc->sample_rate == (int)voss_dsp_sample_rate) {
 		while (1) {
 			uint8_t *src_ptr;
 			size_t src_len;
@@ -721,7 +720,6 @@ vclient_export_read_locked(vclient_t *pvc)
 			int64_t temp[MAX_FRAME * pvc->channels];
 			size_t samples;
 			size_t y;
-			int error;
 
 			vring_get_read(&pvc->rx_ring[0], &src_ptr, &src_len);
 			vring_get_write(&pvc->rx_ring[1], &dst_ptr, &dst_len);
@@ -791,8 +789,6 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 {
 	vclient_t *pvc;
 
-	int delta_in;
-	int delta_out;
 	int error;
 	int retval;
 
@@ -873,7 +869,7 @@ vclient_import_write_locked(vclient_t *pvc)
 	dst_mod = pvc->channels * 8;
 	src_mod = pvc->channels * vclient_sample_bytes(pvc);
 
-	if (pvc->sample_rate == voss_dsp_sample_rate) {
+	if (pvc->sample_rate == (int)voss_dsp_sample_rate) {
 		while (1) {
 			uint8_t *src_ptr;
 			size_t src_len;
@@ -989,9 +985,8 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 {
 	vclient_t *pvc;
 
-	int delta;
 	int error;
-	int retval;	
+	int retval;
 
 	pvc = cuse_dev_get_per_file_handle(pdev);
 	if (pvc == NULL)
@@ -1048,7 +1043,7 @@ vclient_write_oss(struct cuse_dev *pdev, int fflags,
 			retval = error;
 			break;
 		}
-		peer_ptr = ((uint8_t *)peer_ptr) + buf_len;
+		peer_ptr = ((const uint8_t *)peer_ptr) + buf_len;
 		retval += buf_len;
 		len -= buf_len;
 
@@ -1705,7 +1700,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 					    "%s: <Virtual OSS> (play/rec)\n",
 					    ptr->oss_name);
 				}
-				if (write(ptr->fd_sta, temp, strlen(temp)) != strlen(temp)) {
+				if (write(ptr->fd_sta, temp, strlen(temp)) != (int)strlen(temp)) {
 					warn("Could not register virtual OSS device");
 					close(ptr->fd_sta);
 					ptr->fd_sta = -1;
@@ -1781,7 +1776,7 @@ virtual_cuse_init_profile(struct virtual_profile *pvp, int clear)
 	}
 }
 
-static const char * const
+static const char *
 parse_options(int narg, char **pparg, int is_main)
 {
 	const char *ptr;
@@ -2233,6 +2228,7 @@ create_threads(void)
 void
 voss_add_options(char *str)
 {
+	static char name[] = { "virtual_oss" };
 	const char sep[] = "\t ";
 	const char *ptrerr;
 	char *parg[64];
@@ -2240,7 +2236,7 @@ voss_add_options(char *str)
 	char *brkt;
 	int narg = 0;
 
-	parg[narg++] = "virtual_oss";
+	parg[narg++] = name;
 
 	for (word = strtok_r(str, sep, &brkt); word != NULL;
 	     word = strtok_r(NULL, sep, &brkt)) {
