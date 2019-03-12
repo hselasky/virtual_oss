@@ -2175,9 +2175,11 @@ parse_options(int narg, char **pparg, int is_main)
 			} else {
 				profile.rx_filter_size = atoi(optarg);
 			}
-			if ((profile.rx_filter_size - 1) & profile.rx_filter_size)
-				return ("Invalid -F parameter is not power of two");
-			else if (profile.rx_filter_size > VIRTUAL_OSS_FILTER_MAX)
+			/* make value power of two */
+			while ((profile.rx_filter_size - 1) & profile.rx_filter_size)
+				profile.rx_filter_size += ~(profile.rx_filter_size - 1) & profile.rx_filter_size;
+			/* range check */
+			if (profile.rx_filter_size > VIRTUAL_OSS_FILTER_MAX)
 				return ("Invalid -F parameter is out of range");
 			break;
 		case 'G':
@@ -2192,9 +2194,11 @@ parse_options(int narg, char **pparg, int is_main)
 			} else {
 				profile.tx_filter_size = atoi(optarg);
 			}
-			if ((profile.tx_filter_size - 1) & profile.tx_filter_size)
-				return ("Invalid -F parameter is not power of two");
-			else if (profile.tx_filter_size > VIRTUAL_OSS_FILTER_MAX)
+			/* make value power of two */
+			while ((profile.tx_filter_size - 1) & profile.tx_filter_size)
+				profile.tx_filter_size += ~(profile.tx_filter_size - 1) & profile.tx_filter_size;
+			/* range check */
+			if (profile.tx_filter_size > VIRTUAL_OSS_FILTER_MAX)
 				return ("Invalid -F parameter is out of range");
 			break;
 		default:
