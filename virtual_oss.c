@@ -87,7 +87,7 @@ vclient_read_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
 	if (pvc->sync_wakeup)
 		atomic_wakeup();
 
-	vclient_tx_equalizer(pvc, dst, total_read);
+	vclient_tx_equalizer(pvc, dst - total_read, total_read);
 
 	return (total_read);
 }
