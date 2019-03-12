@@ -434,86 +434,94 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 
 	case VIRTUAL_OSS_GET_RX_DEV_FIR_FILTER:
 	case VIRTUAL_OSS_GET_RX_LOOP_FIR_FILTER:
-		if (pvp == NULL) {
+		if (pvp == NULL ||
+		    data.fir_filter.channel < 0 ||
+		    data.fir_filter.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 		} else if (data.fir_filter.filter_data == NULL) {
 			data.fir_filter.filter_size = pvp->rx_filter_size;
 		} else if (data.fir_filter.filter_size != (int)pvp->rx_filter_size) {
 			error = CUSE_ERR_INVALID;
-		} else if (pvp->rx_filter_data == NULL) {
+		} else if (pvp->rx_filter_data[data.fir_filter.channel] == NULL) {
 			error = CUSE_ERR_NO_MEMORY;	/* filter disabled */
 		} else {
-			error = cuse_copy_out(pvp->rx_filter_data,
+			error = cuse_copy_out(pvp->rx_filter_data[data.fir_filter.channel],
 			    data.fir_filter.filter_data,
-			    sizeof(pvp->rx_filter_data[0]) *
+			    sizeof(pvp->rx_filter_data[0][0]) *
 			    data.fir_filter.filter_size);
 		}
 		break;
 
 	case VIRTUAL_OSS_GET_TX_DEV_FIR_FILTER:
 	case VIRTUAL_OSS_GET_TX_LOOP_FIR_FILTER:
-		if (pvp == NULL) {
+		if (pvp == NULL ||
+		    data.fir_filter.channel < 0 ||
+		    data.fir_filter.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 		} else if (data.fir_filter.filter_data == NULL) {
 			data.fir_filter.filter_size = pvp->tx_filter_size;
 		} else if (data.fir_filter.filter_size != (int)pvp->tx_filter_size) {
 			error = CUSE_ERR_INVALID;
-		} else if (pvp->tx_filter_data == NULL) {
+		} else if (pvp->tx_filter_data[data.fir_filter.channel] == NULL) {
 			error = CUSE_ERR_NO_MEMORY;	/* filter disabled */
 		} else {
-			error = cuse_copy_out(pvp->tx_filter_data,
+			error = cuse_copy_out(pvp->tx_filter_data[data.fir_filter.channel],
 			    data.fir_filter.filter_data,
-			    sizeof(pvp->tx_filter_data[0]) *
+			    sizeof(pvp->tx_filter_data[0][0]) *
 			    data.fir_filter.filter_size);
 		}
 		break;
 
 	case VIRTUAL_OSS_SET_RX_DEV_FIR_FILTER:
 	case VIRTUAL_OSS_SET_RX_LOOP_FIR_FILTER:
-		if (pvp == NULL) {
+		if (pvp == NULL ||
+		    data.fir_filter.channel < 0 ||
+		    data.fir_filter.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 		} else if (data.fir_filter.filter_data == NULL) {
-			free(pvp->rx_filter_data);
-			pvp->rx_filter_data = NULL;	/* disable filter */
+			free(pvp->rx_filter_data[data.fir_filter.channel]);
+			pvp->rx_filter_data[data.fir_filter.channel] = NULL;	/* disable filter */
 		} else if (data.fir_filter.filter_size != (int)pvp->rx_filter_size) {
 			error = CUSE_ERR_INVALID;
-		} else {
-			size_t size = sizeof(pvp->rx_filter_data[0]) * pvp->rx_filter_size;
-			if (pvp->rx_filter_data == NULL) {
-				pvp->rx_filter_data = malloc(size);
-				if (pvp->rx_filter_data == NULL)
+		} else if (pvp->rx_filter_size != 0) {
+			size_t size = sizeof(pvp->rx_filter_data[0][0]) * pvp->rx_filter_size;
+			if (pvp->rx_filter_data[data.fir_filter.channel] == NULL) {
+				pvp->rx_filter_data[data.fir_filter.channel] = malloc(size);
+				if (pvp->rx_filter_data[data.fir_filter.channel] == NULL)
 					error = CUSE_ERR_NO_MEMORY;
 				else
-					memset(pvp->rx_filter_data, 0, size);
+					memset(pvp->rx_filter_data[data.fir_filter.channel], 0, size);
 			}
-			if (pvp->rx_filter_data != NULL) {
+			if (pvp->rx_filter_data[data.fir_filter.channel] != NULL) {
 				error = cuse_copy_in(data.fir_filter.filter_data,
-				    pvp->rx_filter_data, size);
+				    pvp->rx_filter_data[data.fir_filter.channel], size);
 			}
 		}
 		break;
 
 	case VIRTUAL_OSS_SET_TX_DEV_FIR_FILTER:
 	case VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER:
-		if (pvp == NULL) {
+		if (pvp == NULL ||
+		    data.fir_filter.channel < 0 ||
+		    data.fir_filter.channel >= (int)pvp->channels) {
 			error = CUSE_ERR_INVALID;
 		} else if (data.fir_filter.filter_data == NULL) {
-			free(pvp->tx_filter_data);
-			pvp->tx_filter_data = NULL;	/* disable filter */
+			free(pvp->tx_filter_data[data.fir_filter.channel]);
+			pvp->tx_filter_data[data.fir_filter.channel] = NULL;	/* disable filter */
 		} else if (data.fir_filter.filter_size != (int)pvp->tx_filter_size) {
 			error = CUSE_ERR_INVALID;
-		} else {
-			size_t size = sizeof(pvp->tx_filter_data[0]) * pvp->tx_filter_size;
-			if (pvp->tx_filter_data == NULL) {
-				pvp->tx_filter_data = malloc(size);
-				if (pvp->tx_filter_data == NULL)
+		} else if (pvp->tx_filter_size != 0) {
+			size_t size = sizeof(pvp->tx_filter_data[0][0]) * pvp->tx_filter_size;
+			if (pvp->tx_filter_data[data.fir_filter.channel] == NULL) {
+				pvp->tx_filter_data[data.fir_filter.channel] = malloc(size);
+				if (pvp->tx_filter_data[data.fir_filter.channel] == NULL)
 					error = CUSE_ERR_NO_MEMORY;
 				else
-					memset(pvp->tx_filter_data, 0, size);
+					memset(pvp->tx_filter_data[data.fir_filter.channel], 0, size);
 			}
-			if (pvp->tx_filter_data != NULL) {
+			if (pvp->tx_filter_data[data.fir_filter.channel] != NULL) {
 				error = cuse_copy_in(data.fir_filter.filter_data,
-				    pvp->tx_filter_data, size);
+				    pvp->tx_filter_data[data.fir_filter.channel], size);
 			}
 		}
 		break;

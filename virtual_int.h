@@ -91,8 +91,8 @@ struct virtual_profile {
 	vclient_head_t *pvc_head;
 	uint32_t rx_filter_size;
 	uint32_t tx_filter_size;
-	double *rx_filter_data;
-	double *tx_filter_data;
+	double *rx_filter_data[VMAX_CHAN];
+	double *tx_filter_data[VMAX_CHAN];
 	int64_t	rx_peak_value[VMAX_CHAN];
 	int64_t	tx_peak_value[VMAX_CHAN];
 	int8_t	rx_shift[VMAX_CHAN];

@@ -168,6 +168,7 @@ struct virtual_oss_midi_delay_locator {
 
 struct virtual_oss_fir_filter {
 	int	number;			/* must be first */
+	int	channel;
 	int	filter_size;
 	double *filter_data;
 };

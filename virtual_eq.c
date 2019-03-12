@@ -42,12 +42,12 @@ vclient_tx_equalizer(struct virtual_client *pvc,
 	size_t x;
 
 	f_size = pvc->profile->tx_filter_size;
-	f_data = pvc->profile->tx_filter_data;
-
-	if (f_size == 0 || f_data == NULL || total == 0)
+	if (f_size == 0 || total == 0)
 		return;
 
 	channels = pvc->channels;
+	total /= channels;
+
 	while (1) {
 		size_t delta;
 		size_t offset;
@@ -60,6 +60,10 @@ vclient_tx_equalizer(struct virtual_client *pvc,
 			delta = total;
 
 		for (x = 0; x != channels; x++) {
+			f_data = pvc->profile->tx_filter_data[x];
+			if (f_data == NULL)
+				continue;
+
 			for (y = 0; y != delta; y++) {
 				pvc->tx_filter_in[x][y + offset] = src[x + y * channels];
 				src[x + y * channels] = pvc->tx_filter_out[x][y + offset];
@@ -68,14 +72,19 @@ vclient_tx_equalizer(struct virtual_client *pvc,
 
 		pvc->tx_filter_offset += delta;
 		total -= delta;
+		src += delta * channels;
 
 		/* check if there is enough data for a new transform */
 		if (pvc->tx_filter_offset == f_size) {
 			for (x = 0; x != channels; x++) {
+			  	f_data = pvc->profile->tx_filter_data[x];
+				if (f_data == NULL)
+					continue;
+
 				/* shift down output */
 				for (y = 0; y != f_size; y++) {
-					pvc->tx_filter_out[y] = pvc->tx_filter_out[y + f_size];
-					pvc->tx_filter_out[y + f_size] = 0;
+					pvc->tx_filter_out[x][y] = pvc->tx_filter_out[x][y + f_size];
+					pvc->tx_filter_out[x][y + f_size] = 0;
 				}
 				/* perform transform */
 				voss_x3_multiply_double(pvc->tx_filter_in[x],
@@ -98,12 +107,13 @@ vclient_rx_equalizer(struct virtual_client *pvc,
 	size_t x;
 
 	f_size = pvc->profile->rx_filter_size;
-	f_data = pvc->profile->rx_filter_data;
 
-	if (f_size == 0 || f_data == NULL || total == 0)
+	if (f_size == 0 || total == 0 || 1)
 		return;
 
 	channels = pvc->channels;
+	total /= channels;
+
 	while (1) {
 		size_t delta;
 		size_t offset;
@@ -116,6 +126,10 @@ vclient_rx_equalizer(struct virtual_client *pvc,
 			delta = total;
 
 		for (x = 0; x != channels; x++) {
+		  	f_data = pvc->profile->rx_filter_data[x];
+			if (f_data == NULL)
+				continue;
+
 			for (y = 0; y != delta; y++) {
 				pvc->rx_filter_in[x][y + offset] = src[x + y * channels];
 				src[x + y * channels] = pvc->rx_filter_out[x][y + offset];
@@ -124,14 +138,19 @@ vclient_rx_equalizer(struct virtual_client *pvc,
 
 		pvc->rx_filter_offset += delta;
 		total -= delta;
+		src += delta * channels;
 
 		/* check if there is enough data for a new transform */
 		if (pvc->rx_filter_offset == f_size) {
 			for (x = 0; x != channels; x++) {
+				f_data = pvc->profile->rx_filter_data[x];
+				if (f_data == NULL)
+					continue;
+
 				/* shift output down */
 				for (y = 0; y != f_size; y++) {
-					pvc->rx_filter_out[y] = pvc->rx_filter_out[y + f_size];
-					pvc->rx_filter_out[y + f_size] = 0;
+					pvc->rx_filter_out[x][y] = pvc->rx_filter_out[x][y + f_size];
+					pvc->rx_filter_out[x][y + f_size] = 0;
 				}
 				/* perform transform */
 				voss_x3_multiply_double(pvc->rx_filter_in[x],
@@ -194,10 +213,13 @@ vclient_eq_free(struct virtual_client *pvc)
 	for (x = 0; x != VMAX_CHAN; x++) {
 		free(pvc->tx_filter_in[x]);
 		pvc->tx_filter_in[x] = NULL;
+
 		free(pvc->rx_filter_in[x]);
 		pvc->rx_filter_in[x] = NULL;
+
 		free(pvc->tx_filter_out[x]);
 		pvc->tx_filter_out[x] = NULL;
+
 		free(pvc->rx_filter_out[x]);
 		pvc->rx_filter_out[x] = NULL;
 	}
