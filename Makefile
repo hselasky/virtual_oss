@@ -71,6 +71,10 @@ LDFLAGS+= -lcuse
 LDFLAGS+= -lcuse4bsd
 .endif
 
+.if defined(HAVE_DEBUG)
+DEBUG_FLAGS=-g -O0 -ferror-limit=-1
+.endif
+
 CFLAGS += -I${LOCALBASE}/include
 LDFLAGS += -L${LIBDIR} ${PTHREAD_LIBS} -lm -lsamplerate
 
