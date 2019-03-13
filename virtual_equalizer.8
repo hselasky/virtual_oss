@@ -97,6 +97,10 @@ To pass only frequencies between 200Hz and 400Hz:
 virtual_oss -B -C 2 -c 2 -S -Q 0 -b 32 -r 48000 -s 8ms -F 80ms -G 80ms \\
     -f /dev/dsp -d dsp.virtual -t vdsp.ctl
 
+# For simplex operation use this:
+virtual_oss -B -C 2 -c 2 -S -Q 0 -b 32 -r 48000 -s 8ms -F 80ms -G 80ms \\
+    -R /dev/null -O /dev/dsp -d dsp.virtual -t vdsp.ctl
+
 cat << EOF | virtual_equalizer -d /dev/vdsp.ctl -w tx_dev -p 0 -c 2
 199 0.0
 200 1.0
