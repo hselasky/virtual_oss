@@ -26,7 +26,7 @@
 # Makefile for virtual_oss
 #
 
-.PATH: . backend_oss backend_bt backend_null
+.PATH: . backend_oss backend_bt backend_null equalizer
 
 VERSION=1.2.1
 PROG=virtual_oss
@@ -59,6 +59,14 @@ LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_bt_speaker
 MAN += virtual_bt_speaker.8
 .endif
 
+.if defined(HAVE_EQUALIZER)
+SRCS += virtual_equalizer.c
+CFLAGS += -DHAVE_EQUALIZER
+LDFLAGS += -lfftw3
+LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_equalizer
+MAN += virtual_equalizer.8
+.endif
+
 .if defined(HAVE_FFMPEG)
 CFLAGS += -DHAVE_FFMPEG
 LDFLAGS += -lavdevice -lavutil -lavcodec -lavresample -lavformat
@@ -84,7 +92,7 @@ help:
 	@echo "Targets are: all, install, clean, package, help"
 
 package: clean
-	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch]
+	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch] equalizer/*.[ch]
 	rm -rf ${PACKAGE}
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}

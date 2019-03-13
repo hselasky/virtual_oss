@@ -1,6 +1,5 @@
 /*-
- * Copyright (c) 2019 Google LLC, written by Richard Kralovic <riso@google.com>
- * All rights reserved.
+ * Copyright (c) 2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,9 +23,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _BT_AUDIO_RECEIVER_H_
-#define	_BT_AUDIO_RECEIVER_H_
+#ifndef _VIRTUAL_UTILS_H_
+#define	_VIRTUAL_UTILS_H_
 
-int	bt_speaker_main(int argc, char **argv);
+int bt_speaker_main(int argc, char **argv);
+int equalizer_main(int argc, char **argv);
 
-#endif					/* _BT_AUDIO_RECEIVER_H_ */
+#endif					/* _VIRTUAL_UTILS_H_ */

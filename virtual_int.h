@@ -266,4 +266,8 @@ extern void vclient_rx_equalizer(struct virtual_client *, int64_t *, size_t);
 extern int vclient_eq_alloc(struct virtual_client *);
 extern void vclient_eq_free(struct virtual_client *);
 
+/* Internal utilities */
+int bt_speaker_main(int argc, char **argv);
+int equalizer_main(int argc, char **argv);
+
 #endif					/* _VIRTUAL_INT_H_ */

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2018 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -46,12 +46,10 @@
 #endif
 #include <pthread.h>
 
+#include "virtual_utils.h"
 #include "virtual_int.h"
 #include "virtual_oss.h"
 #include "virtual_backend.h"
-#ifdef HAVE_BLUETOOTH
-#include "backend_bt/bt_speaker.h"
-#endif
 
 static pthread_mutex_t atomic_mtx;
 static pthread_cond_t atomic_cv;
@@ -2260,26 +2258,33 @@ done:
 	}
 }
 
-#ifdef HAVE_BLUETOOTH
 static int
-is_virtual_bt_speaker(const char *ptr)
+ends_with(const char *ptr, const char *name)
 {
-	const char name[] = "virtual_bt_speaker";
-	int len = strlen(ptr);
+	int plen = strlen(ptr);
+	int nlen = strlen(name);
 
-	if (len < (sizeof(name) - 1))
+	if (plen < nlen)
 		return (0);
-	return (strcmp(ptr + len - sizeof(name) + 1, name) == 0);
+	return (strcmp(ptr + plen - nlen, name) == 0);
 }
-#endif
 
 int
 main(int argc, char **argv)
 {
+	if (argc > 0 && ends_with(argv[0], "virtual_bt_speaker")) {
 #ifdef HAVE_BLUETOOTH
-	if (argc > 0 && is_virtual_bt_speaker(argv[0]))
-		return bt_speaker_main(argc, argv);
+		return (bt_speaker_main(argc, argv));
+#else
+		return (EX_USAGE);
 #endif
+	} else if (argc > 0 && ends_with(argv[0], "virtual_equalizer")) {
+#ifdef HAVE_EQUALIZER
+		return (equalizer_main(argc, argv));
+#else
+		return (EX_USAGE);
+#endif
+	}
 
 	const char *ptrerr;
 

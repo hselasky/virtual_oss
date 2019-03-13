@@ -44,9 +44,10 @@
 #include <bluetooth.h>
 #include <sdp.h>
 
+#include "../virtual_utils.h"
+
 #include "avdtp_signal.h"
 #include "backend_bt.h"
-#include "bt_speaker.h"
 
 static int bt_in_background;
 
