@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd March 3, 2019
+.Dd March 13, 2019
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -98,6 +98,9 @@ Set control device name.
 .It Fl P Ar devname
 Set playback DSP device only.
 Specifying /dev/null is magic and means no playback device.
+.It Fl O Ar devname
+Set playback DSP device only which acts as a master device.
+This option is used in conjunction with -R /dev/null .
 .It Fl R Ar devname
 Set recording DSP device only.
 Specifying /dev/null is magic and means no recording device.

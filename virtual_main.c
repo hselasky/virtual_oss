@@ -463,7 +463,7 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 		if (voss_has_synchronization != 0)
 			error = CUSE_ERR_BUSY;
 		else
-			voss_has_synchronization = 1;
+			voss_has_synchronization++;
 	}
 	if (error == 0)
 		TAILQ_INSERT_TAIL(pvc->profile->pvc_head, pvc, entry);
@@ -495,7 +495,7 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 
 	atomic_lock();
 	if (pvc->profile->synchronized) {
-		voss_has_synchronization = 0;
+		voss_has_synchronization--;
 
 		/* wait for virtual_oss_process(), if any */
 		while (pvc->sync_busy) {
@@ -1594,6 +1594,7 @@ usage(void)
 	fprintf(stderr, "Usage: virtual_oss [options...] [device] \\\n"
 	    "\t" "-C 2 -c 2 -r 48000 -b 16 -s 100.0ms -f /dev/dsp3 \\\n"
 	    "\t" "-P /dev/dsp3 -R /dev/dsp1 \\\n"
+	    "\t" "-O /dev/dsp3 -R /dev/null \\\n"
 	    "\t" "-T /dev/sndstat \\\n"
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d dsp100.0 \\\n"
 	    "\t" "-c 1 -m 0,0 [-w wav.0] -d vdsp.0 \\\n"
@@ -1791,9 +1792,9 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?P:Q:R:ST:B";
+		optstr = "F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
 	else
-		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:P:R:";
+		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
 
 	virtual_cuse_init_profile(&profile, 1);
 
@@ -1905,6 +1906,7 @@ parse_options(int narg, char **pparg, int is_main)
 			}
 			break;
 		case 'f':
+		case 'O':
 		case 'P':
 		case 'R':
 			if (voss_dsp_sample_rate == 0 || voss_dsp_samples == 0)
@@ -1953,12 +1955,15 @@ parse_options(int narg, char **pparg, int is_main)
 				voss_rx_backend_refresh();
 				voss_dsp_rx_refresh = 1;
 			}
-			if (c == 'f' || c == 'P') {
+			if (c == 'f' || c == 'P' || c == 'O') {
 				if (strlen(optarg) > VMAX_STRING - 1)
 					return ("Device name too long");
 				strncpy(voss_dsp_tx_device, optarg, sizeof(voss_dsp_tx_device));
 				voss_tx_backend_refresh();
 				voss_dsp_tx_refresh = 1;
+
+				if (c == 'O' && voss_has_synchronization == 0)
+					voss_has_synchronization++;
 			}
 			break;
 		case 'w':

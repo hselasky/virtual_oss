@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015-2018 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2015-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -170,7 +170,8 @@ oss_rec_delay(struct voss_backend *pbe, int *pdelay)
 static void
 oss_play_delay(struct voss_backend *pbe, int *pdelay)
 {
-	if (ioctl(pbe->fd, SNDCTL_DSP_GETODELAY, pdelay) != 0)
+	if (voss_has_synchronization != 0 ||
+	    ioctl(pbe->fd, SNDCTL_DSP_GETODELAY, pdelay) != 0)
 		*pdelay = -1;
 }
 
