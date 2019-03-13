@@ -199,8 +199,10 @@ equalizer_load(struct Equalizer *e, const char *config)
 
 	for (i = 0; i < N; ++i)
 		sum += fabs(e->fftw_time[i]);
-	if (sum != 0.0)
-		e->fftw_time[i] /= sum;
+	if (sum != 0.0) {
+	  	for (i = 0; i < N; ++i)
+			e->fftw_time[i] /= sum;
+	}
 
 	for (i = 0; i < N; ++i) {
 		message("%.3lf ms: %.10lf\n", 1000.0 * i / e->rate, e->fftw_time[i]);
