@@ -49,6 +49,7 @@
 struct Equalizer {
 	double	rate;
 	int	block_size;
+	int	do_normalize;
 
 	/* (block_size * 2) elements, time domain */
 	double *fftw_time;
@@ -81,13 +82,13 @@ message(const char *fmt,...)
  * only. Currently a Hann window.
  */
 static double
-get_window(double x)
+equalizer_get_window(double x)
 {
 	return (0.5 + 0.5 * cos(M_PI * x));
 }
 
 static int
-load_freq_amps(struct Equalizer *e, const char *config)
+equalizer_load_freq_amps(struct Equalizer *e, const char *config)
 {
 	double prev_f = 0.0;
 	double prev_amp = 1.0;
@@ -95,12 +96,26 @@ load_freq_amps(struct Equalizer *e, const char *config)
 	double next_amp = 1.0;
 	int i;
 
+	if (strncasecmp(config, "normalize", 4) == 0) {
+		while (*config != 0) {
+			if (*config == '\n') {
+				config++;
+				break;
+			}
+			config++;
+		}
+		e->do_normalize = 1;
+	} else {
+		e->do_normalize = 0;
+	}
+
 	for (i = 0; i <= (e->block_size / 2); ++i) {
-		double f = e->rate / e->block_size * i;
+		const double f = (i * e->rate) / e->block_size;
 
 		while (f >= next_f) {
 			prev_f = next_f;
 			prev_amp = next_amp;
+
 			if (*config == 0) {
 				next_f = e->rate;
 				next_amp = prev_amp;
@@ -123,7 +138,7 @@ load_freq_amps(struct Equalizer *e, const char *config)
 		}
 		e->fftw_freq[i] = ((f - prev_f) / (next_f - prev_f)) * (next_amp - prev_amp) + prev_amp;
 	}
-	return 1;
+	return (1);
 }
 
 static void
@@ -146,47 +161,47 @@ equalizer_init(struct Equalizer *e, int rate, int block_size)
 }
 
 static int
-equalizer_load(struct Equalizer *e, const char *config)
+equalizer_load(struct Equalizer *eq, const char *config)
 {
 	int retval = 0;
-	int N = e->block_size;
+	int N = eq->block_size;
 	int buffer_size = sizeof(double) * N;
 	int i;
 
-	memset(e->fftw_freq, 0, buffer_size);
+	memset(eq->fftw_freq, 0, buffer_size);
 
 	message("\n\nReloading amplification specifications:\n%s\n", config);
 
-	if (!load_freq_amps(e, config))
+	if (!equalizer_load_freq_amps(eq, config))
 		goto end;
 
 	double *requested_freq = (double *)malloc(buffer_size);
 
-	memcpy(requested_freq, e->fftw_freq, buffer_size);
+	memcpy(requested_freq, eq->fftw_freq, buffer_size);
 
-	fftw_execute(e->inverse);
+	fftw_execute(eq->inverse);
 
 	/* Multiply by symmetric window and shift */
 	for (i = 0; i < (N / 2); ++i) {
-		double weight = get_window(i / (double)(N / 2)) / N;
+		double weight = equalizer_get_window(i / (double)(N / 2)) / N;
 
-		e->fftw_time[N / 2 + i] = e->fftw_time[i] * weight;
+		eq->fftw_time[N / 2 + i] = eq->fftw_time[i] * weight;
 	}
 	for (i = (N / 2 - 1); i > 0; --i) {
-		e->fftw_time[i] = e->fftw_time[N - i];
+		eq->fftw_time[i] = eq->fftw_time[N - i];
 	}
-	e->fftw_time[0] = 0;
+	eq->fftw_time[0] = 0;
 
-	fftw_execute(e->forward);
+	fftw_execute(eq->forward);
 	for (i = 0; i < N; ++i) {
-		e->fftw_freq[i] /= (double)N;
+		eq->fftw_freq[i] /= (double)N;
 	}
 
 	/* Debug output */
 	for (i = 0; i <= (N / 2); ++i) {
-		double f = (e->rate / N) * i;
-		double a = sqrt(pow(e->fftw_freq[i], 2.0) +
-		    ((i > 0 && i < N / 2) ? pow(e->fftw_freq[N - i], 2.0) : 0));
+		double f = (eq->rate / N) * i;
+		double a = sqrt(pow(eq->fftw_freq[i], 2.0) +
+		    ((i > 0 && i < N / 2) ? pow(eq->fftw_freq[N - i], 2.0) : 0));
 
 		a *= N;
 		double r = requested_freq[i];
@@ -194,18 +209,20 @@ equalizer_load(struct Equalizer *e, const char *config)
 		message("%3.1lf Hz: requested %2.2lf, got %2.7lf (log10 = %.2lf), %3.7lfdb\n",
 		    f, r, a, log(a) / log(10), (log(a / r) / log(10.0)) * 10.0);
 	}
-	/* Normalize FIR filter */
-	double sum = 0;
 
-	for (i = 0; i < N; ++i)
-		sum += fabs(e->fftw_time[i]);
-	if (sum != 0.0) {
-	  	for (i = 0; i < N; ++i)
-			e->fftw_time[i] /= sum;
+	/* Normalize FIR filter, if any */
+	if (eq->do_normalize) {
+		double sum = 0;
+
+		for (i = 0; i < N; ++i)
+			sum += fabs(eq->fftw_time[i]);
+		if (sum != 0.0) {
+			for (i = 0; i < N; ++i)
+				eq->fftw_time[i] /= sum;
+		}
 	}
-
 	for (i = 0; i < N; ++i) {
-		message("%.3lf ms: %.10lf\n", 1000.0 * i / e->rate, e->fftw_time[i]);
+		message("%.3lf ms: %.10lf\n", 1000.0 * i / eq->rate, eq->fftw_time[i]);
 	}
 
 	/* End of debug */
@@ -218,13 +235,13 @@ end:
 }
 
 static void
-equalizer_done(struct Equalizer *e)
+equalizer_done(struct Equalizer *eq)
 {
 
-	fftw_destroy_plan(e->forward);
-	fftw_destroy_plan(e->inverse);
-	free(e->fftw_time);
-	free(e->fftw_freq);
+	fftw_destroy_plan(eq->forward);
+	fftw_destroy_plan(eq->inverse);
+	free(eq->fftw_time);
+	free(eq->fftw_freq);
 }
 
 static struct option equalizer_opts[] = {

@@ -101,12 +101,23 @@ virtual_oss -B -C 2 -c 2 -S -Q 0 -b 32 -r 48000 -s 8ms -F 80ms -G 80ms \\
 virtual_oss -B -C 2 -c 2 -S -Q 0 -b 32 -r 48000 -s 8ms -F 80ms -G 80ms \\
     -R /dev/null -O /dev/dsp -d dsp.virtual -t vdsp.ctl
 
+# Load normalized filter points to avoid sample value overflow
+cat << EOF | virtual_equalizer -d /dev/vdsp.ctl -w tx_dev -p 0 -c 2
+NORMALIZE
+199 0.0
+200 1.0
+400 1.0
+401 0.0
+EOF
+
+# Load FIR filter based on sine frequency points
 cat << EOF | virtual_equalizer -d /dev/vdsp.ctl -w tx_dev -p 0 -c 2
 199 0.0
 200 1.0
 400 1.0
 401 0.0
 EOF
+
 .Ed
 .Pp
 .Sh FILES
