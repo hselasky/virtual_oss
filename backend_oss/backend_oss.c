@@ -43,6 +43,7 @@ oss_set_format(int fd, int *format)
 {
 	int value[6];
 	int error;
+	int fmt;
 	int i;
 
 	value[0] = *format & VPREFERRED_SNE_AFMT;
@@ -53,11 +54,13 @@ oss_set_format(int fd, int *format)
 	value[5] = *format & VPREFERRED_UBE_AFMT;
 
 	for (i = 0; i != 6; i++) {
-		if (value[i] == 0)
+		fmt = value[i];
+		if (fmt == 0)
 			continue;
-		error = ioctl(fd, SNDCTL_DSP_SETFMT, value + i);
-		if (error == 0) {
-			*format = value[i];
+		error = ioctl(fd, SNDCTL_DSP_SETFMT, &fmt);
+		/* make sure we got the format we asked for */
+		if (error == 0 && fmt == value[i]) {
+			*format = fmt;
 			return (0);
 		}
 	}
