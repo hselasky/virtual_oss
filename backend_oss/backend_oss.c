@@ -151,7 +151,8 @@ oss_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 	struct pollfd fds = { .fd = pbe->fd, .events = POLLIN | POLLRDNORM };
 	int err;
 
-	err = poll(&fds, 1, INFTIM);
+	/* wait at maximum 2 seconds for data, else something is wrong */
+	err = poll(&fds, 1, 2000);
 	if (err < 1)
 		return (-1);
 	return (read(pbe->fd, ptr, len));
