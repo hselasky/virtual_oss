@@ -179,7 +179,7 @@ vclient_eq_alloc(struct virtual_client *pvc)
 			pvc->tx_filter_in[x] =
 			    malloc(sizeof(pvc->tx_filter_in[x][0]) * size);
 			pvc->tx_filter_out[x] =
-			    malloc(sizeof(pvc->tx_filter_out[x][0]) * 2 * size);
+			    calloc(2 * size, sizeof(pvc->tx_filter_out[x][0]));
 			if (pvc->tx_filter_in[x] == NULL ||
 			    pvc->tx_filter_out[x] == NULL)
 				goto error;
@@ -189,7 +189,7 @@ vclient_eq_alloc(struct virtual_client *pvc)
 			pvc->rx_filter_in[x] =
 			    malloc(sizeof(pvc->rx_filter_in[x][0]) * size);
 			pvc->rx_filter_out[x] =
-			    malloc(sizeof(pvc->rx_filter_out[x][0]) * 2 * size);
+			    calloc(2 * size, sizeof(pvc->rx_filter_out[x][0]));
 			if (pvc->rx_filter_in[x] == NULL ||
 			    pvc->rx_filter_out[x] == NULL)
 				goto error;
