@@ -28,7 +28,7 @@
 
 .PATH: . backend_oss backend_bt backend_null equalizer
 
-VERSION=1.2.1
+VERSION=1.2.2
 PROG=virtual_oss
 MAN=virtual_oss.8
 PACKAGE=${PROG}-${VERSION}
@@ -52,9 +52,14 @@ backend_oss.c \
 backend_null.c
 
 .if defined(HAVE_BLUETOOTH)
-SRCS += backend_bt.c avdtp.c sbc_encode.c bt_speaker.c
+SRCS += backend_bt.c avdtp.c sbc_encode.c
 CFLAGS += -DHAVE_BLUETOOTH
 LDFLAGS += -lbluetooth -lsdp
+.endif
+
+.if defined(HAVE_BLUETOOTH) && defined(HAVE_BLUETOOTH_SPEAKER)
+SRCS += bt_speaker.c
+CFLAGS += -DHAVE_BLUETOOTH_SPEAKER
 LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_bt_speaker
 MAN += virtual_bt_speaker.8
 .endif

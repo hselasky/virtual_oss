@@ -2278,7 +2278,7 @@ int
 main(int argc, char **argv)
 {
 	if (argc > 0 && ends_with(argv[0], "virtual_bt_speaker")) {
-#ifdef HAVE_BLUETOOTH
+#ifdef HAVE_BLUETOOTH_SPEAKER
 		return (bt_speaker_main(argc, argv));
 #else
 		return (EX_USAGE);
