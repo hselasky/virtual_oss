@@ -41,15 +41,15 @@
 struct voss_x3_input_double {
 	double	a;
 	double	b;
-	size_t	toggle;
-} __aligned(32);
+} __aligned(16);
 
 /*
  * <input size> = "stride"
  * <output size> = 2 * "stride"
  */
 static void
-voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low, double *ptr_high, const size_t stride)
+voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low, double *ptr_high,
+    const size_t stride, const uint8_t toggle)
 {
 	size_t x;
 	size_t y;
@@ -57,9 +57,7 @@ voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low,
 	if (stride >= (1UL << VOSS_X3_LOG2_COMBA)) {
 		const size_t strideh = stride >> 1;
 
-		input->toggle ^= stride;
-
-		if (input->toggle & stride) {
+		if (toggle) {
 
 			/* inverse step */
 			for (x = 0; x != strideh; x++) {
@@ -74,12 +72,12 @@ voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low,
 				ptr_high[x] = a + b + c + d;
 			}
 
-			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh);
+			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh, toggle);
 
 			for (x = 0; x != strideh; x++)
 				ptr_low[x + strideh] = -ptr_low[x + strideh];
 
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh);
+			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh, toggle);
 
 			/* forward step */
 			for (x = 0; x != strideh; x++) {
@@ -97,9 +95,9 @@ voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low,
 				input[x + strideh].b += input[x].b;
 			}
 
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh);
+			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh, !toggle);
 		} else {
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh);
+			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh, !toggle);
 
 			/* inverse step */
 			for (x = 0; x != strideh; x++) {
@@ -117,12 +115,12 @@ voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low,
 				input[x + strideh].b -= input[x].b;
 			}
 
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh);
+			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh, toggle);
 
 			for (x = 0; x != strideh; x++)
 				ptr_low[x + strideh] = -ptr_low[x + strideh];
 
-			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh);
+			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh, toggle);
 
 			/* forward step */
 			for (x = 0; x != strideh; x++) {
@@ -170,9 +168,8 @@ voss_x3_multiply_double(const int64_t *va, const double *vb, double *pc, const s
 	for (x = 0; x != max; x++) {
 		input[x].a = va[x];
 		input[x].b = vb[x];
-		input[x].toggle = 0;
 	}
 
 	/* do multiplication */
-	voss_x3_multiply_sub_double(input, pc, pc + max, max);
+	voss_x3_multiply_sub_double(input, pc, pc + max, max, 1);
 }
