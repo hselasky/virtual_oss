@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2017 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2017-2019 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -49,7 +49,7 @@ struct voss_x3_input_double {
  */
 static void
 voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low, double *ptr_high,
-    const size_t stride, const uint8_t toggle)
+    const size_t stride)
 {
 	size_t x;
 	size_t y;
@@ -57,84 +57,43 @@ voss_x3_multiply_sub_double(struct voss_x3_input_double *input, double *ptr_low,
 	if (stride >= (1UL << VOSS_X3_LOG2_COMBA)) {
 		const size_t strideh = stride >> 1;
 
-		if (toggle) {
+		/* inverse step */
+		for (x = 0; x != strideh; x++) {
+			double a, b, c, d;
 
-			/* inverse step */
-			for (x = 0; x != strideh; x++) {
-				double a, b, c, d;
+			a = ptr_low[x];
+			b = ptr_low[x + strideh];
+			c = ptr_high[x];
+			d = ptr_high[x + strideh];
 
-				a = ptr_low[x];
-				b = ptr_low[x + strideh];
-				c = ptr_high[x];
-				d = ptr_high[x + strideh];
-
-				ptr_low[x + strideh] = a + b;
-				ptr_high[x] = a + b + c + d;
-			}
-
-			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh, toggle);
-
-			for (x = 0; x != strideh; x++)
-				ptr_low[x + strideh] = -ptr_low[x + strideh];
-
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh, toggle);
-
-			/* forward step */
-			for (x = 0; x != strideh; x++) {
-				double a, b, c, d;
-
-				a = ptr_low[x];
-				b = ptr_low[x + strideh];
-				c = ptr_high[x];
-				d = ptr_high[x + strideh];
-
-				ptr_low[x + strideh] = -a - b;
-				ptr_high[x] = c + b - d;
-
-				input[x + strideh].a += input[x].a;
-				input[x + strideh].b += input[x].b;
-			}
-
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh, !toggle);
-		} else {
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh, !toggle);
-
-			/* inverse step */
-			for (x = 0; x != strideh; x++) {
-				double a, b, c, d;
-
-				a = ptr_low[x];
-				b = ptr_low[x + strideh];
-				c = ptr_high[x];
-				d = ptr_high[x + strideh];
-
-				ptr_low[x + strideh] = -a - b;
-				ptr_high[x] = a + b + c + d;
-
-				input[x + strideh].a -= input[x].a;
-				input[x + strideh].b -= input[x].b;
-			}
-
-			voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh, toggle);
-
-			for (x = 0; x != strideh; x++)
-				ptr_low[x + strideh] = -ptr_low[x + strideh];
-
-			voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh, toggle);
-
-			/* forward step */
-			for (x = 0; x != strideh; x++) {
-				double a, b, c, d;
-
-				a = ptr_low[x];
-				b = ptr_low[x + strideh];
-				c = ptr_high[x];
-				d = ptr_high[x + strideh];
-
-				ptr_low[x + strideh] = b - a;
-				ptr_high[x] = c - b - d;
-			}
+			ptr_low[x + strideh] = a + b;
+			ptr_high[x] = a + b + c + d;
 		}
+
+		voss_x3_multiply_sub_double(input, ptr_low, ptr_low + strideh, strideh);
+
+		for (x = 0; x != strideh; x++)
+			ptr_low[x + strideh] = -ptr_low[x + strideh];
+
+		voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high + strideh, strideh);
+
+		/* forward step */
+		for (x = 0; x != strideh; x++) {
+			double a, b, c, d;
+
+			a = ptr_low[x];
+			b = ptr_low[x + strideh];
+			c = ptr_high[x];
+			d = ptr_high[x + strideh];
+
+			ptr_low[x + strideh] = -a - b;
+			ptr_high[x] = c + b - d;
+
+			input[x + strideh].a += input[x].a;
+			input[x + strideh].b += input[x].b;
+		}
+
+		voss_x3_multiply_sub_double(input + strideh, ptr_low + strideh, ptr_high, strideh);
 	} else {
 		for (x = 0; x != stride; x++) {
 			double value = input[x].a;
@@ -171,5 +130,5 @@ voss_x3_multiply_double(const int64_t *va, const double *vb, double *pc, const s
 	}
 
 	/* do multiplication */
-	voss_x3_multiply_sub_double(input, pc, pc + max, max, 1);
+	voss_x3_multiply_sub_double(input, pc, pc + max, max);
 }
