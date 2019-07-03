@@ -413,7 +413,8 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	if (vclient_eq_alloc(pvc))
 		goto err_4;
 
-	pvc->start_block = voss_dsp_blocks;
+	pvc->rx_samples = 0;
+	pvc->tx_samples = 0;
 	pvc->last_ts = virtual_oss_timestamp();
 
 	return (0);
@@ -1355,20 +1356,32 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		pvc->tx_volume = ((data.val & 0xFF) * 128) / 100;
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
+		memset(&data.oss_count, 0, sizeof(data.oss_count));
+		/* compute input samples */
+		data.oss_count.samples =
+		    vclient_scale(pvc->rx_samples, pvc->sample_rate, voss_dsp_sample_rate);
+		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		/* compute input/output samples */
+		/* compute input samples */
 		data.oss_count.samples =
-		    vclient_scale((voss_dsp_blocks - pvc->start_block) * voss_dsp_samples,
-		    pvc->sample_rate, voss_dsp_sample_rate) * pvc->channels;
+		    vclient_scale(pvc->tx_samples, pvc->sample_rate, voss_dsp_sample_rate);
 		break;
-	case SNDCTL_DSP_GETOPTR:
 	case SNDCTL_DSP_GETIPTR:
 		memset(&data.oss_count_info, 0, sizeof(data.oss_count_info));
-		/* compute input/output bytes */
+		/* compute input bytes */
 		bytes =
-		    vclient_scale((voss_dsp_blocks - pvc->start_block) * voss_dsp_samples,
-		    pvc->sample_rate, voss_dsp_sample_rate) * pvc->channels *
+		    vclient_scale(pvc->rx_samples, pvc->sample_rate, voss_dsp_sample_rate) *
+		    vclient_sample_bytes(pvc);
+		data.oss_count_info.bytes = bytes;
+		data.oss_count_info.blocks = bytes / pvc->buffer_size;
+		data.oss_count_info.ptr = bytes;
+		break;
+	case SNDCTL_DSP_GETOPTR:
+		memset(&data.oss_count_info, 0, sizeof(data.oss_count_info));
+		/* compute output bytes */
+		bytes =
+		    vclient_scale(pvc->tx_samples, pvc->sample_rate, voss_dsp_sample_rate) *
 		    vclient_sample_bytes(pvc);
 		data.oss_count_info.bytes = bytes;
 		data.oss_count_info.blocks = bytes / pvc->buffer_size;
@@ -1537,7 +1550,6 @@ uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
 uint32_t voss_dsp_rx_fmt;
 uint32_t voss_dsp_tx_fmt;
-uint64_t voss_dsp_blocks;
 uint8_t	voss_libsamplerate_enable;
 uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;

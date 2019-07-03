@@ -250,8 +250,6 @@ virtual_oss_process(void *arg)
 
 			atomic_lock();
 
-			voss_dsp_blocks++;
-
 			if (TAILQ_FIRST(&virtual_monitor_input) != NULL) {
 				memcpy(buffer_monitor, buffer_data,
 				    8 * samples * src_chans);
@@ -324,6 +322,8 @@ virtual_oss_process(void *arg)
 				if (pvc->rx_enabled == 0)
 					continue;
 
+				pvc->rx_samples += samples * dst_chans;
+
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    buffer_temp, samples * dst_chans);
@@ -359,6 +359,8 @@ virtual_oss_process(void *arg)
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
 				    buffer_data, samples * dst_chans) == 0)
 					continue;
+
+				pvc->tx_samples += samples * dst_chans;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 
@@ -434,6 +436,8 @@ virtual_oss_process(void *arg)
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
 				    buffer_data, samples * dst_chans) == 0)
 					continue;
+
+				pvc->tx_samples += samples * dst_chans;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
 
@@ -677,6 +681,8 @@ virtual_oss_process(void *arg)
 				if (pvc->rx_enabled == 0)
 					continue;
 
+				pvc->rx_samples += samples * dst_chans;
+				
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    buffer_monitor, samples * dst_chans);

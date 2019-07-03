@@ -138,7 +138,8 @@ struct virtual_client {
 	vresample_t rx_resample;
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
-	uint64_t start_block;
+	uint64_t rx_samples;
+	uint64_t tx_samples;
 	uint64_t last_ts;
 	uint32_t buffer_frags;
 	uint32_t buffer_size;
@@ -195,7 +196,6 @@ extern uint32_t voss_dsp_rx_fmt;
 extern uint32_t voss_dsp_tx_fmt;
 extern uint8_t voss_libsamplerate_enable;
 extern uint8_t voss_libsamplerate_quality;
-extern uint64_t voss_dsp_blocks;
 extern int voss_is_recording;
 extern int voss_has_synchronization;
 extern char voss_dsp_rx_device[VMAX_STRING];
