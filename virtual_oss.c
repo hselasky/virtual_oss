@@ -260,8 +260,6 @@ virtual_oss_process(void *arg)
 			 */
 			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
 
-				/* update timestamp */
-				pvc->last_ts = last_timestamp;
 				dst_chans = pvc->channels;
 
 				if (dst_chans > src_chans)
@@ -322,6 +320,7 @@ virtual_oss_process(void *arg)
 				if (pvc->rx_enabled == 0)
 					continue;
 
+				pvc->rx_timestamp = last_timestamp;
 				pvc->rx_samples += samples * dst_chans;
 
 				/* store data into ring buffer */
@@ -360,6 +359,7 @@ virtual_oss_process(void *arg)
 				    buffer_data, samples * dst_chans) == 0)
 					continue;
 
+				pvc->tx_timestamp = last_timestamp;
 				pvc->tx_samples += samples * dst_chans;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
@@ -424,9 +424,6 @@ virtual_oss_process(void *arg)
 			 */
 			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
 
-				/* update timestamp */
-				pvc->last_ts = last_timestamp;
-
 				if (pvc->tx_enabled == 0)
 					continue;
 
@@ -437,6 +434,7 @@ virtual_oss_process(void *arg)
 				    buffer_data, samples * dst_chans) == 0)
 					continue;
 
+				pvc->tx_timestamp = last_timestamp;
 				pvc->tx_samples += samples * dst_chans;
 
 				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
@@ -681,6 +679,7 @@ virtual_oss_process(void *arg)
 				if (pvc->rx_enabled == 0)
 					continue;
 
+				pvc->rx_timestamp = last_timestamp;
 				pvc->rx_samples += samples * dst_chans;
 				
 				/* store data into ring buffer */

@@ -147,22 +147,36 @@ vclient_bufsize_scaled(vclient_t *pvc)
 	return (pvc->channels * samples_scaled * vclient_sample_bytes(pvc));
 }
 
-static uint32_t
-vclient_bufsize_consumed(vclient_t *pvc)
+static uint64_t
+vclient_bufsize_consumed(vclient_t *pvc, uint64_t ts)
 {
 	int64_t delta;
-	int32_t samples_scaled;
-	int32_t retval;
+	int64_t samples_scaled;
+	int64_t retval;
 
-	delta = virtual_oss_timestamp() - pvc->last_ts;
+	delta = virtual_oss_timestamp() - ts;
 	if (delta < 0)
 		delta = 0;
 	samples_scaled = (delta * (uint64_t)pvc->sample_rate) / 1000000000ULL;
 	if (samples_scaled < 0)
 		samples_scaled = 0;
-	else if (samples_scaled > (int32_t)voss_dsp_samples)
-		samples_scaled = (int32_t)voss_dsp_samples;
 	retval = pvc->channels * samples_scaled * vclient_sample_bytes(pvc);
+	if (retval < 0)
+		retval = 0;
+	return (retval);
+}
+
+/*
+ * VLC and some other audio player use this value for jitter
+ * computations and expect it to be very accurate. VirtualOSS is block
+ * based and does not have sample accuracy. Use the system clock to
+ * update this value as we go along instead:
+ */
+static uint32_t
+vclient_output_delay_adjusted(vclient_t *pvc)
+{
+	int64_t retval = vclient_output_delay(pvc) -
+	    vclient_bufsize_consumed(pvc, pvc->tx_timestamp);
 	if (retval < 0)
 		retval = 0;
 	return (retval);
@@ -325,6 +339,7 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	size_t bufsize_min;
 	size_t mod_internal;
 	size_t mod;
+	uint64_t ts;
 	int bufsize;
 
 	/* check we are not busy */
@@ -413,9 +428,12 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	if (vclient_eq_alloc(pvc))
 		goto err_4;
 
+	ts = virtual_oss_timestamp();
+
 	pvc->rx_samples = 0;
 	pvc->tx_samples = 0;
-	pvc->last_ts = virtual_oss_timestamp();
+	pvc->tx_timestamp = ts;
+	pvc->rx_timestamp = ts;
 
 	return (0);
 
@@ -1290,11 +1308,18 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		memset(&data.buf_info, 0, sizeof(data.buf_info));
 		data.buf_info.fragsize = pvc->buffer_size;
 		data.buf_info.fragstotal = pvc->buffer_frags;
-		temp = vclient_output_delay(pvc) / pvc->buffer_size;
-		if (temp > data.buf_info.fragstotal)
-			temp = data.buf_info.fragstotal;
-		data.buf_info.fragments = pvc->buffer_frags - temp;
-		data.buf_info.bytes = temp * pvc->buffer_size;
+		bytes = (pvc->buffer_size * pvc->buffer_frags);
+		temp = vclient_output_delay(pvc);
+		if (temp >= bytes) {
+			/* buffer is full */
+			data.buf_info.fragments = 0;
+			data.buf_info.bytes = 0;
+		} else {
+			/* buffer is not full */
+			bytes -= temp;
+			data.buf_info.fragments = bytes / pvc->buffer_size;
+			data.buf_info.bytes = bytes;
+		}
 		break;
 	case SNDCTL_DSP_GETCAPS:
 		data.val = PCM_CAP_REALTIME | PCM_CAP_DUPLEX |
@@ -1327,18 +1352,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 			data.val |= PCM_ENABLE_OUTPUT;
 		break;
 	case SNDCTL_DSP_GETODELAY:
-		data.val = vclient_output_delay(pvc);
-
-		/*
-		 * VLC and some other audio player use this value for
-		 * jitter computations and expect it to be very
-		 * accurate. VirtualOSS is block based and does not
-		 * have sample accuracy. Use the system clock to
-		 * update this value as we go along instead:
-		 */
-		data.val -= vclient_bufsize_consumed(pvc);
-		if (data.val < 0)
-			data.val = 0;
+		data.val = vclient_output_delay_adjusted(pvc);
 		break;
 	case SNDCTL_DSP_POST:
 		break;

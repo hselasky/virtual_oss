@@ -139,8 +139,9 @@ struct virtual_client {
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
 	uint64_t rx_samples;
+	uint64_t rx_timestamp;
 	uint64_t tx_samples;
-	uint64_t last_ts;
+	uint64_t tx_timestamp;
 	uint32_t buffer_frags;
 	uint32_t buffer_size;
 	uint32_t rec_delay;
