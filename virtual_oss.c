@@ -741,7 +741,9 @@ virtual_oss_process(void *arg)
 				if (len <= 0)
 					break;
 			}
-			if (len <= 0)
+
+			/* check for error only */
+			if (len < 0)
 				break;
 		}
 	}
