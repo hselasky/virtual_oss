@@ -1239,6 +1239,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		    (1 << (data.val & 0xFFFF)), (data.val >> 16), 0, 0, 0);
 		break;
 	case SNDCTL_DSP_RESET:
+		error = vclient_setup_buffers(pvc, 0, 0, 0, 0, 0);
 		break;
 	case SNDCTL_DSP_SYNC:
 		break;
