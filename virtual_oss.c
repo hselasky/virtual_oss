@@ -24,6 +24,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -161,6 +162,8 @@ virtual_oss_process(void *arg)
 	int64_t fmt_max;
 	uint8_t fmt_limit[VMAX_CHAN];
 
+	bool need_delay = false;
+	
 	buffer_dsp_max_size = voss_dsp_samples *
 	    voss_dsp_max_channels * (voss_dsp_bits / 8);
 	buffer_dsp_half_size = (voss_dsp_samples / 2) *
@@ -179,7 +182,8 @@ virtual_oss_process(void *arg)
 		rx_be->close(rx_be);
 		tx_be->close(tx_be);
 
-		sleep(2);
+		if (need_delay)
+			sleep(2);
 
 		voss_dsp_rx_refresh = 0;
 		voss_dsp_tx_refresh = 0;
@@ -191,8 +195,10 @@ virtual_oss_process(void *arg)
 		rx_chn = voss_dsp_max_channels;
 
 		if (rx_be->open(rx_be, voss_dsp_rx_device, voss_dsp_sample_rate,
-		    buffer_dsp_half_size, &rx_chn, &rx_fmt) < 0)
+		    buffer_dsp_half_size, &rx_chn, &rx_fmt) < 0) {
+			need_delay = true;
 			continue;
+		}
 
 		buffer_dsp_rx_sample_size = rx_chn * (voss_dsp_bits / 8);
 		buffer_dsp_rx_size = voss_dsp_samples * buffer_dsp_rx_sample_size;
@@ -200,8 +206,10 @@ virtual_oss_process(void *arg)
 		tx_fmt = voss_dsp_tx_fmt;
 		tx_chn = voss_dsp_max_channels;
 		if (tx_be->open(tx_be, voss_dsp_tx_device, voss_dsp_sample_rate,
-		    buffer_dsp_max_size, &tx_chn, &tx_fmt) < 0)
+		    buffer_dsp_max_size, &tx_chn, &tx_fmt) < 0) {
+			need_delay = true;
 			continue;
+		}
 
 		buffer_dsp_tx_size = voss_dsp_samples *
 		    tx_chn * (voss_dsp_bits / 8);
@@ -210,9 +218,10 @@ virtual_oss_process(void *arg)
 			uint64_t delta_time;
 
 			/* Check if DSP device should be re-opened */
-			if (voss_dsp_rx_refresh || voss_dsp_tx_refresh)
+			if (voss_dsp_rx_refresh || voss_dsp_tx_refresh) {
+				need_delay = false;
 				break;
-
+			}
 			delta_time = nice_timeout - virtual_oss_timestamp();
 
 			/* Don't service more than 2x sample rate */
@@ -226,10 +235,10 @@ virtual_oss_process(void *arg)
 
 			/* Read in samples */
 			len = rx_be->transfer(rx_be, buffer_dsp, buffer_dsp_rx_size);
-			if (len < 0)
+			if (len < 0 || (len % buffer_dsp_rx_sample_size) != 0) {
+				need_delay = true;
 				break;
-			if (len % buffer_dsp_rx_sample_size)
-				break;
+			}
 			if (len == 0)
 				continue;
 
@@ -743,8 +752,10 @@ virtual_oss_process(void *arg)
 			}
 
 			/* check for error only */
-			if (len < 0)
+			if (len < 0) {
+				need_delay = true;
 				break;
+			}
 		}
 	}
 	return (NULL);
