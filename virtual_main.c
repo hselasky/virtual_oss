@@ -1231,12 +1231,32 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.val = pvc->buffer_size;
 		break;
 	case SNDCTL_DSP_SETFRAGMENT:
-		if ((data.val & 0xFFFF) < 4 || (data.val & 0xFFFF) > 24) {
-			error = CUSE_ERR_INVALID;
-			break;
+		if ((data.val & 0xFFFF) < 4) {
+			/* need at least 16 bytes of buffer */
+			data.val &= ~0xFFFF;
+			data.val |= 4;
+		} else if ((data.val & 0xFFFF) > 24) {
+			/* no more than 16MBytes of buffer */
+			data.val &= ~0xFFFF;
+			data.val |= 24;
 		}
 		error = vclient_setup_buffers(pvc,
 		    (1 << (data.val & 0xFFFF)), (data.val >> 16), 0, 0, 0);
+		if (error) {
+			/* fallback to defaults */
+			pvc->buffer_size_set = 0;
+			pvc->buffer_frags_set = 0;
+			error = vclient_setup_buffers(pvc, 0, 0, 0, 0, 0);
+			if (error)
+				break;
+			/* figure out log2() of actual buffer size */
+			for (data.val = 0;
+			     data.val < 24 && (1U << data.val) < pvc->buffer_size;
+			     data.val++)
+				;
+			/* or in the actual number of fragments */
+			data.val |= (pvc->buffer_frags << 16);
+		}
 		break;
 	case SNDCTL_DSP_RESET:
 		error = vclient_setup_buffers(pvc, 0, 0, 0, 0, 0);
