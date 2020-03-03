@@ -395,7 +395,7 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 		return (CUSE_ERR_INVALID);
 	if ((pvc->buffer_size * pvc->buffer_frags) >= (128 * 1024 * 1024))
 		return (CUSE_ERR_INVALID);
-	if (pvc->channels <= 0 || channels > pvc->profile->channels)
+	if (pvc->channels <= 0 || pvc->channels > pvc->profile->channels)
 		return (CUSE_ERR_INVALID);
 
 	/* get buffer sizes */
