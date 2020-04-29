@@ -1220,7 +1220,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.val = vclient_input_delay(pvc);
 		break;
 	case FIONWRITE:
-		data.val = vring_total_write_len(&pvc->tx_ring[1]);
+		data.val = vring_total_read_len(&pvc->tx_ring[1]);
 		break;
 	case FIOASYNC:
 	case SNDCTL_DSP_NONBLOCK:
