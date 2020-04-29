@@ -26,7 +26,7 @@
 # Makefile for virtual_oss
 #
 
-.PATH: . backend_oss backend_bt backend_null equalizer
+.PATH: . backend_oss backend_bt backend_null equalizer frontend_http
 
 VERSION=1.2.6
 PROG=virtual_oss
@@ -75,6 +75,11 @@ MAN += virtual_equalizer.8
 .if defined(HAVE_FFMPEG)
 CFLAGS += -DHAVE_FFMPEG
 LDFLAGS += -lavdevice -lavutil -lavcodec -lavresample -lavformat
+.endif
+
+.if defined(HAVE_HTTPD)
+SRCS += virtual_httpd.c
+CFLAGS += -DHAVE_HTTPD
 .endif
 
 .if defined(HAVE_CUSE)

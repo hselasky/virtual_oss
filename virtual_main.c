@@ -274,7 +274,7 @@ error:
 	return (CUSE_ERR_NO_MEMORY);
 }
 
-static void
+void
 vclient_free(vclient_t *pvc)
 {
 	vresample_free(&pvc->rx_resample);
@@ -292,7 +292,7 @@ vclient_free(vclient_t *pvc)
 	free(pvc);
 }
 
-static vclient_t *
+vclient_t *
 vclient_alloc(void)
 {
 	vclient_t *pvc;
@@ -309,7 +309,7 @@ vclient_alloc(void)
 	return (pvc);
 }
 
-static int
+int
 vclient_get_default_fmt(vprofile_t *pvp)
 {
 	int retval;
@@ -331,7 +331,7 @@ vclient_get_default_fmt(vprofile_t *pvp)
 	return (retval);
 }
 
-static int
+int
 vclient_setup_buffers(vclient_t *pvc, int size, int frags,
     int channels, int format, int sample_rate)
 {
@@ -1672,6 +1672,11 @@ usage(void)
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-F <rx_filter_samples> or <milliseconds>ms \\\n"
 	    "\t" "-G <tx_filter_samples> or <milliseconds>ms \\\n"
+#ifdef HAVE_HTTPD
+	    "\t" "-N <max HTTP connections, default is 1> \\\n"
+	    "\t" "-H <bind HTTP server to this host> \\\n"
+	    "\t" "-o <bind HTTP server to this port, default is 80> \\\n"
+#endif
 	    "\t" "-t vdsp.ctl \n"
 	    "\t" "Left channel = 0\n"
 	    "\t" "Right channel = 1\n"
@@ -1783,8 +1788,17 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	/* need to set new filter sizes */
 	pvp->rx_filter_size = 0;
 	pvp->tx_filter_size = 0;
-	
+
+	/* need to specify new HTTP parameters next time */
+	pvp->http.host = NULL;
+	pvp->http.port = NULL;
+	pvp->http.nfds = 0;
+
+#ifdef HAVE_HTTPD
+	return (voss_httpd_start(ptr));
+#else
 	return (NULL);
+#endif
 }
 
 static void
@@ -1842,7 +1856,7 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
+		optstr = "N:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
 	else
 		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
 
@@ -2254,6 +2268,21 @@ parse_options(int narg, char **pparg, int is_main)
 			if (profile.tx_filter_size > VIRTUAL_OSS_FILTER_MAX)
 				return ("Invalid -F parameter is out of range");
 			break;
+#ifdef HAVE_HTTPD
+		case 'N':
+			profile.http.nfds = atoi(optarg);
+			break;
+		case 'H':
+			profile.http.host = optarg;
+			if (profile.http.port == NULL)
+				profile.http.port = "80";
+			if (profile.http.nfds == 0)
+				profile.http.nfds = 1;
+			break;
+		case 'o':
+			profile.http.port = optarg;
+			break;
+#endif
 		default:
 			if (is_main)
 				usage();

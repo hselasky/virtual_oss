@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -109,6 +109,12 @@ struct virtual_profile {
 	uint8_t synchronized;
 	uint32_t rec_delay;
 	int fd_sta;
+	struct {
+		const char * host;
+		const char * port;
+		volatile int * fds;
+		size_t nfds;
+	} http;
 };
 
 struct virtual_ring {
@@ -222,6 +228,13 @@ extern size_t vring_write_linear(struct virtual_ring *, const uint8_t *, size_t)
 extern size_t vring_read_linear(struct virtual_ring *, uint8_t *, size_t);
 extern size_t vring_write_zero(struct virtual_ring *, size_t);
 
+extern vclient_t *vclient_alloc(void);
+extern void vclient_free(vclient_t *);
+
+extern int vclient_get_default_fmt(vprofile_t *);
+extern int vclient_setup_buffers(vclient_t *, int size, int frags,
+    int channels, int format, int sample_rate);
+
 extern uint32_t vclient_sample_bytes(vclient_t *);
 extern uint32_t vclient_bufsize_internal(vclient_t *);
 extern uint32_t vclient_bufsize_scaled(vclient_t *);
@@ -268,7 +281,10 @@ extern int vclient_eq_alloc(struct virtual_client *);
 extern void vclient_eq_free(struct virtual_client *);
 
 /* Internal utilities */
-int bt_speaker_main(int argc, char **argv);
-int equalizer_main(int argc, char **argv);
+extern int bt_speaker_main(int argc, char **argv);
+extern int equalizer_main(int argc, char **argv);
+
+/* HTTP daemon support */
+extern const char *voss_httpd_start(vprofile_t *);
 
 #endif					/* _VIRTUAL_INT_H_ */
