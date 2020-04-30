@@ -265,13 +265,12 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		    "</script>"
 		    "<br>"
 		    "<br>"
-		    "<br>"
-		    "<input type=\"button\" value=\"PRESS HERE TO START PLAYBACK\" onclick=\"play()\">"
-		    "<br>"
+		    "<input type=\"button\" value=\"PRESS HERE TO START PLAYBACK\" onclick=\"play()\" style=\"font-size: 200%%; background-color: #00FF00\">"
 		    "<br>"
 		    "<br>"
 		    "<br>"
-		    "<input type=\"button\" class=\"block\" value=\"PRESS HERE TO STOP PLAYBACK\" onclick=\"stop()\">"
+		    "<br>"
+		    "<input type=\"button\" class=\"block\" value=\"PRESS HERE TO STOP PLAYBACK\" onclick=\"stop()\" style=\"font-size: 200%%; background-color: #ff0000\">"
 		    "<audio id=\"audio\" src=\"\" preload=\"none\"></audio>"
 		    "<br>"
 		    "<br>"
@@ -284,24 +283,23 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		break;
 	case 1:
 		for (x = 0; x < pvc->profile->http.nfds; x++) {
-			if (pvc->profile->http.fds[x] < 0) {
-				const int flag = 1;
-
-				fprintf(io, "HTTP/1.0 200 OK\r\n"
-				    "Content-Type: audio/x-wav\r\n"
-				    "Server: virtual_oss/1.0\r\n"
-				    "Cache-Control: no-cache\r\n"
-				    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
-				    "Pragma: no-cache\r\n"
-				    "\r\n");
-				if (voss_http_generate_wav_header(pvc, io))
-					goto done;
-				fflush(io);
-				fdclose(io, NULL);
-				setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
-				pvc->profile->http.fds[x] = fd;
-				return;
-			}
+			static const int flag = 1;
+			if (pvc->profile->http.fds[x] >= 0)
+				continue;
+			fprintf(io, "HTTP/1.0 200 OK\r\n"
+				"Content-Type: audio/x-wav\r\n"
+				"Server: virtual_oss/1.0\r\n"
+				"Cache-Control: no-cache\r\n"
+				"Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+				"Pragma: no-cache\r\n"
+				"\r\n");
+			if (voss_http_generate_wav_header(pvc, io))
+				goto done;
+			fflush(io);
+			fdclose(io, NULL);
+			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
+			pvc->profile->http.fds[x] = fd;
+			return;
 		}
 		fprintf(io, "HTTP/1.0 503 Out of Resources\r\n"
 		    "Content-Type: audio/x-wav\r\n"
@@ -335,7 +333,7 @@ static int
 voss_httpd_do_listen(vclient_t *pvc, const char *host, const char *port,
     struct pollfd *pfd, int num_sock, int buffer)
 {
-	const struct timeval timeout = {.tv_sec = 1};
+	static const struct timeval timeout = {.tv_sec = 1};
 	struct addrinfo hints;
 	struct addrinfo *res;
 	struct addrinfo *res0;
