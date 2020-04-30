@@ -170,11 +170,7 @@ voss_http_generate_wav_header(vclient_t *pvc, FILE *io)
 
 	/* sample rate */
 
-	/*
-	 * NOTE: Sample rate is increased by 1Hz so that buffers won't
-	 * overflow over time!
-	 */
-	len = pvc->sample_rate + 0;
+	len = pvc->sample_rate;
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
@@ -183,7 +179,7 @@ voss_http_generate_wav_header(vclient_t *pvc, FILE *io)
 
 	/* byte rate */
 
-	len = (pvc->sample_rate + 0) * pvc->channels * vclient_sample_bytes(pvc);
+	len = pvc->sample_rate * pvc->channels * vclient_sample_bytes(pvc);
 
 	*ptr++ = len;
 	*ptr++ = len >> 8;
