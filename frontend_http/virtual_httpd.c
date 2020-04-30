@@ -49,14 +49,19 @@
 
 #define	VOSS_HTTPD_BIND_MAX 8
 
+struct http_state {
+	int fd;
+	uint64_t ts;
+};
+
 static size_t
 voss_httpd_usage(vclient_t *pvc)
 {
 	size_t usage = 0;
 	size_t x;
 
-	for (x = 0; x < pvc->profile->http.nfds; x++)
-		usage += (pvc->profile->http.fds[x] != -1);
+	for (x = 0; x < pvc->profile->http.nstate; x++)
+		usage += (pvc->profile->http.state[x].fd != -1);
 	return (usage);
 }
 
@@ -238,9 +243,14 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 
 	switch (page) {
 	case 0:
+		x = voss_httpd_usage(pvc);
+
 		fprintf(io, "HTTP/1.0 200 OK\r\n"
 		    "Content-Type: text/html\r\n"
 		    "Server: virtual_oss/1.0\r\n"
+		    "Cache-Control: no-cache\r\n"
+		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+		    "Pragma: no-cache\r\n"
 		    "\r\n"
 		    "<html><head><title>Welcome to live streaming</title>"
 		    "<meta http-equiv=\"Cache-Control\" content=\"no-cache, no-store, must-revalidate\" />"
@@ -263,28 +273,34 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		    "audio.src = \"\";"
 		    "}"
 		    "</script>"
-		    "<br>"
-		    "<br>"
-		    "<input type=\"button\" value=\"PRESS HERE TO START PLAYBACK\" onclick=\"play()\" style=\"font-size: 200%%; background-color: #00FF00\">"
-		    "<br>"
-		    "<br>"
-		    "<br>"
-		    "<br>"
-		    "<input type=\"button\" class=\"block\" value=\"PRESS HERE TO STOP PLAYBACK\" onclick=\"stop()\" style=\"font-size: 200%%; background-color: #ff0000\">"
 		    "<audio id=\"audio\" src=\"\" preload=\"none\"></audio>"
 		    "<br>"
 		    "<br>"
-		    "<br>"
-		    "<br>"
-		    "<a href=\"stream.wav\">Direct stream link (for use with VideoLanClient, VLC)</a><br><br>"
+		    "%s"
 		    "<i>There are currently %zu of %zu active streams</i><br>"
 		    "</body>"
-		    "</html>", voss_httpd_usage(pvc), pvc->profile->http.nfds);
+		    "</html>", (x == pvc->profile->http.nstate) ?
+		    "<h2>No free streams. <a href=\"index.html\">Try again later!</a></h2>"
+		    "<br>"
+		    "<br>"
+		    "<br>"
+		    "<br>" :
+		    "<input type=\"button\" value=\"PRESS HERE TO START PLAYBACK\" onclick=\"play()\" style=\"font-size: 150%; background-color: #00FF00\">"
+		    "<br>"
+		    "<br>"
+		    "<br>"
+		    "<br>"
+		    "<input type=\"button\" class=\"block\" value=\"PRESS HERE TO STOP PLAYBACK\" onclick=\"stop()\" style=\"font-size: 150%; background-color: #ff0000\">"
+		    "<br>"
+		    "<br>"
+		    "<br>"
+		    "<br>"
+		    "<a href=\"stream.wav\">Direct stream link (for use with VideoLanClient, VLC)</a><br><br>", x, pvc->profile->http.nstate);
 		break;
 	case 1:
-		for (x = 0; x < pvc->profile->http.nfds; x++) {
+		for (x = 0; x < pvc->profile->http.nstate; x++) {
 			static const int flag = 1;
-			if (pvc->profile->http.fds[x] >= 0)
+			if (pvc->profile->http.state[x].fd >= 0)
 				continue;
 			fprintf(io, "HTTP/1.0 200 OK\r\n"
 				"Content-Type: audio/x-wav\r\n"
@@ -298,7 +314,8 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 			fflush(io);
 			fdclose(io, NULL);
 			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
-			pvc->profile->http.fds[x] = fd;
+			pvc->profile->http.state[x].ts = virtual_oss_timestamp();
+			pvc->profile->http.state[x].fd = fd;
 			return;
 		}
 		fprintf(io, "HTTP/1.0 503 Out of Resources\r\n"
@@ -366,7 +383,7 @@ voss_httpd_do_listen(vclient_t *pvc, const char *host, const char *port,
 		setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, (int)sizeof(timeout));
 
 		if (bind(s, res0->ai_addr, res0->ai_addrlen) == 0) {
-			if (listen(s, pvc->profile->http.nfds) == 0) {
+			if (listen(s, pvc->profile->http.nstate) == 0) {
 				if (ns < num_sock) {
 					pfd[ns++].fd = s;
 					continue;
@@ -403,7 +420,7 @@ voss_httpd_server(vclient_t *pvc)
 	nfd = voss_httpd_do_listen(pvc, host, port, fds, VOSS_HTTPD_BIND_MAX, bufferlimit);
 	if (nfd < 1) {
 		errx(EX_SOFTWARE, "Could not bind to "
-		    "'%s' and '%s'\n", host, port);
+		    "'%s' and '%s'", host, port);
 	}
 
 	while (1) {
@@ -434,6 +451,7 @@ static void
 voss_httpd_streamer(vclient_t *pvc)
 {
 	const int bufferlimit = voss_httpd_buflimit(pvc);
+	uint64_t ts;
 	uint8_t buffer[4096 * pvc->channels * vclient_sample_bytes(pvc)];
 	uint8_t fmt_limit[VMAX_CHAN];
 	size_t dst_mod;
@@ -459,6 +477,8 @@ voss_httpd_streamer(vclient_t *pvc)
 		}
 		atomic_unlock();
 
+		ts = virtual_oss_timestamp();
+
 		dst_ptr = buffer;
 		dst_len = sizeof(buffer);
 
@@ -477,14 +497,19 @@ voss_httpd_streamer(vclient_t *pvc)
 		format_export(pvc->format, (int64_t *)src_ptr, dst_ptr, dst_len,
 		    fmt_limit, pvc->channels);
 
-		for (x = 0; x < pvc->profile->http.nfds; x++) {
-			int fd = pvc->profile->http.fds[x];
+		for (x = 0; x < pvc->profile->http.nstate; x++) {
+			int fd = pvc->profile->http.state[x].fd;
+			uint64_t delta = ts - pvc->profile->http.state[x].ts;
 			int len;
 
 			if (fd < 0) {
 				/* do nothing */
+			} else if (delta >= (8ULL * 1000000000ULL)) {
+				/* no data for 8 seconds - terminate */
+				pvc->profile->http.state[x].fd = -1;
+				close(fd);
 			} else if (ioctl(fd, FIONWRITE, &len) < 0) {
-				pvc->profile->http.fds[x] = -1;
+				pvc->profile->http.state[x].fd = -1;
 				close(fd);
 			} else if (len > bufferlimit ||
 			    (size_t)(bufferlimit - len) < dst_len) {
@@ -493,13 +518,16 @@ voss_httpd_streamer(vclient_t *pvc)
 
 				if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
 				    error != 0) {
-					pvc->profile->http.fds[x] = -1;
+					pvc->profile->http.state[x].fd = -1;
 					close(fd);
 				}
 				/* do nothing */
 			} else if (write(fd, dst_ptr, dst_len) != dst_len) {
-				pvc->profile->http.fds[x] = -1;
+				pvc->profile->http.state[x].fd = -1;
 				close(fd);
+			} else {
+				/* update timestamp */
+				pvc->profile->http.state[x].ts = ts;
 			}
 		}
 
@@ -516,15 +544,17 @@ voss_httpd_start(vprofile_t *pvp)
 	int error;
 	size_t x;
 
-	if (pvp->http.host == NULL || pvp->http.port == NULL || pvp->http.nfds == 0)
+	if (pvp->http.host == NULL || pvp->http.port == NULL || pvp->http.nstate == 0)
 		return (NULL);
 
-	pvp->http.fds = malloc(sizeof(int) * pvp->http.nfds);
-	if (pvp->http.fds == NULL)
+	pvp->http.state = malloc(sizeof(pvp->http.state[0]) * pvp->http.nstate);
+	if (pvp->http.state == NULL)
 		return ("Could not allocate memory for HTTP server");
 
-	for (x = 0; x != pvp->http.nfds; x++)
-		pvp->http.fds[x] = -1;
+	for (x = 0; x != pvp->http.nstate; x++) {
+		pvp->http.state[x].fd = -1;
+		pvp->http.state[x].ts = 0;
+	}
 
 	pvc = vclient_alloc();
 	if (pvc == NULL)

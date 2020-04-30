@@ -1792,7 +1792,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	/* need to specify new HTTP parameters next time */
 	pvp->http.host = NULL;
 	pvp->http.port = NULL;
-	pvp->http.nfds = 0;
+	pvp->http.nstate = 0;
 
 #ifdef HAVE_HTTPD
 	return (voss_httpd_start(ptr));
@@ -2270,14 +2270,14 @@ parse_options(int narg, char **pparg, int is_main)
 			break;
 #ifdef HAVE_HTTPD
 		case 'N':
-			profile.http.nfds = atoi(optarg);
+			profile.http.nstate = atoi(optarg);
 			break;
 		case 'H':
 			profile.http.host = optarg;
 			if (profile.http.port == NULL)
 				profile.http.port = "80";
-			if (profile.http.nfds == 0)
-				profile.http.nfds = 1;
+			if (profile.http.nstate == 0)
+				profile.http.nstate = 1;
 			break;
 		case 'o':
 			profile.http.port = optarg;

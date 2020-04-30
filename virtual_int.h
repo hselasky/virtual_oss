@@ -112,8 +112,8 @@ struct virtual_profile {
 	struct {
 		const char * host;
 		const char * port;
-		volatile int * fds;
-		size_t nfds;
+		volatile struct http_state * state;
+		size_t nstate;
 	} http;
 };
 
