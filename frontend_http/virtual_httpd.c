@@ -314,7 +314,8 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 			fflush(io);
 			fdclose(io, NULL);
 			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
-			pvc->profile->http.state[x].ts = virtual_oss_timestamp();
+			pvc->profile->http.state[x].ts =
+			    virtual_oss_timestamp() - 1000000000ULL;
 			pvc->profile->http.state[x].fd = fd;
 			return;
 		}
