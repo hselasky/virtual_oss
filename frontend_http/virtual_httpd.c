@@ -325,7 +325,7 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		    "<h2>Alternative 2 (on your own)</h2>"
 		    "<br>"
 		    "<br>"
-		    "<audio id=\"audio\" controls=\"true\" src=\"stream.wav\" preload=\"none\" width=\"100%%\"></audio>"
+		    "<audio id=\"audio\" controls=\"true\" src=\"stream.wav\" preload=\"none\"></audio>"
 		    "<br>"
 		    "<br>",
 		    pvc->profile->http.host, pvc->profile->http.port,
