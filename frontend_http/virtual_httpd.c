@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
@@ -48,9 +49,10 @@
 #include "../virtual_int.h"
 
 #define	VOSS_HTTPD_BIND_MAX 8
+#define	VOSS_HTTPD_MAX_STREAM_TIME (60 * 60 * 3)	/* seconds */
 
 struct http_state {
-	int fd;
+	int	fd;
 	uint64_t ts;
 };
 
@@ -91,10 +93,13 @@ voss_httpd_read_line(FILE *io)
 }
 
 static int
-voss_http_generate_wav_header(vclient_t *pvc, FILE *io)
+voss_http_generate_wav_header(vclient_t *pvc, FILE *io,
+    uintmax_t r_start, uintmax_t r_end, bool is_partial)
 {
 	uint8_t buffer[256];
 	uint8_t *ptr;
+	uintmax_t dummy_len;
+	uintmax_t delta;
 	size_t mod;
 	size_t len;
 	size_t buflen;
@@ -200,15 +205,63 @@ voss_http_generate_wav_header(vclient_t *pvc, FILE *io)
 	*ptr++ = len;
 	*ptr++ = len >> 8;
 
-	if (fwrite(buffer, buflen, 1, io) != 1)
-		return (-1);
+	/* check if alignment is correct */
+	if (r_start >= buflen && (r_start % mod) != 0)
+		return (2);
 
+	dummy_len = pvc->sample_rate * pvc->channels * vclient_sample_bytes(pvc);
+	dummy_len *= VOSS_HTTPD_MAX_STREAM_TIME;
+
+	/* fixup end */
+	if (r_end >= dummy_len)
+		r_end = dummy_len - 1;
+
+	delta = r_end - r_start + 1;
+
+	printf("%jd %jd %jd %jd %d\n", r_start, r_end, dummy_len, delta, is_partial);
+
+	if (is_partial) {
+		fprintf(io, "HTTP/1.1 206 Partial Content\r\n"
+		    "Content-Type: audio/wav\r\n"
+		    "Server: virtual_oss/1.0\r\n"
+		    "Cache-Control: no-cache, no-store\r\n"
+		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+		    "Connection: Close\r\n"
+		    "Content-Range: bytes %ju-%ju/%ju\r\n"
+		    "Content-Length: %ju\r\n"
+		    "\r\n", r_start, r_end, dummy_len, delta);
+	} else {
+		fprintf(io, "HTTP/1.0 200 OK\r\n"
+		    "Content-Type: audio/wav\r\n"
+		    "Server: virtual_oss/1.0\r\n"
+		    "Cache-Control: no-cache, no-store\r\n"
+		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+		    "Connection: Close\r\n"
+		    "Content-Length: %ju\r\n"
+		    "\r\n", dummy_len);
+	}
+
+	/* check if we should insert a header */
+	if (r_start < buflen) {
+		buflen -= r_start;
+		if (buflen > delta)
+			buflen = delta;
+		/* send data */
+		if (fwrite(buffer + r_start, buflen, 1, io) != 1)
+			return (-1);
+		/* check if all data was read */
+		if (buflen == delta)
+			return (1);
+	}
 	return (0);
 }
 
 static void
 voss_httpd_handle_connection(vclient_t *pvc, int fd)
 {
+	uintmax_t r_start = 0;
+	uintmax_t r_end = -1ULL;
+	bool is_partial = false;
 	char *hdr;
 	char *ptr;
 	char *line;
@@ -234,6 +287,11 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 			page = 0;
 		} else if (page < 0 && strstr(line, "GET /stream.wav") == line) {
 			page = 1;
+		} else if (page < 0 && strstr(line, "GET /stream.m3u") == line) {
+			page = 2;
+		} else if (strstr(line, "Range: bytes=") == line &&
+		    sscanf(line, "Range: bytes=%zu-%zu", &r_start, &r_end) >= 1) {
+			is_partial = true;
 		}
 	}
 
@@ -244,9 +302,8 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		fprintf(io, "HTTP/1.0 200 OK\r\n"
 		    "Content-Type: text/html\r\n"
 		    "Server: virtual_oss/1.0\r\n"
-		    "Cache-Control: no-cache\r\n"
+		    "Cache-Control: no-cache, no-store\r\n"
 		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
-		    "Pragma: no-cache\r\n"
 		    "\r\n"
 		    "<html><head><title>Welcome to live streaming</title>"
 		    "<meta http-equiv=\"Cache-Control\" content=\"no-cache, no-store, must-revalidate\" />"
@@ -255,73 +312,72 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		    "</head>"
 		    "<body>"
 		    "<h1>Live HD stream</h1>"
-		    "<script>"
-		    "function play() {"
-		    "var audio = document.getElementById(\"audio\");"
-		    "audio.currentTime = 0;"
-		    "audio.src = \"stream.wav\";"
-		    "audio.play();"
-		    "}"
-		    "function stop() {"
-		    "var audio = document.getElementById(\"audio\");"
-		    "audio.pause();"
-		    "audio.currentTime = 0;"
-		    "audio.src = \"\";"
-		    "}"
-		    "</script>"
-		    "<audio id=\"audio\" src=\"\" preload=\"none\"></audio>"
 		    "<br>"
 		    "<br>"
-		    "%s"
-		    "<i>There are currently %zu of %zu active streams</i><br>"
-		    "</body>"
-		    "</html>", (x == pvc->profile->http.nstate) ?
-		    "<h2>No free streams. <a href=\"index.html\">Try again later!</a></h2>"
+		    "<h2>Alternative 1 (recommended)</h2>"
+		    "<ol type=\"1\">"
+		    "<li>Install <a href=\"https://www.videolan.org\">VideoLanClient (VLC)</a>, from App- or Play-store free of charge</li>"
+		    "<li>Open VLC and select Network Stream</li>"
+		    "<li>Enter, copy or share this network address to VLC: <a href=\"http://%s:%s/stream.m3u\">http://%s:%s/stream.m3u</a></li>"
+		    "</ol>"
 		    "<br>"
 		    "<br>"
-		    "<br>"
-		    "<br>" :
-		    "<input type=\"button\" value=\"PRESS HERE TO START PLAYBACK\" onclick=\"play()\" style=\"font-size: 150%; background-color: #00FF00\">"
+		    "<h2>Alternative 2 (on your own)</h2>"
 		    "<br>"
 		    "<br>"
+		    "<audio id=\"audio\" controls=\"true\" src=\"stream.wav\" preload=\"none\" width=\"100%%\"></audio>"
 		    "<br>"
-		    "<br>"
-		    "<input type=\"button\" class=\"block\" value=\"PRESS HERE TO STOP PLAYBACK\" onclick=\"stop()\" style=\"font-size: 150%; background-color: #ff0000\">"
-		    "<br>"
-		    "<br>"
-		    "<br>"
-		    "<br>"
-		    "<a href=\"stream.wav\">Direct stream link (for use with VideoLanClient, VLC)</a><br><br>", x, pvc->profile->http.nstate);
+		    "<br>",
+		    pvc->profile->http.host, pvc->profile->http.port,
+		    pvc->profile->http.host, pvc->profile->http.port);
+
+		if (x == pvc->profile->http.nstate)
+			fprintf(io, "<h2>There are currently no free slots (%zu active). Try again later!</h2>", x);
+		else
+			fprintf(io, "<h2>There are %zu free slots (%zu active)</h2>", pvc->profile->http.nstate - x, x);
+
+		fprintf(io, "</body></html>");
 		break;
 	case 1:
 		for (x = 0; x < pvc->profile->http.nstate; x++) {
 			static const int flag = 1;
+
 			if (pvc->profile->http.state[x].fd >= 0)
 				continue;
-			fprintf(io, "HTTP/1.0 200 OK\r\n"
-				"Content-Type: audio/x-wav\r\n"
-				"Server: virtual_oss/1.0\r\n"
-				"Cache-Control: no-cache\r\n"
-				"Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
-				"Pragma: no-cache\r\n"
-				"\r\n");
-			if (voss_http_generate_wav_header(pvc, io))
+			switch (voss_http_generate_wav_header(pvc, io, r_start, r_end, is_partial)) {
+			case 0:
+				fflush(io);
+				fdclose(io, NULL);
+				setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
+				pvc->profile->http.state[x].ts =
+				    virtual_oss_timestamp() - 1000000000ULL;
+				pvc->profile->http.state[x].fd = fd;
+				return;
+			case 1:
+				fclose(io);
+				return;
+			case 2:
+				fprintf(io, "HTTP/1.1 416 Range Not Satisfiable\r\n"
+				    "Server: virtual_oss/1.0\r\n"
+				    "\r\n");
 				goto done;
-			fflush(io);
-			fdclose(io, NULL);
-			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
-			pvc->profile->http.state[x].ts =
-			    virtual_oss_timestamp() - 1000000000ULL;
-			pvc->profile->http.state[x].fd = fd;
-			return;
+			default:
+				goto done;
+			}
 		}
 		fprintf(io, "HTTP/1.0 503 Out of Resources\r\n"
-		    "Content-Type: audio/x-wav\r\n"
 		    "Server: virtual_oss/1.0\r\n"
-		    "Cache-Control: no-cache\r\n"
-		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
-		    "Pragma: no-cache\r\n"
 		    "\r\n");
+		break;
+	case 2:
+		fprintf(io, "HTTP/1.0 200 OK\r\n"
+		    "Content-Type: audio/mpegurl\r\n"
+		    "Server: virtual_oss/1.0\r\n"
+		    "Cache-Control: no-cache, no-store\r\n"
+		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+		    "\r\n"
+		    "http://%s:%s/stream.wav\r\n",
+		    pvc->profile->http.host, pvc->profile->http.port);
 		break;
 	default:
 		fprintf(io, "HTTP/1.0 404 Not Found\r\n"
