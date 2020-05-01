@@ -218,8 +218,6 @@ voss_http_generate_wav_header(vclient_t *pvc, FILE *io,
 
 	delta = r_end - r_start + 1;
 
-	printf("%jd %jd %jd %jd %d\n", r_start, r_end, dummy_len, delta, is_partial);
-
 	if (is_partial) {
 		fprintf(io, "HTTP/1.1 206 Partial Content\r\n"
 		    "Content-Type: audio/wav\r\n"
