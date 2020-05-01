@@ -338,15 +338,12 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		break;
 	case 1:
 		for (x = 0; x < pvc->profile->http.nstate; x++) {
-			static const int flag = 1;
-
 			if (pvc->profile->http.state[x].fd >= 0)
 				continue;
 			switch (voss_http_generate_wav_header(pvc, io, r_start, r_end, is_partial)) {
 			case 0:
 				fflush(io);
 				fdclose(io, NULL);
-				setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, (int)sizeof(flag));
 				pvc->profile->http.state[x].ts =
 				    virtual_oss_timestamp() - 1000000000ULL;
 				pvc->profile->http.state[x].fd = fd;
