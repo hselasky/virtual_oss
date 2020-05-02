@@ -112,8 +112,14 @@ struct virtual_profile {
 	struct {
 		const char * host;
 		const char * port;
+		const char * rtp_ifname;
+		const char * rtp_port;
 		volatile struct http_state * state;
 		size_t nstate;
+		int rtp_fd;
+		int rtp_vlanid;
+		uint32_t rtp_ts;
+		uint16_t rtp_seqnum;
 	} http;
 };
 
@@ -231,9 +237,11 @@ extern size_t vring_write_zero(struct virtual_ring *, size_t);
 extern vclient_t *vclient_alloc(void);
 extern void vclient_free(vclient_t *);
 
-extern int vclient_get_default_fmt(vprofile_t *);
+extern int vclient_get_default_fmt(vprofile_t *, int type);
 extern int vclient_setup_buffers(vclient_t *, int size, int frags,
     int channels, int format, int sample_rate);
+extern int vclient_export_read_locked(vclient_t *);
+extern void vclient_import_write_locked(vclient_t *);
 
 extern uint32_t vclient_sample_bytes(vclient_t *);
 extern uint32_t vclient_bufsize_internal(vclient_t *);

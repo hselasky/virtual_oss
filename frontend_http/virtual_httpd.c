@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
+#include <errno.h>
 #include <poll.h>
 #include <sysexits.h>
 
@@ -39,10 +40,19 @@
 #include <sys/queue.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/endian.h>
+#include <sys/uio.h>
+#include <sys/soundcard.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+
+#include <net/if.h>
+#include <net/if_vlan_var.h>
+#include <net/bpf.h>
+
+#include <arpa/inet.h>
 
 #include <pthread.h>
 
@@ -56,6 +66,196 @@ struct http_state {
 	uint64_t ts;
 };
 
+struct rtp_raw_packet {
+	struct {
+		uint32_t padding;
+		uint8_t	dhost[6];
+		uint8_t	shost[6];
+		uint16_t ether_type;
+	} __packed eth;
+	struct {
+		uint8_t	hl_ver;
+		uint8_t	tos;
+		uint16_t len;
+		uint16_t ident;
+		uint16_t offset;
+		uint8_t	ttl;
+		uint8_t	protocol;
+		uint16_t chksum;
+		union {
+			uint32_t sourceip;
+			uint16_t source16[2];
+		};
+		union {
+			uint32_t destip;
+			uint16_t dest16[2];
+		};
+	} __packed ip;
+	struct {
+		uint16_t srcport;
+		uint16_t dstport;
+		uint16_t len;
+		uint16_t chksum;
+	} __packed udp;
+	union {
+		uint8_t	header8[12];
+		uint16_t header16[6];
+		uint32_t header32[3];
+	} __packed rtp;
+
+} __packed;
+
+static const char *
+voss_httpd_bind_rtp(vclient_t *pvc, const char *ifname, int *pfd)
+{
+	const char *perr = NULL;
+	struct vlanreq vr = {};
+	struct ifreq ifr = {};
+	int n = 1;
+	int fd;
+
+	fd = socket(AF_LOCAL, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		perr = "Cannot open raw RTP socket";
+		goto done;
+	}
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_data = (void *)&vr;
+
+	if (ioctl(fd, SIOCGETVLAN, &ifr) == 0)
+		pvc->profile->http.rtp_vlanid = vr.vlr_tag;
+	else
+		pvc->profile->http.rtp_vlanid = 0;
+
+	close(fd);
+
+	ifr.ifr_data = NULL;
+
+	*pfd = fd = open("/dev/bpf", O_RDWR);
+	if (fd < 0) {
+		perr = "Cannot open BPF device";
+		goto done;
+	}
+
+	if (ioctl(fd, BIOCSETIF, &ifr) != 0) {
+		perr = "Cannot bind BPF device to network interface";
+		goto done;
+	}
+done:
+	if (perr != NULL && fd > -1)
+		close(fd);
+	return (perr);
+}
+
+static uint16_t
+voss_ipv4_csum(const uint16_t *ptr, size_t count)
+{
+	uint32_t sum = 0;
+
+	while (count--)
+		sum += *ptr++;
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+
+	return (~sum);
+}
+
+static uint16_t
+voss_udp_csum(uint32_t sum, const uint16_t *hdr, size_t count,
+    const uint16_t *ptr, size_t length)
+{
+	while (count--)
+		sum += *hdr++;
+
+	while (length > 1) {
+		sum += *ptr++;
+		length -= 2;
+	}
+
+	if (length & 1)
+		sum += *(uint8_t *)ptr;
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+
+	return (~sum);
+}
+
+static void
+voss_httpd_send_rtp_sub(vclient_t *pvc, int fd, void *ptr, size_t len, uint32_t ts)
+{
+	struct sockaddr sa = {};
+	struct rtp_raw_packet pkt = {};
+	struct iovec iov[2];
+	size_t total_ip;
+	uint16_t port = atoi(pvc->profile->http.rtp_port);
+	size_t x;
+
+	/* NOTE: BPF filter will insert VLAN header for us */
+	memset(pkt.eth.dhost, 255, sizeof(pkt.eth.dhost));
+	memset(pkt.eth.shost, 1, sizeof(pkt.eth.shost));
+	pkt.eth.ether_type = htobe16(0x0800);
+	total_ip = sizeof(pkt.ip) + sizeof(pkt.udp) + sizeof(pkt.rtp) + len;
+
+	iov[0].iov_base = pkt.eth.dhost;
+	iov[0].iov_len = 14 + total_ip - len;
+
+	iov[1].iov_base = alloca(len);
+	iov[1].iov_len = len;
+
+	/* byte swap data - WAV files are 16-bit little endian */
+	for (x = 0; x != (len / 2); x++)
+		((uint16_t *)iov[1].iov_base)[x] = bswap16(((uint16_t *)ptr)[x]);
+
+	pkt.ip.hl_ver = 0x45;
+	pkt.ip.len = htobe16(total_ip);
+	pkt.ip.ttl = 8;
+	pkt.ip.protocol = 17;
+	pkt.ip.sourceip = 0x0A000001U;
+	pkt.ip.destip = htobe32((239 << 24) + (255 << 16) + (1 << 0));
+	pkt.ip.chksum = voss_ipv4_csum((void *)&pkt.ip, sizeof(pkt.ip) / 2);
+
+	pkt.udp.srcport = htobe16(port);
+	pkt.udp.dstport = htobe16(port);
+	pkt.udp.len = htobe16(total_ip - sizeof(pkt.ip));
+
+	pkt.rtp.header8[0] = (2 << 6);
+	pkt.rtp.header8[1] = ((pvc->channels == 2) ? 10 : 11) | 0x80;
+
+	pkt.rtp.header16[1] = htobe16(pvc->profile->http.rtp_seqnum);
+	pkt.rtp.header32[1] = htobe32(ts);
+	pkt.rtp.header32[2] = htobe32(0);
+
+	pkt.udp.chksum = voss_udp_csum(pkt.ip.dest16[0] + pkt.ip.dest16[1] +
+	    pkt.ip.source16[0] + pkt.ip.source16[1] + 0x1100 + pkt.udp.len,
+	    (void *)&pkt.udp, sizeof(pkt.udp) / 2 + sizeof(pkt.rtp) / 2,
+	    iov[1].iov_base, iov[1].iov_len);
+
+	pvc->profile->http.rtp_seqnum++;
+	pvc->profile->http.rtp_ts += len / (2 * pvc->channels);
+
+	if (writev(fd, iov, 2) < 0)
+		;
+}
+
+static void
+voss_httpd_send_rtp(vclient_t *pvc, int fd, void *ptr, size_t len, uint32_t ts)
+{
+	const uint32_t mod = pvc->channels * vclient_sample_bytes(pvc);
+	const uint32_t max = 1420 - (1420 % mod);
+
+	while (len >= max) {
+		voss_httpd_send_rtp_sub(pvc, fd, ptr, max, ts);
+		len -= max;
+		ptr = (uint8_t *)ptr + max;
+	}
+
+	if (len != 0)
+		voss_httpd_send_rtp_sub(pvc, fd, ptr, len, ts);
+}
+
 static size_t
 voss_httpd_usage(vclient_t *pvc)
 {
@@ -68,9 +268,8 @@ voss_httpd_usage(vclient_t *pvc)
 }
 
 static char *
-voss_httpd_read_line(FILE *io)
+voss_httpd_read_line(FILE *io, char *linebuffer, size_t linelen)
 {
-	static char linebuffer[2048];
 	char buffer[2];
 	size_t size = 0;
 
@@ -80,7 +279,7 @@ voss_httpd_read_line(FILE *io)
 	while (1) {
 		if (buffer[0] == '\r' && buffer[1] == '\n')
 			break;
-		if (size == sizeof(linebuffer) - 1)
+		if (size == (linelen - 1))
 			return (NULL);
 		linebuffer[size++] = buffer[0];
 		buffer[0] = buffer[1];
@@ -255,8 +454,9 @@ voss_http_generate_wav_header(vclient_t *pvc, FILE *io,
 }
 
 static void
-voss_httpd_handle_connection(vclient_t *pvc, int fd)
+voss_httpd_handle_connection(vclient_t *pvc, int fd, const struct sockaddr_in *sa)
 {
+	char linebuffer[2048];
 	uintmax_t r_start = 0;
 	uintmax_t r_end = -1ULL;
 	bool is_partial = false;
@@ -275,7 +475,7 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 
 	/* dump HTTP request header */
 	while (1) {
-		line = voss_httpd_read_line(io);
+		line = voss_httpd_read_line(io, linebuffer, sizeof(linebuffer));
 		if (line == NULL)
 			goto done;
 		if (line[0] == 0)
@@ -341,9 +541,15 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 			if (pvc->profile->http.state[x].fd >= 0)
 				continue;
 			switch (voss_http_generate_wav_header(pvc, io, r_start, r_end, is_partial)) {
+				static const int enable = 1;
+
 			case 0:
 				fflush(io);
 				fdclose(io, NULL);
+				if (ioctl(fd, FIONBIO, &enable) != 0) {
+					close(fd);
+					return;
+				}
 				pvc->profile->http.state[x].ts =
 				    virtual_oss_timestamp() - 1000000000ULL;
 				pvc->profile->http.state[x].fd = fd;
@@ -370,9 +576,13 @@ voss_httpd_handle_connection(vclient_t *pvc, int fd)
 		    "Server: virtual_oss/1.0\r\n"
 		    "Cache-Control: no-cache, no-store\r\n"
 		    "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
-		    "\r\n"
-		    "http://%s:%s/stream.wav\r\n",
-		    pvc->profile->http.host, pvc->profile->http.port);
+		    "\r\n");
+		if (sa->sin_family == AF_INET && pvc->profile->http.rtp_port != NULL) {
+			fprintf(io, "rtp://239.255.0.1:%s\r\n", pvc->profile->http.rtp_port);
+		} else {
+			fprintf(io, "http://%s:%s/stream.wav\r\n",
+			    pvc->profile->http.host, pvc->profile->http.port);
+		}
 		break;
 	default:
 		fprintf(io, "HTTP/1.0 404 Not Found\r\n"
@@ -399,7 +609,7 @@ voss_httpd_do_listen(vclient_t *pvc, const char *host, const char *port,
     struct pollfd *pfd, int num_sock, int buffer)
 {
 	static const struct timeval timeout = {.tv_sec = 1};
-	struct addrinfo hints;
+	struct addrinfo hints = {};
 	struct addrinfo *res;
 	struct addrinfo *res0;
 	int error;
@@ -407,11 +617,10 @@ voss_httpd_do_listen(vclient_t *pvc, const char *host, const char *port,
 	int s;
 	int ns = 0;
 
-	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
-	hints.ai_flags |= AI_NUMERICHOST;
+	hints.ai_flags = AI_PASSIVE;
 
 	if ((error = getaddrinfo(host, port, &hints, &res)))
 		return (-1);
@@ -451,6 +660,7 @@ voss_httpd_do_listen(vclient_t *pvc, const char *host, const char *port,
 static size_t
 voss_httpd_buflimit(vclient_t *pvc)
 {
+	/* don't buffer more than 250ms */
 	return ((pvc->sample_rate / 4) *
 	    pvc->channels * vclient_sample_bytes(pvc));
 };
@@ -461,10 +671,10 @@ voss_httpd_server(vclient_t *pvc)
 	const size_t bufferlimit = voss_httpd_buflimit(pvc);
 	const char *host = pvc->profile->http.host;
 	const char *port = pvc->profile->http.port;
+	struct sockaddr sa = {};
 	struct pollfd fds[VOSS_HTTPD_BIND_MAX] = {};
 	int nfd;
 
-	/* don't buffer more than 250ms */
 	nfd = voss_httpd_do_listen(pvc, host, port, fds, VOSS_HTTPD_BIND_MAX, bufferlimit);
 	if (nfd < 1) {
 		errx(EX_SOFTWARE, "Could not bind to "
@@ -485,12 +695,14 @@ voss_httpd_server(vclient_t *pvc)
 			errx(EX_SOFTWARE, "Polling failed");
 
 		for (c = 0; c != ns; c++) {
+			socklen_t socklen = sizeof(sa);
+
 			if (fds[c].revents == 0)
 				continue;
-			f = accept(fds[c].fd, NULL, NULL);
+			f = accept(fds[c].fd, &sa, &socklen);
 			if (f < 0)
 				continue;
-			voss_httpd_handle_connection(pvc, f);
+			voss_httpd_handle_connection(pvc, f, (const struct sockaddr_in *)&sa);
 		}
 	}
 }
@@ -498,28 +710,22 @@ voss_httpd_server(vclient_t *pvc)
 static void
 voss_httpd_streamer(vclient_t *pvc)
 {
-	const int bufferlimit = voss_httpd_buflimit(pvc);
+	const size_t bufferlimit = voss_httpd_buflimit(pvc);
+	uint8_t *ptr;
+	size_t len;
 	uint64_t ts;
-	uint8_t buffer[4096 * pvc->channels * vclient_sample_bytes(pvc)];
-	uint8_t fmt_limit[VMAX_CHAN];
-	size_t dst_mod;
-	size_t src_mod;
-	uint8_t *src_ptr;
-	uint8_t *dst_ptr;
-	size_t src_len;
-	size_t dst_len;
 	size_t x;
-
-	dst_mod = pvc->channels * vclient_sample_bytes(pvc);
-	src_mod = pvc->channels * 8;
 
 	atomic_lock();
 	while (1) {
-		for (x = 0; x != pvc->channels; x++)
-			fmt_limit[x] = pvc->profile->limiter;
-
-		vring_get_read(&pvc->rx_ring[0], &src_ptr, &src_len);
-		if (src_len == 0) {
+		if (vclient_export_read_locked(pvc) != 0) {
+			atomic_wait();
+			continue;
+		}
+		vring_get_read(&pvc->rx_ring[1], &ptr, &len);
+		if (len == 0) {
+			/* try to avoid ring wraps */
+			vring_reset(&pvc->rx_ring[1]);
 			atomic_wait();
 			continue;
 		}
@@ -527,28 +733,18 @@ voss_httpd_streamer(vclient_t *pvc)
 
 		ts = virtual_oss_timestamp();
 
-		dst_ptr = buffer;
-		dst_len = sizeof(buffer);
+		/* check if we should send RTP data, if any */
+		if (pvc->profile->http.rtp_fd > -1) {
+			voss_httpd_send_rtp(pvc, pvc->profile->http.rtp_fd,
+			    ptr, len, pvc->profile->http.rtp_ts);
+		}
 
-		src_len /= src_mod;
-		dst_len /= dst_mod;
-
-		/* compare number of samples */
-		if (dst_len > src_len)
-			dst_len = src_len;
-		else
-			src_len = dst_len;
-
-		src_len *= src_mod;
-		dst_len *= dst_mod;
-
-		format_export(pvc->format, (int64_t *)src_ptr, dst_ptr, dst_len,
-		    fmt_limit, pvc->channels);
-
+		/* send HTTP data, if any */
 		for (x = 0; x < pvc->profile->http.nstate; x++) {
 			int fd = pvc->profile->http.state[x].fd;
 			uint64_t delta = ts - pvc->profile->http.state[x].ts;
-			int len;
+			uint8_t buf[1];
+			int write_len;
 
 			if (fd < 0) {
 				/* do nothing */
@@ -556,21 +752,15 @@ voss_httpd_streamer(vclient_t *pvc)
 				/* no data for 8 seconds - terminate */
 				pvc->profile->http.state[x].fd = -1;
 				close(fd);
-			} else if (ioctl(fd, FIONWRITE, &len) < 0) {
+			} else if (read(fd, buf, sizeof(buf)) != -1 || errno != EWOULDBLOCK) {
 				pvc->profile->http.state[x].fd = -1;
 				close(fd);
-			} else if (len > bufferlimit ||
-			    (size_t)(bufferlimit - len) < dst_len) {
-				int error = 0;
-				socklen_t len = sizeof(error);
-
-				if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
-				    error != 0) {
-					pvc->profile->http.state[x].fd = -1;
-					close(fd);
-				}
+			} else if (ioctl(fd, FIONWRITE, &write_len) < 0) {
+				pvc->profile->http.state[x].fd = -1;
+				close(fd);
+			} else if ((ssize_t)(bufferlimit - write_len) < (ssize_t)len) {
 				/* do nothing */
-			} else if (write(fd, dst_ptr, dst_len) != dst_len) {
+			} else if (write(fd, ptr, len) != len) {
 				pvc->profile->http.state[x].fd = -1;
 				close(fd);
 			} else {
@@ -580,7 +770,7 @@ voss_httpd_streamer(vclient_t *pvc)
 		}
 
 		atomic_lock();
-		vring_inc_read(&pvc->rx_ring[0], src_len);
+		vring_inc_read(&pvc->rx_ring[1], len);
 	}
 }
 
@@ -597,7 +787,7 @@ voss_httpd_start(vprofile_t *pvp)
 
 	pvp->http.state = malloc(sizeof(pvp->http.state[0]) * pvp->http.nstate);
 	if (pvp->http.state == NULL)
-		return ("Could not allocate memory for HTTP server");
+		return ("Could not allocate HTTP states");
 
 	for (x = 0; x != pvp->http.nstate; x++) {
 		pvp->http.state[x].fd = -1;
@@ -610,9 +800,30 @@ voss_httpd_start(vprofile_t *pvp)
 
 	pvc->profile = pvp;
 
-	/* setup buffers */
-	error = vclient_setup_buffers(pvc, 0, 0, pvp->channels,
-	    vclient_get_default_fmt(pvp), voss_dsp_sample_rate);
+	if (pvp->http.rtp_ifname != NULL) {
+		const char *perr;
+
+		if (pvc->channels > 2)
+			return ("RTP only supports 44.1kHz, 1 or 2 channels at 16-bit depth");
+
+		/* bind to UDP port */
+		perr = voss_httpd_bind_rtp(pvc, pvp->http.rtp_ifname,
+		    &pvp->http.rtp_fd);
+		if (perr != NULL)
+			return (perr);
+
+		/* setup buffers */
+		error = vclient_setup_buffers(pvc, 0, 0,
+		    pvp->channels, AFMT_S16_LE, 44100);
+	} else {
+		pvp->http.rtp_fd = -1;
+
+		/* setup buffers */
+		error = vclient_setup_buffers(pvc, 0, 0, pvp->channels,
+		    vclient_get_default_fmt(pvp, VTYPE_WAV_HDR),
+		    voss_dsp_sample_rate);
+	}
+
 	if (error != 0) {
 		vclient_free(pvc);
 		return ("Could not allocate buffers for HTTP server");

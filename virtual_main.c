@@ -104,9 +104,6 @@ vclient_sample_bytes(vclient_t *pvc)
 	}
 }
 
-static int vclient_export_read_locked(vclient_t *pvc);
-static void vclient_import_write_locked(vclient_t *pvc);
-
 static uint32_t
 vclient_output_delay(vclient_t *pvc)
 {
@@ -310,23 +307,40 @@ vclient_alloc(void)
 }
 
 int
-vclient_get_default_fmt(vprofile_t *pvp)
+vclient_get_default_fmt(vprofile_t *pvp, int type)
 {
 	int retval;
 
-	switch (pvp->bits) {
-	case 16:
-		retval = AFMT_S16_NE;
-		break;
-	case 24:
-		retval = AFMT_S24_NE;
-		break;
-	case 32:
-		retval = AFMT_S32_NE;
-		break;
-	default:
-		retval = AFMT_S8;
-		break;
+	if (type == VTYPE_WAV_HDR) {
+		switch (pvp->bits) {
+		case 16:
+			retval = AFMT_S16_LE;
+			break;
+		case 24:
+			retval = AFMT_S24_LE;
+			break;
+		case 32:
+			retval = AFMT_S32_LE;
+			break;
+		default:
+			retval = AFMT_S8;
+			break;
+		}
+	} else {
+		switch (pvp->bits) {
+		case 16:
+			retval = AFMT_S16_NE;
+			break;
+		case 24:
+			retval = AFMT_S24_NE;
+			break;
+		case 32:
+			retval = AFMT_S32_NE;
+			break;
+		default:
+			retval = AFMT_S8;
+			break;
+		}
 	}
 	return (retval);
 }
@@ -466,7 +480,7 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 
 	/* setup buffers */
 	error = vclient_setup_buffers(pvc, 0, 0, pvp->channels,
-	    vclient_get_default_fmt(pvp), voss_dsp_sample_rate);
+	    vclient_get_default_fmt(pvp, type), voss_dsp_sample_rate);
 	if (error != 0) {
 		vclient_free(pvc);
 		return (error);
@@ -665,7 +679,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 	return (0);
 }
 
-static int
+int
 vclient_export_read_locked(vclient_t *pvc)
 {
 	enum { MAX_FRAME = 1024 };
@@ -876,7 +890,7 @@ vclient_read(struct cuse_dev *pdev, int fflags,
 	return (retval);
 }
 
-static void
+void
 vclient_import_write_locked(vclient_t *pvc)
 {
 	enum { MAX_FRAME = 1024 };
@@ -1676,6 +1690,8 @@ usage(void)
 	    "\t" "-N <max HTTP connections, default is 1> \\\n"
 	    "\t" "-H <bind HTTP server to this host> \\\n"
 	    "\t" "-o <bind HTTP server to this port, default is 80> \\\n"
+	    "\t" "-J <bind RTP server to this network interface> \\\n"
+	    "\t" "-k <bind RTP server to this port, default is 8080> \\\n"
 #endif
 	    "\t" "-t vdsp.ctl \n"
 	    "\t" "Left channel = 0\n"
@@ -1793,6 +1809,8 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	pvp->http.host = NULL;
 	pvp->http.port = NULL;
 	pvp->http.nstate = 0;
+	pvp->http.rtp_ifname = NULL;
+	pvp->http.rtp_port = NULL;
 
 #ifdef HAVE_HTTPD
 	return (voss_httpd_start(ptr));
@@ -1856,7 +1874,7 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "N:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
+		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
 	else
 		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
 
@@ -2281,6 +2299,14 @@ parse_options(int narg, char **pparg, int is_main)
 			break;
 		case 'o':
 			profile.http.port = optarg;
+			break;
+		case 'J':
+			profile.http.rtp_ifname = optarg;
+			if (profile.http.rtp_port == NULL)
+				profile.http.rtp_port = "8080";
+			break;
+		case 'k':
+			profile.http.rtp_port = optarg;
 			break;
 #endif
 		default:
