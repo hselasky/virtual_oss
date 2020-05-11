@@ -36,7 +36,6 @@
 #include <sysexits.h>
 
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/queue.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -212,8 +211,8 @@ voss_httpd_send_rtp_sub(vclient_t *pvc, int fd, void *ptr, size_t len, uint32_t 
 	pkt.ip.hl_ver = 0x45;
 	pkt.ip.len = htobe16(total_ip);
 	pkt.ip.ttl = 8;
-	pkt.ip.protocol = 17;
-	pkt.ip.sourceip = 0x0A000001U;
+	pkt.ip.protocol = 17;	/* UDP */
+	pkt.ip.sourceip = 0x01010101U;
 	pkt.ip.destip = htobe32((239 << 24) + (255 << 16) + (1 << 0));
 	pkt.ip.chksum = voss_ipv4_csum((void *)&pkt.ip, sizeof(pkt.ip) / 2);
 
