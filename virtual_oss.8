@@ -42,8 +42,8 @@ using character devices from userspace. These devices can be used to
 record played back audio and mix the individual channels in multiple
 ways.
 .Pp
-.Nm 
-requires the 
+.Nm
+requires the
 .Xr cuse4bsd 3
 or
 .Xr cuse 3
@@ -122,6 +122,8 @@ This option is used in conjunction with -f /dev/null .
 Set receive filter size in number of samples or <milliseconds>ms for the next device to be created.
 .It Fl G Ar size
 Set transmit filter size in number of samples or <milliseconds>ms for the next device to be created.
+.It Fl D Ar file
+Write process ID of virtual_oss to file.
 .It Fl h
 Show usage and all available options.
 .El

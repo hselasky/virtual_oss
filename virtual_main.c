@@ -586,7 +586,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* pre-advance write pointer */
 	vring_inc_write(&pvc->rx_ring[1], len);
-	
+
 	/* clear block */
 	memset(ptr, 0, len);
 
@@ -724,7 +724,7 @@ vclient_export_read_locked(vclient_t *pvc)
 				dst_len = src_len;
 			else
 				src_len = dst_len;
-		
+
 			if (dst_len == 0)
 				break;
 
@@ -793,7 +793,7 @@ vclient_export_read_locked(vclient_t *pvc)
 			src_len = pvr->data.input_frames_used * src_mod;
 			dst_len = pvr->data.output_frames_gen * dst_mod;
 
-			samples = pvr->data.output_frames_gen * pvc->channels; 
+			samples = pvr->data.output_frames_gen * pvc->channels;
 
 			for (y = 0; y != samples; y++)
 				temp[y] = pvr->data_out[y];
@@ -918,7 +918,7 @@ vclient_import_write_locked(vclient_t *pvc)
 				dst_len = src_len;
 			else
 				src_len = dst_len;
-		
+
 			if (dst_len == 0)
 				break;
 
@@ -993,7 +993,7 @@ vclient_import_write_locked(vclient_t *pvc)
 			src_len = pvr->data.input_frames_used * src_mod;
 			dst_len = pvr->data.output_frames_gen * dst_mod;
 
-			samples = pvr->data.output_frames_gen * pvc->channels; 
+			samples = pvr->data.output_frames_gen * pvc->channels;
 
 			for (y = 0; y != samples; y++)
 				((int64_t *)dst_ptr)[y] = pvr->data_out[y];
@@ -1609,6 +1609,8 @@ int	voss_has_synchronization;
 
 static int voss_dsp_perm = 0666;
 static int voss_do_background;
+static int voss_do_pid;
+char *pidpath;
 
 uint32_t voss_dsp_rx_refresh;
 uint32_t voss_dsp_tx_refresh;
@@ -1874,7 +1876,7 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
+		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:";
 	else
 		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
 
@@ -1888,6 +1890,10 @@ parse_options(int narg, char **pparg, int is_main)
 		switch (c) {
 		case 'B':
 			voss_do_background = 1;
+			break;
+		case 'D':
+			voss_do_pid = 1;
+			pidpath = optarg;
 			break;
 		case 'C':
 			if (voss_mix_channels != 0) {
@@ -2437,6 +2443,15 @@ main(int argc, char **argv)
 	if (voss_do_background != 0 && daemon(0, 0) != 0)
 		errx(EX_SOFTWARE, "Cannot become daemon");
 
+	if (voss_do_pid == 1) {
+		int pidfile = open(pidpath, O_RDWR | O_CREAT | O_TRUNC, 00600);
+		pid_t mypid = getpid();
+		char mypidstr[8];
+		snprintf(mypidstr, 8, "%d\n", mypid);
+		write(pidfile, mypidstr, strlen(mypidstr));
+		close(pidfile);
+	}
+
 	/* setup audio delay unit */
 	voss_ad_init(voss_dsp_sample_rate);
 
@@ -2454,9 +2469,8 @@ main(int argc, char **argv)
 	}
 
 	/* Create worker threads */
-
 	create_threads();
-	
+
 	/* Run DSP threads */
 
 	virtual_oss_process(NULL);
