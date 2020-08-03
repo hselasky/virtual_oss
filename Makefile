@@ -30,7 +30,7 @@
 
 VERSION=1.2.6
 PROG=virtual_oss
-MAN=virtual_oss.8
+MAN=${PROG}.8
 PACKAGE=${PROG}-${VERSION}
 PTHREAD_LIBS?= -lpthread
 PREFIX?=        /usr/local
@@ -108,4 +108,3 @@ package: clean
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
 	rm -rf ${PACKAGE}.tar
 	tar -jcvf ${PACKAGE}.tar.bz2 --uid 0 --gid 0 ${PACKAGE}
-
