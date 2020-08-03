@@ -586,7 +586,7 @@ vclient_generate_wav_header_locked(vclient_t *pvc)
 
 	/* pre-advance write pointer */
 	vring_inc_write(&pvc->rx_ring[1], len);
-	
+
 	/* clear block */
 	memset(ptr, 0, len);
 
@@ -724,7 +724,7 @@ vclient_export_read_locked(vclient_t *pvc)
 				dst_len = src_len;
 			else
 				src_len = dst_len;
-		
+
 			if (dst_len == 0)
 				break;
 
@@ -793,7 +793,7 @@ vclient_export_read_locked(vclient_t *pvc)
 			src_len = pvr->data.input_frames_used * src_mod;
 			dst_len = pvr->data.output_frames_gen * dst_mod;
 
-			samples = pvr->data.output_frames_gen * pvc->channels; 
+			samples = pvr->data.output_frames_gen * pvc->channels;
 
 			for (y = 0; y != samples; y++)
 				temp[y] = pvr->data_out[y];
@@ -918,7 +918,7 @@ vclient_import_write_locked(vclient_t *pvc)
 				dst_len = src_len;
 			else
 				src_len = dst_len;
-		
+
 			if (dst_len == 0)
 				break;
 
@@ -993,7 +993,7 @@ vclient_import_write_locked(vclient_t *pvc)
 			src_len = pvr->data.input_frames_used * src_mod;
 			dst_len = pvr->data.output_frames_gen * dst_mod;
 
-			samples = pvr->data.output_frames_gen * pvc->channels; 
+			samples = pvr->data.output_frames_gen * pvc->channels;
 
 			for (y = 0; y != samples; y++)
 				((int64_t *)dst_ptr)[y] = pvr->data_out[y];
@@ -2454,9 +2454,8 @@ main(int argc, char **argv)
 	}
 
 	/* Create worker threads */
-
 	create_threads();
-	
+
 	/* Run DSP threads */
 
 	virtual_oss_process(NULL);
