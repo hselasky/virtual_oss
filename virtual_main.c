@@ -1609,6 +1609,7 @@ int	voss_has_synchronization;
 
 static int voss_dsp_perm = 0666;
 static int voss_do_background;
+static const char *voss_pid_path;
 
 uint32_t voss_dsp_rx_refresh;
 uint32_t voss_dsp_tx_refresh;
@@ -1874,7 +1875,7 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:B";
+		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:";
 	else
 		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
 
@@ -1888,6 +1889,9 @@ parse_options(int narg, char **pparg, int is_main)
 		switch (c) {
 		case 'B':
 			voss_do_background = 1;
+			break;
+		case 'D':
+			voss_pid_path = optarg;
 			break;
 		case 'C':
 			if (voss_mix_channels != 0) {
@@ -2436,6 +2440,18 @@ main(int argc, char **argv)
 	/* check if daemon mode is requested */
 	if (voss_do_background != 0 && daemon(0, 0) != 0)
 		errx(EX_SOFTWARE, "Cannot become daemon");
+
+	if (voss_pid_path != NULL) {
+		int pidfile = open(voss_pid_path, O_RDWR | O_CREAT | O_TRUNC, 0600);
+		pid_t mypid = getpid();
+		char mypidstr[8];
+		snprintf(mypidstr, sizeof(mypidstr), "%d\n", mypid);
+		if (pidfile < 0)
+			errx(EX_SOFTWARE, "Cannot create PID file '%s'", voss_pid_path);
+		if (write(pidfile, mypidstr, strlen(mypidstr)) != strlen(mypidstr))
+			errx(EX_SOFTWARE, "Cannot write PID file");
+		close(pidfile);
+	}
 
 	/* setup audio delay unit */
 	voss_ad_init(voss_dsp_sample_rate);
