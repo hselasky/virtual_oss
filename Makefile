@@ -102,7 +102,8 @@ help:
 	@echo "Targets are: all, install, clean, package, help"
 
 package: clean
-	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch] equalizer/*.[ch]
+	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch] \
+		equalizer/*.[ch] rc.d/virtual_oss.in
 	rm -rf ${PACKAGE}
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
