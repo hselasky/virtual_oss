@@ -293,6 +293,7 @@ vclient_t *
 vclient_alloc(void)
 {
 	vclient_t *pvc;
+	int x;
 
 	pvc = malloc(sizeof(*pvc));
 	if (pvc == NULL)
@@ -302,6 +303,9 @@ vclient_alloc(void)
 
 	pvc->tx_volume = 128;
 	pvc->noise_rem = 1;
+
+	for (x = 0; x != VMAX_CHAN; x++)
+		pvc->rx_compressor_gain[x] = 1.0;
 
 	return (pvc);
 }
@@ -683,7 +687,6 @@ int
 vclient_export_read_locked(vclient_t *pvc)
 {
 	enum { MAX_FRAME = 1024 };
-	uint8_t fmt_limit[VMAX_CHAN];
 	size_t dst_mod;
 	size_t src_mod;
 	uint8_t x;
@@ -702,9 +705,6 @@ vclient_export_read_locked(vclient_t *pvc)
 
 	dst_mod = pvc->channels * vclient_sample_bytes(pvc);
 	src_mod = pvc->channels * 8;
-
-	for (x = 0; x != pvc->channels; x++)
-		fmt_limit[x] = pvc->profile->limiter;
 
 	if (pvc->sample_rate == (int)voss_dsp_sample_rate) {
 		while (1) {
@@ -731,8 +731,12 @@ vclient_export_read_locked(vclient_t *pvc)
 			src_len *= src_mod;
 			dst_len *= dst_mod;
 
-			format_export(pvc->format, (int64_t *)src_ptr, dst_ptr, dst_len,
-			    fmt_limit, pvc->channels);
+			/* apply compressor, if any */
+			voss_compressor((int64_t *)src_ptr, pvc->rx_compressor_gain,
+			    &pvc->profile->rx_compressor, src_len / 8,
+			    pvc->channels, format_max(pvc->format));
+
+			format_export(pvc->format, (const int64_t *)src_ptr, dst_ptr, dst_len);
 
 			vring_inc_read(&pvc->rx_ring[0], src_len);
 			vring_inc_write(&pvc->rx_ring[1], dst_len);
@@ -798,8 +802,12 @@ vclient_export_read_locked(vclient_t *pvc)
 			for (y = 0; y != samples; y++)
 				temp[y] = pvr->data_out[y];
 
-			format_export(pvc->format, temp, dst_ptr, dst_len,
-			    fmt_limit, pvc->channels);
+			/* apply compressor, if any */
+			voss_compressor(temp, pvc->rx_compressor_gain,
+			    &pvc->profile->rx_compressor, samples,
+			    pvc->channels, format_max(pvc->format));
+
+			format_export(pvc->format, temp, dst_ptr, dst_len);
 
 			vring_inc_read(&pvc->rx_ring[0], src_len);
 			vring_inc_write(&pvc->rx_ring[1], dst_len);
@@ -1674,7 +1682,8 @@ usage(void)
 	    "\t" "-r <rate> \\\n"
 	    "\t" "-i <rtprio> \\\n"
 	    "\t" "-a <amp -63..63> \\\n"
-	    "\t" "-g <ch0grp,ch1grp...chnNgrp> \\\n"
+	    "\t" "-g <knee,attack,decay> # enable device RX compressor\\\n"
+	    "\t" "-x <knee,attack,decay> # enable output compressor\\\n"
 	    "\t" "-p <pol 0..1> \\\n"
 	    "\t" "-e <rxtx_mute 0..1> \\\n"
 	    "\t" "-e <rx_mute 0..1>,<tx_mute 0..1> \\\n"
@@ -1813,6 +1822,9 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	pvp->http.rtp_ifname = NULL;
 	pvp->http.rtp_port = NULL;
 
+	/* need to set new compressor parameters next time */
+	memset(&pvp->rx_compressor, 0, sizeof(pvp->rx_compressor));
+
 #ifdef HAVE_HTTPD
 	return (voss_httpd_start(ptr));
 #else
@@ -1862,7 +1874,7 @@ static const char *
 parse_options(int narg, char **pparg, int is_main)
 {
 	const char *ptr;
-	int c;
+	int a, b, c;
 	int val;
 	int idx;
 	int type;
@@ -1875,9 +1887,9 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:";
+		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:x:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:";
 	else
-		optstr = "F:G:w:e:p:a:c:b:f:g:m:M:d:l:L:s:O:P:R:";
+		optstr = "F:G:w:e:p:a:c:b:f:m:M:d:l:L:s:O:P:R:";
 
 	virtual_cuse_init_profile(&profile, 1);
 
@@ -1970,26 +1982,36 @@ parse_options(int narg, char **pparg, int is_main)
 			}
 			break;
 		case 'g':
-			ptr = optarg;
-			val = 0;
-			idx = 0;
-			while (1) {
-				c = *ptr++;
-				if (c == ',' || c == 0) {
-					if (idx >= VMAX_CHAN)
-						return ("Too many channel groups");
-					voss_output_group[idx] = val;
-					if (c == 0)
-						break;
-					val = 0;
-					idx++;
-					continue;
-				}
-				if (c >= '0' && c <= '9') {
-					val *= 10;
-					val += c - '0';
-				}
-			}
+			if (profile.rx_compressor.enabled)
+				return ("Compressor already enabled for this device");
+			if (sscanf(optarg, "%d,%d,%d", &a, &b, &c) != 3 ||
+			    a < VIRTUAL_OSS_KNEE_MIN ||
+			    a > VIRTUAL_OSS_KNEE_MAX ||
+			    b < VIRTUAL_OSS_ATTACK_MIN ||
+			    b > VIRTUAL_OSS_ATTACK_MAX ||
+			    c < VIRTUAL_OSS_DECAY_MIN ||
+			    c > VIRTUAL_OSS_DECAY_MAX)
+				return ("Invalid device compressor argument(s)");
+			profile.rx_compressor.enabled = 1;
+			profile.rx_compressor.knee = a;
+			profile.rx_compressor.attack = b;
+			profile.rx_compressor.decay = c;
+			break;
+		case 'x':
+			if (voss_output_compressor_param.enabled)
+				return ("Compressor already enabled for output");
+			if (sscanf(optarg, "%d,%d,%d", &a, &b, &c) != 3 ||
+			    a < VIRTUAL_OSS_KNEE_MIN ||
+			    a > VIRTUAL_OSS_KNEE_MAX ||
+			    b < VIRTUAL_OSS_ATTACK_MIN ||
+			    b > VIRTUAL_OSS_ATTACK_MAX ||
+			    c < VIRTUAL_OSS_DECAY_MIN ||
+			    c > VIRTUAL_OSS_DECAY_MAX)
+				return ("Invalid output compressor argument(s)");
+			voss_output_compressor_param.enabled = 1;
+			voss_output_compressor_param.knee = a;
+			voss_output_compressor_param.attack = b;
+			voss_output_compressor_param.decay = c;
 			break;
 		case 'f':
 		case 'O':

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,8 +40,6 @@
 
 #include "virtual_oss.h"
 
-uint8_t	voss_output_group[VMAX_CHAN];
-uint8_t	voss_output_limiter[VMAX_CHAN];
 int64_t	voss_output_peak[VMAX_CHAN];
 int64_t	voss_input_peak[VMAX_CHAN];
 
@@ -91,8 +89,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_mon_info mon_info;
 		struct virtual_oss_io_peak io_peak;
 		struct virtual_oss_mon_peak mon_peak;
-		struct virtual_oss_output_chn_grp out_chg;
-		struct virtual_oss_output_limit out_lim;
+		struct virtual_oss_compressor out_lim;
 		struct virtual_oss_io_limit io_lim;
 		struct virtual_oss_master_peak master_peak;
 		struct virtual_oss_audio_delay_locator ad_locator;
@@ -101,6 +98,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	}     data;
 
 	vprofile_t *pvp;
+	vclient_t *pvc;
 	vmonitor_t *pvm;
 
 	int chan;
@@ -306,51 +304,55 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		if (pvm == NULL)
 			error = CUSE_ERR_INVALID;
 		break;
-	case VIRTUAL_OSS_SET_OUTPUT_CHN_GRP:
-		if (data.out_chg.channel < 0 ||
-		    data.out_chg.channel >= (int)voss_max_channels ||
-		    data.out_chg.group < 0 ||
-		    data.out_chg.group >= VMAX_CHAN) {
-			error = CUSE_ERR_INVALID;
-			break;
-		}
-		voss_output_group[data.out_chg.channel] = data.out_chg.group;
-		break;
-	case VIRTUAL_OSS_GET_OUTPUT_CHN_GRP:
-		if (data.out_chg.channel < 0 ||
-		    data.out_chg.channel >= (int)voss_max_channels) {
-			error = CUSE_ERR_INVALID;
-			break;
-		}
-		data.out_chg.group = voss_output_group[data.out_chg.channel];
-		break;
 	case VIRTUAL_OSS_SET_OUTPUT_LIMIT:
-		if (data.out_lim.group < 0 ||
-		    data.out_lim.group >= VMAX_CHAN ||
-		    data.out_lim.limit < 0 ||
-		    data.out_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
+		if (data.out_lim.enabled < 0 ||
+		    data.out_lim.enabled > 1 ||
+		    data.out_lim.knee < VIRTUAL_OSS_KNEE_MIN ||
+		    data.out_lim.knee > VIRTUAL_OSS_KNEE_MAX ||
+		    data.out_lim.attack < VIRTUAL_OSS_ATTACK_MIN ||
+		    data.out_lim.attack > VIRTUAL_OSS_ATTACK_MAX ||
+		    data.out_lim.decay < VIRTUAL_OSS_DECAY_MIN ||
+		    data.out_lim.decay > VIRTUAL_OSS_DECAY_MAX ||
+		    data.out_lim.gain != 0) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		voss_output_limiter[data.out_lim.group] = data.out_lim.limit;
+		voss_output_compressor_param.enabled = data.out_lim.enabled;
+		voss_output_compressor_param.knee = data.out_lim.knee;
+		voss_output_compressor_param.attack = data.out_lim.attack;
+		voss_output_compressor_param.decay = data.out_lim.decay;
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_LIMIT:
-		if (data.out_lim.group < 0 ||
-		    data.out_lim.group >= VMAX_CHAN) {
-			error = CUSE_ERR_INVALID;
-			break;
+		data.out_lim.enabled = voss_output_compressor_param.enabled;
+		data.out_lim.knee = voss_output_compressor_param.knee;
+		data.out_lim.attack = voss_output_compressor_param.attack;
+		data.out_lim.decay = voss_output_compressor_param.decay;
+		data.out_lim.gain = 1000;
+		for (chan = 0; chan != VMAX_CHAN; chan++) {
+			int gain = voss_output_compressor_gain[chan] * 1000.0;
+			if (data.out_lim.gain > gain)
+				data.out_lim.gain = gain;
 		}
-		data.out_lim.limit = voss_output_limiter[data.out_lim.group];
 		break;
 	case VIRTUAL_OSS_SET_DEV_LIMIT:
 	case VIRTUAL_OSS_SET_LOOP_LIMIT:
 		if (pvp == NULL ||
-		    data.io_lim.limit < 0 ||
-		    data.io_lim.limit >= VIRTUAL_OSS_LIMITER_MAX) {
+		    data.io_lim.param.enabled < 0 ||
+		    data.io_lim.param.enabled > 1 ||
+		    data.io_lim.param.knee < VIRTUAL_OSS_KNEE_MIN ||
+		    data.io_lim.param.knee > VIRTUAL_OSS_KNEE_MAX ||
+		    data.io_lim.param.attack < VIRTUAL_OSS_ATTACK_MIN ||
+		    data.io_lim.param.attack > VIRTUAL_OSS_ATTACK_MAX ||
+		    data.io_lim.param.decay < VIRTUAL_OSS_DECAY_MIN ||
+		    data.io_lim.param.decay > VIRTUAL_OSS_DECAY_MAX ||
+		    data.io_lim.param.gain != 0) {
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		pvp->limiter = data.io_lim.limit;
+		pvp->rx_compressor.enabled = data.io_lim.param.enabled;
+		pvp->rx_compressor.knee = data.io_lim.param.knee;
+		pvp->rx_compressor.attack = data.io_lim.param.attack;
+		pvp->rx_compressor.decay = data.io_lim.param.decay;
 		break;
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
 	case VIRTUAL_OSS_GET_LOOP_LIMIT:
@@ -358,7 +360,19 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		data.io_lim.limit = pvp->limiter;
+		data.io_lim.param.enabled = pvp->rx_compressor.enabled;
+		data.io_lim.param.knee = pvp->rx_compressor.knee;
+		data.io_lim.param.attack = pvp->rx_compressor.attack;
+		data.io_lim.param.decay = pvp->rx_compressor.decay;
+		data.io_lim.param.gain = 1000;
+
+		TAILQ_FOREACH(pvc, pvp->pvc_head, entry) {
+			for (chan = 0; chan != VMAX_CHAN; chan++) {
+				int gain = pvc->rx_compressor_gain[chan] * 1000.0;
+				if (data.io_lim.param.gain > gain)
+					data.io_lim.param.gain = gain;
+			}
+		}
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_PEAK:
 		chan = data.master_peak.channel;

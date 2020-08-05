@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,8 +29,7 @@
 #include <sys/ioccom.h>
 
 #define	VIRTUAL_OSS_NAME_MAX	32
-#define	VIRTUAL_OSS_VERSION 0x00010006
-#define	VIRTUAL_OSS_LIMITER_MAX	64	/* exclusive */
+#define	VIRTUAL_OSS_VERSION 0x00010007
 #define	VIRTUAL_OSS_OPTIONS_MAX	1024	/* bytes */
 #define	VIRTUAL_OSS_FILTER_MAX 65536	/* samples */
 
@@ -99,25 +98,28 @@ struct virtual_oss_mon_peak {
 #define	VIRTUAL_OSS_ADD_INPUT_MON	 _IOR('O', 13, int)
 #define	VIRTUAL_OSS_ADD_OUTPUT_MON	 _IOR('O', 14, int)
 
-struct virtual_oss_output_chn_grp {
-	int	channel;
-	int	group;
+struct virtual_oss_compressor {
+	int	enabled;
+	int	knee;
+#define	VIRTUAL_OSS_KNEE_MAX 255	/* inclusive */
+#define	VIRTUAL_OSS_KNEE_MIN 0
+	int	attack;
+#define	VIRTUAL_OSS_ATTACK_MAX 62	/* inclusive */
+#define	VIRTUAL_OSS_ATTACK_MIN 0
+	int	decay;
+#define	VIRTUAL_OSS_DECAY_MAX 62	/* inclusive */
+#define	VIRTUAL_OSS_DECAY_MIN 0
+	int	gain;			/* read only */
+#define	VIRTUAL_OSS_GAIN_MAX 1000	/* inclusive */
+#define	VIRTUAL_OSS_GAIN_MIN 0
 };
 
-#define	VIRTUAL_OSS_SET_OUTPUT_CHN_GRP	 _IOW('O', 15, struct virtual_oss_output_chn_grp)
-#define	VIRTUAL_OSS_GET_OUTPUT_CHN_GRP	_IOWR('O', 16, struct virtual_oss_output_chn_grp)
-
-struct virtual_oss_output_limit {
-	int	group;
-	int	limit;
-};
-
-#define	VIRTUAL_OSS_SET_OUTPUT_LIMIT	_IOW('O', 17, struct virtual_oss_output_limit)
-#define	VIRTUAL_OSS_GET_OUTPUT_LIMIT   _IOWR('O', 18, struct virtual_oss_output_limit)
+#define	VIRTUAL_OSS_SET_OUTPUT_LIMIT	_IOW('O', 17, struct virtual_oss_compressor)
+#define	VIRTUAL_OSS_GET_OUTPUT_LIMIT   _IOWR('O', 18, struct virtual_oss_compressor)
 
 struct virtual_oss_io_limit {
 	int	number;			/* must be first */
-	int	limit;
+	struct virtual_oss_compressor param;
 };
 
 #define	VIRTUAL_OSS_SET_DEV_LIMIT	_IOW('O', 19, struct virtual_oss_io_limit)

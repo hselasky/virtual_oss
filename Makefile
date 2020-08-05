@@ -41,6 +41,7 @@ LIBDIR=         ${PREFIX}/lib
 
 SRCS= \
 virtual_audio_delay.c \
+virtual_compressor.c \
 virtual_ctl.c \
 virtual_eq.c \
 virtual_format.c \

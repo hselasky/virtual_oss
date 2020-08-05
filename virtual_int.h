@@ -84,6 +84,13 @@ typedef struct virtual_resample vresample_t;
 
 struct cuse_methods;
 
+struct virtual_compressor {
+	uint8_t enabled;	/* 0..1 */
+	uint8_t knee;		/* 0..255 */
+	uint8_t	attack;		/* 0..62 */
+	uint8_t	decay;		/* 0..62 */
+};
+
 struct virtual_profile {
 	vprofile_entry_t entry;
 	char oss_name[VMAX_STRING];
@@ -105,7 +112,7 @@ struct virtual_profile {
 	uint8_t	tx_pol[VMAX_CHAN];
 	uint8_t	bits;
 	uint8_t	channels;
-	uint8_t	limiter;
+	struct virtual_compressor rx_compressor;
 	uint8_t synchronized;
 	uint32_t rec_delay;
 	int fd_sta;
@@ -150,6 +157,7 @@ struct virtual_client {
 	vresample_t rx_resample;
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
+	double rx_compressor_gain[VMAX_CHAN];
 	uint64_t rx_samples;
 	uint64_t rx_timestamp;
 	uint64_t tx_samples;
@@ -195,8 +203,8 @@ extern vmonitor_head_t virtual_monitor_output;
 
 extern const struct cuse_methods vctl_methods;
 
-extern uint8_t voss_output_group[VMAX_CHAN];
-extern uint8_t voss_output_limiter[VMAX_CHAN];
+extern struct virtual_compressor voss_output_compressor_param;
+extern double voss_output_compressor_gain[VMAX_CHAN];
 extern int64_t voss_output_peak[VMAX_CHAN];
 extern int64_t voss_input_peak[VMAX_CHAN];
 extern uint32_t voss_max_channels;
@@ -253,7 +261,7 @@ extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 
 extern uint32_t format_best(uint32_t);
 extern void format_import(uint32_t, const uint8_t *, uint32_t, int64_t *);
-extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t, const uint8_t *, uint8_t);
+extern void format_export(uint32_t, const int64_t *, uint8_t *, uint32_t);
 extern int64_t format_max(uint32_t);
 extern void format_maximum(const int64_t *, int64_t *, uint32_t, uint32_t, int8_t);
 extern void format_remix(int64_t *, uint32_t, uint32_t, uint32_t);
@@ -291,6 +299,10 @@ extern void vclient_eq_free(struct virtual_client *);
 /* Internal utilities */
 extern int bt_speaker_main(int argc, char **argv);
 extern int equalizer_main(int argc, char **argv);
+
+/* Internal compressor */
+extern void voss_compressor(int64_t *, double *, const struct virtual_compressor *,
+   const unsigned, const unsigned, const int64_t);
 
 /* HTTP daemon support */
 extern const char *voss_httpd_start(vprofile_t *);

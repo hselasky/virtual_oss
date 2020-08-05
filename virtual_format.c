@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2016 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -119,11 +119,9 @@ format_import(uint32_t fmt, const uint8_t *src, uint32_t len,
 }
 
 void
-format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
-    const uint8_t *plimit, uint8_t max_channels)
+format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len)
 {
 	const uint8_t *end = dst + len;
-	uint8_t ch = 0;
 	int64_t val;
 
 	if (fmt & (AFMT_S16_BE
@@ -134,10 +132,6 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 
 			val = *src++;
 
-			val >>= plimit[ch];
-			ch++;
-			if (ch == max_channels)
-				ch = 0;
 			if (val > 0x7FFF)
 				val = 0x7FFF;
 			else if (val < -0x7FFF)
@@ -165,10 +159,6 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 
 			val = *src++;
 
-			val >>= plimit[ch];
-			ch++;
-			if (ch == max_channels)
-				ch = 0;
 			if (val > 0x7FFFFF)
 				val = 0x7FFFFF;
 			else if (val < -0x7FFFFF)
@@ -197,10 +187,6 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 
 			val = *src++;
 
-			val >>= plimit[ch];
-			ch++;
-			if (ch == max_channels)
-				ch = 0;
 			if (val > 0x7FFFFFFFLL)
 				val = 0x7FFFFFFFLL;
 			else if (val < -0x7FFFFFFFLL)
@@ -230,10 +216,6 @@ format_export(uint32_t fmt, const int64_t *src, uint8_t *dst, uint32_t len,
 
 			val = *src++;
 
-			val >>= plimit[ch];
-			ch++;
-			if (ch == max_channels)
-				ch = 0;
 			if (val > 0x7F)
 				val = 0x7F;
 			else if (val < -0x7F)

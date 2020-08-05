@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -159,9 +159,6 @@ virtual_oss_process(void *arg)
 	int64_t *buffer_temp;
 	int64_t *buffer_data;
 
-	int64_t fmt_max;
-	uint8_t fmt_limit[VMAX_CHAN];
-
 	bool need_delay = false;
 	
 	buffer_dsp_max_size = voss_dsp_samples *
@@ -213,6 +210,10 @@ virtual_oss_process(void *arg)
 
 		buffer_dsp_tx_size = voss_dsp_samples *
 		    tx_chn * (voss_dsp_bits / 8);
+
+		/* reset compressor gain */
+		for (x = 0; x != VMAX_CHAN; x++)
+			voss_output_compressor_gain[x] = 1.0;
 
 		while (1) {
 			uint64_t delta_time;
@@ -318,14 +319,6 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_temp, pvc->profile->rx_peak_value,
 				    pvc->channels, samples, shift_fmt);
 
-				/* Update limiter */
-				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
-				for (x = 0; x != VMAX_CHAN; x++) {
-					while ((pvc->profile->rx_peak_value[x] >>
-					    pvc->profile->limiter) > fmt_max) {
-						pvc->profile->limiter++;
-					}
-				}
 				if (pvc->rx_enabled == 0)
 					continue;
 
@@ -677,14 +670,6 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_monitor, pvc->profile->rx_peak_value,
 				    pvc->channels, samples, shift_fmt);
 
-				/* Update limiter */
-				fmt_max = (1LL << (pvc->profile->bits - 1)) - 1LL;
-				for (x = 0; x != VMAX_CHAN; x++) {
-					while ((pvc->profile->rx_peak_value[x] >>
-					    pvc->profile->limiter) > fmt_max) {
-						pvc->profile->limiter++;
-					}
-				}
 				if (pvc->rx_enabled == 0)
 					continue;
 
@@ -705,20 +690,16 @@ virtual_oss_process(void *arg)
 			format_maximum(buffer_temp, voss_output_peak,
 			    tx_chn, samples, 0);
 
-			/* Update limiter */
-			fmt_max = format_max(tx_fmt);
+			/* Apply compressor, if any */
 
-			for (x = 0; x != VMAX_CHAN; x++) {
-				y = voss_output_group[x];
-				while ((voss_output_peak[x] >> voss_output_limiter[y]) > fmt_max)
-					voss_output_limiter[y]++;
-				fmt_limit[x] = voss_output_limiter[y];
-			}
+			voss_compressor(buffer_temp, voss_output_compressor_gain,
+			    &voss_output_compressor_param, samples * tx_chn,
+			    tx_chn, format_max(tx_fmt));
 
 			/* Export and transmit resulting audio */
 
 			format_export(tx_fmt, buffer_temp, buffer_dsp,
-			    buffer_dsp_tx_size, fmt_limit, tx_chn);
+			    buffer_dsp_tx_size);
 
 			atomic_unlock();
 
