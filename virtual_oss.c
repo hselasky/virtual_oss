@@ -145,6 +145,7 @@ virtual_oss_process(void *arg)
 	int buffer_dsp_half_size;
 	int buffer_dsp_rx_sample_size;
 	int buffer_dsp_rx_size;
+	int buffer_dsp_tx_size_ref;
 	int buffer_dsp_tx_size;
 	uint64_t nice_timeout = 0;
 	uint64_t last_timestamp;
@@ -208,7 +209,7 @@ virtual_oss_process(void *arg)
 			continue;
 		}
 
-		buffer_dsp_tx_size = voss_dsp_samples *
+		buffer_dsp_tx_size_ref = voss_dsp_samples *
 		    tx_chn * (voss_dsp_bits / 8);
 
 		/* reset compressor gain */
@@ -696,6 +697,10 @@ virtual_oss_process(void *arg)
 			    &voss_output_compressor_param, samples * tx_chn,
 			    tx_chn, format_max(tx_fmt));
 
+			/* Recompute buffer DSP transmit size according to received number of samples */
+
+			buffer_dsp_tx_size = samples * tx_chn * (voss_dsp_bits / 8);
+
 			/* Export and transmit resulting audio */
 
 			format_export(tx_fmt, buffer_temp, buffer_dsp,
@@ -713,7 +718,7 @@ virtual_oss_process(void *arg)
 			 */
 			if (blocks == 0)
 				blocks = 2;	/* buffer is empty */
-			else if (blocks > (4 * buffer_dsp_tx_size))
+			else if (blocks > (4 * buffer_dsp_tx_size_ref))
 				blocks = 0;	/* too much data */
 			else
 				blocks = 1;	/* normal */
