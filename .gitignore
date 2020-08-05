@@ -1,3 +1,7 @@
 *.o
 *.depend
 *.depend.*
+virtual_oss
+virtual_oss.8.gz
+virtual_oss.debug
+virtual_oss.full
