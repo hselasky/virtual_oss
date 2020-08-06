@@ -304,9 +304,6 @@ vclient_alloc(void)
 	pvc->tx_volume = 128;
 	pvc->noise_rem = 1;
 
-	for (x = 0; x != VMAX_CHAN; x++)
-		pvc->rx_compressor_gain[x] = 1.0;
-
 	return (pvc);
 }
 
@@ -503,7 +500,7 @@ vclient_open_sub(struct cuse_dev *pdev, int fflags, int type)
 			voss_has_synchronization++;
 	}
 	if (error == 0)
-		TAILQ_INSERT_TAIL(pvc->profile->pvc_head, pvc, entry);
+		TAILQ_INSERT_TAIL(&pvc->profile->head, pvc, entry);
 	atomic_unlock();
 
 	return (error);
@@ -541,7 +538,7 @@ vclient_close(struct cuse_dev *pdev, int fflags)
 			atomic_wait();
 		}
 	}
-	TAILQ_REMOVE(pvc->profile->pvc_head, pvc, entry);
+	TAILQ_REMOVE(&pvc->profile->head, pvc, entry);
 	atomic_unlock();
 
 	vclient_free(pvc);
@@ -731,11 +728,6 @@ vclient_export_read_locked(vclient_t *pvc)
 			src_len *= src_mod;
 			dst_len *= dst_mod;
 
-			/* apply compressor, if any */
-			voss_compressor((int64_t *)src_ptr, pvc->rx_compressor_gain,
-			    &pvc->profile->rx_compressor, src_len / 8,
-			    pvc->channels, format_max(pvc->format));
-
 			format_export(pvc->format, (const int64_t *)src_ptr, dst_ptr, dst_len);
 
 			vring_inc_read(&pvc->rx_ring[0], src_len);
@@ -801,11 +793,6 @@ vclient_export_read_locked(vclient_t *pvc)
 
 			for (y = 0; y != samples; y++)
 				temp[y] = pvr->data_out[y];
-
-			/* apply compressor, if any */
-			voss_compressor(temp, pvc->rx_compressor_gain,
-			    &pvc->profile->rx_compressor, samples,
-			    pvc->channels, format_max(pvc->format));
 
 			format_export(pvc->format, temp, dst_ptr, dst_len);
 
@@ -1596,9 +1583,6 @@ static const struct cuse_methods vclient_wav_methods = {
 vprofile_head_t virtual_profile_client_head;
 vprofile_head_t virtual_profile_loopback_head;
 
-vclient_head_t virtual_client_head;
-vclient_head_t virtual_loopback_head;
-
 vmonitor_head_t virtual_monitor_input;
 vmonitor_head_t virtual_monitor_output;
 
@@ -1712,7 +1696,8 @@ usage(void)
 }
 
 static const char *
-dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int synchronized)
+dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
+    int tx_mute, int synchronized, int is_client)
 {
 	vprofile_t *ptr;
 	struct cuse_dev *pdev;
@@ -1735,6 +1720,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 
 	ptr->synchronized = synchronized;
 	ptr->fd_sta = -1;
+	TAILQ_INIT(&ptr->head);
 
 	for (x = 0; x != ptr->channels; x++) {
 		ptr->tx_mute[x] = tx_mute;
@@ -1797,12 +1783,12 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 			return ("Could not create CUSE WAV device");
 		}
 	}
+
 	atomic_lock();
-	if (ptr->pvc_head == &virtual_client_head) {
+	if (is_client)
 		TAILQ_INSERT_TAIL(&virtual_profile_client_head, ptr, entry);
-	} else if (ptr->pvc_head == &virtual_loopback_head) {
+	else
 		TAILQ_INSERT_TAIL(&virtual_profile_loopback_head, ptr, entry);
-	}
 	atomic_unlock();
 
 	voss_dups++;
@@ -1823,7 +1809,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute, int tx_mute, int syn
 	pvp->http.rtp_port = NULL;
 
 	/* need to set new compressor parameters next time */
-	memset(&pvp->rx_compressor, 0, sizeof(pvp->rx_compressor));
+	memset(&pvp->rx_compressor_param, 0, sizeof(pvp->rx_compressor_param));
 
 #ifdef HAVE_HTTPD
 	return (voss_httpd_start(ptr));
@@ -1867,6 +1853,7 @@ virtual_cuse_init_profile(struct virtual_profile *pvp, int clear)
 	for (x = 0; x != VMAX_CHAN; x++) {
 		pvp->rx_src[x] = x;
 		pvp->tx_dst[x] = x;
+		pvp->rx_compressor_gain[x] = 1.0;
 	}
 }
 
@@ -1952,7 +1939,7 @@ parse_options(int narg, char **pparg, int is_main)
 			profile.channels = atoi(optarg);
 			if (profile.channels == 0)
 				return ("Number of channels is zero");
-			if (profile.channels >= VMAX_CHAN)
+			if (profile.channels > VMAX_CHAN)
 				return ("Number of channels is too high");
 			break;
 		case 'r':
@@ -1982,7 +1969,7 @@ parse_options(int narg, char **pparg, int is_main)
 			}
 			break;
 		case 'g':
-			if (profile.rx_compressor.enabled)
+			if (profile.rx_compressor_param.enabled)
 				return ("Compressor already enabled for this device");
 			if (sscanf(optarg, "%d,%d,%d", &a, &b, &c) != 3 ||
 			    a < VIRTUAL_OSS_KNEE_MIN ||
@@ -1992,10 +1979,10 @@ parse_options(int narg, char **pparg, int is_main)
 			    c < VIRTUAL_OSS_DECAY_MIN ||
 			    c > VIRTUAL_OSS_DECAY_MAX)
 				return ("Invalid device compressor argument(s)");
-			profile.rx_compressor.enabled = 1;
-			profile.rx_compressor.knee = a;
-			profile.rx_compressor.attack = b;
-			profile.rx_compressor.decay = c;
+			profile.rx_compressor_param.enabled = 1;
+			profile.rx_compressor_param.knee = a;
+			profile.rx_compressor_param.attack = b;
+			profile.rx_compressor_param.decay = c;
 			break;
 		case 'x':
 			if (voss_output_compressor_param.enabled)
@@ -2083,7 +2070,6 @@ parse_options(int narg, char **pparg, int is_main)
 			if (strlen(optarg) > VMAX_STRING - 1)
 				return ("Device name too long");
 			strncpy(profile.oss_name, optarg, sizeof(profile.oss_name));
-			profile.pvc_head = &virtual_client_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
 			    profile.channels == 0 || voss_dsp_samples == 0)
@@ -2094,7 +2080,8 @@ parse_options(int narg, char **pparg, int is_main)
 			if (val <= 0 || val >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1], 0);
+			ptr = dup_profile(&profile, opt_amp, opt_pol,
+			    opt_mute[0], opt_mute[1], 0, 1);
 			if (ptr != NULL)
 				return (ptr);
 			break;
@@ -2103,7 +2090,6 @@ parse_options(int narg, char **pparg, int is_main)
 			if (strlen(optarg) > VMAX_STRING - 1)
 				return ("Device name too long");
 			strncpy(profile.oss_name, optarg, sizeof(profile.oss_name));
-			profile.pvc_head = &virtual_loopback_head;
 
 			if (profile.bits == 0 || voss_dsp_sample_rate == 0 ||
 			    profile.channels == 0 || voss_dsp_samples == 0)
@@ -2114,7 +2100,8 @@ parse_options(int narg, char **pparg, int is_main)
 			if (val <= 0 || val >= (1024 * 1024))
 				return ("-s option value is too big");
 
-			ptr = dup_profile(&profile, opt_amp, opt_pol, opt_mute[0], opt_mute[1], c == 'L');
+			ptr = dup_profile(&profile, opt_amp, opt_pol,
+			    opt_mute[0], opt_mute[1], c == 'L', 0);
 			if (ptr != NULL)
 				return (ptr);
 			break;
@@ -2426,9 +2413,6 @@ main(int argc, char **argv)
 
 	TAILQ_INIT(&virtual_profile_client_head);
 	TAILQ_INIT(&virtual_profile_loopback_head);
-
-	TAILQ_INIT(&virtual_client_head);
-	TAILQ_INIT(&virtual_loopback_head);
 
 	TAILQ_INIT(&virtual_monitor_input);
 	TAILQ_INIT(&virtual_monitor_output);

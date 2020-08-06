@@ -93,9 +93,9 @@ struct virtual_compressor {
 
 struct virtual_profile {
 	vprofile_entry_t entry;
+	vclient_head_t head;
 	char oss_name[VMAX_STRING];
 	char wav_name[VMAX_STRING];
-	vclient_head_t *pvc_head;
 	uint32_t rx_filter_size;
 	uint32_t tx_filter_size;
 	double *rx_filter_data[VMAX_CHAN];
@@ -112,7 +112,8 @@ struct virtual_profile {
 	uint8_t	tx_pol[VMAX_CHAN];
 	uint8_t	bits;
 	uint8_t	channels;
-	struct virtual_compressor rx_compressor;
+	struct virtual_compressor rx_compressor_param;
+	double rx_compressor_gain[VMAX_CHAN];
 	uint8_t synchronized;
 	uint32_t rec_delay;
 	int fd_sta;
@@ -157,7 +158,6 @@ struct virtual_client {
 	vresample_t rx_resample;
 	vresample_t tx_resample;
 	struct virtual_profile *profile;
-	double rx_compressor_gain[VMAX_CHAN];
 	uint64_t rx_samples;
 	uint64_t rx_timestamp;
 	uint64_t tx_samples;
@@ -191,9 +191,6 @@ struct virtual_monitor {
 	uint8_t	mute;
 	int8_t	shift;
 };
-
-extern vclient_head_t virtual_client_head;
-extern vclient_head_t virtual_loopback_head;
 
 extern vprofile_head_t virtual_profile_client_head;
 extern vprofile_head_t virtual_profile_loopback_head;

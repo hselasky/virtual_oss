@@ -124,6 +124,7 @@ vclient_write_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
 void   *
 virtual_oss_process(void *arg)
 {
+	vprofile_t *pvp;
 	vclient_t *pvc;
 	vmonitor_t *pvm;
 	struct voss_backend *rx_be = voss_rx_backend;
@@ -261,33 +262,40 @@ virtual_oss_process(void *arg)
 
 			atomic_lock();
 
-			if (TAILQ_FIRST(&virtual_monitor_input) != NULL) {
-				memcpy(buffer_monitor, buffer_data,
-				    8 * samples * src_chans);
-			}
-			/*
-			 * -- 1 -- Distribute input samples to all
-			 * client devices
-			 */
-			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
+			/* make a copy of the input data */
+			memcpy(buffer_monitor, buffer_data, 8 * samples * src_chans);
+
+			/* (1) Distribute input samples to all clients */
+
+			TAILQ_FOREACH(pvp, &virtual_profile_client_head, entry) {
+
+			    if (TAILQ_FIRST(&pvp->head) == NULL)
+				continue;
+
+			    /* check if compressor should be applied */
+			    voss_compressor(buffer_data, pvp->rx_compressor_gain,
+			        &pvp->rx_compressor_param, samples * src_chans,
+				src_chans, (1ULL << (pvp->bits - 1)) - 1ULL);
+
+			    TAILQ_FOREACH(pvc, &pvp->head, entry) {
 
 				dst_chans = pvc->channels;
 
-				if (dst_chans > src_chans)
+				if (dst_chans > voss_max_channels)
 					continue;
 
-				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+				shift_fmt = pvp->bits - (vclient_sample_bytes(pvc) * 8);
 
 				for (x = 0; x != dst_chans; x++) {
-					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x] - shift_fmt;
+					src = pvp->rx_src[x];
+					shift = pvp->rx_shift[x] - shift_fmt;
 
-					if (pvc->profile->rx_mute[x] || src >= src_chans) {
+					if (pvp->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
 							buffer_temp[(y * dst_chans) + x] = 0;
 						}
 					} else {
-						if (pvc->profile->rx_pol[x]) {
+						if (pvp->rx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
@@ -317,8 +325,8 @@ virtual_oss_process(void *arg)
 					}
 				}
 
-				format_maximum(buffer_temp, pvc->profile->rx_peak_value,
-				    pvc->channels, samples, shift_fmt);
+				format_maximum(buffer_temp, pvp->rx_peak_value,
+				    dst_chans, samples, shift_fmt);
 
 				if (pvc->rx_enabled == 0)
 					continue;
@@ -329,6 +337,11 @@ virtual_oss_process(void *arg)
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    buffer_temp, samples * dst_chans);
+			    }
+
+			    /* restore buffer, if any */
+			    if (pvp->rx_compressor_param.enabled)
+				memcpy(buffer_data, buffer_monitor, 8 * samples * src_chans);
 			}
 
 			/* fill main output buffer with silence */
@@ -336,7 +349,7 @@ virtual_oss_process(void *arg)
 			memset(buffer_temp, 0, sizeof(buffer_temp[0]) *
 			    samples * src_chans);
 
-			/* -- 2.0 -- Run audio delay locator */
+			/* (2) Run audio delay locator */
 
 			if (voss_ad_enabled != 0) {
 				y = (samples * voss_mix_channels);
@@ -346,16 +359,19 @@ virtual_oss_process(void *arg)
 					    [x + voss_ad_input_channel]);
 				}
 			}
-			/*
-			 * -- 2.1 -- Load output samples from all client
-			 * devices
-			 */
-			TAILQ_FOREACH(pvc, &virtual_client_head, entry) {
+
+			/* (3) Load output samples from all clients */
+
+			TAILQ_FOREACH(pvp, &virtual_profile_client_head, entry) {
+			    TAILQ_FOREACH(pvc, &pvp->head, entry) {
 
 				if (pvc->tx_enabled == 0)
 					continue;
 
 				dst_chans = pvc->channels;
+
+				if (dst_chans > voss_max_channels)
+					continue;
 
 				/* read data from ring buffer */
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
@@ -365,24 +381,24 @@ virtual_oss_process(void *arg)
 				pvc->tx_timestamp = last_timestamp;
 				pvc->tx_samples += samples * dst_chans;
 
-				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+				shift_fmt = pvp->bits - (vclient_sample_bytes(pvc) * 8);
 
-				format_maximum(buffer_data, pvc->profile->tx_peak_value,
+				format_maximum(buffer_data, pvp->tx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
-					src = pvc->profile->tx_dst[x];
-					shift_orig = pvc->profile->tx_shift[x] + shift_fmt;
+				for (x = x_off = 0; x != pvp->channels; x++, x_off++) {
+					src = pvp->tx_dst[x];
+					shift_orig = pvp->tx_shift[x] + shift_fmt;
 					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
-					if (pvc->profile->tx_mute[x] || src >= src_chans) {
+					if (pvp->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
 						if (x_off >= dst_chans)
 							x_off -= dst_chans;
 
-						if (pvc->profile->tx_pol[x]) {
+						if (pvp->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
@@ -419,18 +435,21 @@ virtual_oss_process(void *arg)
 						}
 					}
 				}
+			    }
 			}
 
-			/*
-			 * -- 2.2 -- Load output samples from all loopback
-			 * devices
-			 */
-			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
+			/* (4) Load output samples from all loopbacks */
+
+			TAILQ_FOREACH(pvp, &virtual_profile_loopback_head, entry) {
+			    TAILQ_FOREACH(pvc, &pvp->head, entry) {
 
 				if (pvc->tx_enabled == 0)
 					continue;
 
 				dst_chans = pvc->channels;
+
+				if (dst_chans > voss_max_channels)
+					continue;
 
 				/* read data from ring buffer */
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
@@ -440,24 +459,24 @@ virtual_oss_process(void *arg)
 				pvc->tx_timestamp = last_timestamp;
 				pvc->tx_samples += samples * dst_chans;
 
-				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+				shift_fmt = pvp->bits - (vclient_sample_bytes(pvc) * 8);
 
-				format_maximum(buffer_data, pvc->profile->tx_peak_value,
+				format_maximum(buffer_data, pvp->tx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				for (x = x_off = 0; x != pvc->profile->channels; x++, x_off++) {
-					src = pvc->profile->tx_dst[x];
-					shift_orig = pvc->profile->tx_shift[x] + shift_fmt;
+				for (x = x_off = 0; x != pvp->channels; x++, x_off++) {
+					src = pvp->tx_dst[x];
+					shift_orig = pvp->tx_shift[x] + shift_fmt;
 					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
-					if (pvc->profile->tx_mute[x] || src >= src_chans) {
+					if (pvp->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
 						if (x_off >= dst_chans)
 							x_off -= dst_chans;
 
-						if (pvc->profile->tx_pol[x]) {
+						if (pvp->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
@@ -494,9 +513,10 @@ virtual_oss_process(void *arg)
 						}
 					}
 				}
+			    }
 			}
 
-			/* -- 3 -- Check for input monitoring */
+			/* (5) Check for input monitoring */
 
 			TAILQ_FOREACH(pvm, &virtual_monitor_input, entry) {
 
@@ -559,7 +579,8 @@ virtual_oss_process(void *arg)
 				memcpy(buffer_monitor, buffer_temp,
 				    8 * samples * src_chans);
 			}
-			/* -- 4 -- Check for output monitoring */
+
+			/* (6) Check for output monitoring */
 
 			TAILQ_FOREACH(pvm, &virtual_monitor_output, entry) {
 
@@ -618,27 +639,40 @@ virtual_oss_process(void *arg)
 				}
 			}
 
-			/* -- 5 -- Check for output recording */
+			/* make a copy of the output data */
+			memcpy(buffer_data, buffer_temp, 8 * samples * src_chans);
 
-			TAILQ_FOREACH(pvc, &virtual_loopback_head, entry) {
+			/* (7) Check for output recording */
+
+			TAILQ_FOREACH(pvp, &virtual_profile_loopback_head, entry) {
+
+			    if (TAILQ_FIRST(&pvp->head) == NULL)
+				continue;
+
+			    /* check if compressor should be applied */
+			    voss_compressor(buffer_temp, pvp->rx_compressor_gain,
+				&pvp->rx_compressor_param, samples,
+			        samples * src_chans, (1ULL << (pvp->bits - 1)) - 1ULL);
+
+			    TAILQ_FOREACH(pvc, &pvp->head, entry) {
 
 				dst_chans = pvc->channels;
 
-				if (dst_chans > src_chans)
+				if (dst_chans > voss_max_channels)
 					continue;
 
-				shift_fmt = pvc->profile->bits - (vclient_sample_bytes(pvc) * 8);
+				shift_fmt = pvp->bits - (vclient_sample_bytes(pvc) * 8);
 
 				for (x = 0; x != dst_chans; x++) {
-					src = pvc->profile->rx_src[x];
-					shift = pvc->profile->rx_shift[x] - shift_fmt;
+					src = pvp->rx_src[x];
+					shift = pvp->rx_shift[x] - shift_fmt;
 
-					if (pvc->profile->rx_mute[x] || src >= src_chans) {
+					if (pvp->rx_mute[x] || src >= src_chans) {
 						for (y = 0; y != samples; y++) {
 							buffer_monitor[(y * dst_chans) + x] = 0;
 						}
 					} else {
-						if (pvc->profile->rx_pol[x]) {
+						if (pvp->rx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
 								for (y = 0; y != samples; y++) {
@@ -668,8 +702,8 @@ virtual_oss_process(void *arg)
 					}
 				}
 
-				format_maximum(buffer_monitor, pvc->profile->rx_peak_value,
-				    pvc->channels, samples, shift_fmt);
+				format_maximum(buffer_monitor, pvp->rx_peak_value,
+				    dst_chans, samples, shift_fmt);
 
 				if (pvc->rx_enabled == 0)
 					continue;
@@ -680,6 +714,11 @@ virtual_oss_process(void *arg)
 				/* store data into ring buffer */
 				vclient_write_linear(pvc, &pvc->rx_ring[0],
 				    buffer_monitor, samples * dst_chans);
+			    }
+
+			    /* restore buffer, if any */
+			    if (pvp->rx_compressor_param.enabled)
+				memcpy(buffer_temp, buffer_data, 8 * samples * src_chans);
 			}
 
 			atomic_wakeup();

@@ -349,10 +349,10 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		pvp->rx_compressor.enabled = data.io_lim.param.enabled;
-		pvp->rx_compressor.knee = data.io_lim.param.knee;
-		pvp->rx_compressor.attack = data.io_lim.param.attack;
-		pvp->rx_compressor.decay = data.io_lim.param.decay;
+		pvp->rx_compressor_param.enabled = data.io_lim.param.enabled;
+		pvp->rx_compressor_param.knee = data.io_lim.param.knee;
+		pvp->rx_compressor_param.attack = data.io_lim.param.attack;
+		pvp->rx_compressor_param.decay = data.io_lim.param.decay;
 		break;
 	case VIRTUAL_OSS_GET_DEV_LIMIT:
 	case VIRTUAL_OSS_GET_LOOP_LIMIT:
@@ -360,18 +360,16 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 			error = CUSE_ERR_INVALID;
 			break;
 		}
-		data.io_lim.param.enabled = pvp->rx_compressor.enabled;
-		data.io_lim.param.knee = pvp->rx_compressor.knee;
-		data.io_lim.param.attack = pvp->rx_compressor.attack;
-		data.io_lim.param.decay = pvp->rx_compressor.decay;
+		data.io_lim.param.enabled = pvp->rx_compressor_param.enabled;
+		data.io_lim.param.knee = pvp->rx_compressor_param.knee;
+		data.io_lim.param.attack = pvp->rx_compressor_param.attack;
+		data.io_lim.param.decay = pvp->rx_compressor_param.decay;
 		data.io_lim.param.gain = 1000;
 
-		TAILQ_FOREACH(pvc, pvp->pvc_head, entry) {
-			for (chan = 0; chan != VMAX_CHAN; chan++) {
-				int gain = pvc->rx_compressor_gain[chan] * 1000.0;
-				if (data.io_lim.param.gain > gain)
-					data.io_lim.param.gain = gain;
-			}
+		for (chan = 0; chan != VMAX_CHAN; chan++) {
+			int gain = pvp->rx_compressor_gain[chan] * 1000.0;
+			if (data.io_lim.param.gain > gain)
+				data.io_lim.param.gain = gain;
 		}
 		break;
 	case VIRTUAL_OSS_GET_OUTPUT_PEAK:

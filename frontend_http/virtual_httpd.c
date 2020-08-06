@@ -834,7 +834,7 @@ voss_httpd_start(vprofile_t *pvp)
 	pvc->type = VTYPE_OSS_DAT;
 
 	atomic_lock();
-	TAILQ_INSERT_TAIL(pvp->pvc_head, pvc, entry);
+	TAILQ_INSERT_TAIL(&pvp->head, pvc, entry);
 	atomic_unlock();
 
 	if (pthread_create(&td, NULL, (void *)&voss_httpd_server, pvc))
