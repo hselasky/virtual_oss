@@ -31,7 +31,11 @@
 #include "virtual_int.h"
 #include "virtual_oss.h"
 
-struct virtual_compressor voss_output_compressor_param;
+struct virtual_compressor voss_output_compressor_param = {
+	.knee = 85,
+	.attack = 3,
+	.decay = 20,
+};
 double voss_output_compressor_gain[VMAX_CHAN];
 
 void

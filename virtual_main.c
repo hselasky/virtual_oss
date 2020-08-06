@@ -1695,6 +1695,32 @@ usage(void)
 	exit(EX_USAGE);
 }
 
+static void
+init_compressor(struct virtual_profile *pvp)
+{
+	int x;
+
+	memset(&pvp->rx_compressor_param, 0, sizeof(pvp->rx_compressor_param));
+
+	pvp->rx_compressor_param.knee = 85;
+	pvp->rx_compressor_param.attack = 3;
+	pvp->rx_compressor_param.decay = 20;
+
+	for (x = 0; x != VMAX_CHAN; x++)
+		pvp->rx_compressor_gain[x] = 1.0;
+}
+
+static void
+init_mapping(struct virtual_profile *pvp)
+{
+	int x;
+
+	for (x = 0; x != VMAX_CHAN; x++) {
+		pvp->rx_src[x] = x;
+		pvp->tx_dst[x] = x;
+	}
+}
+
 static const char *
 dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
     int tx_mute, int synchronized, int is_client)
@@ -1809,7 +1835,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
 	pvp->http.rtp_port = NULL;
 
 	/* need to set new compressor parameters next time */
-	memset(&pvp->rx_compressor_param, 0, sizeof(pvp->rx_compressor_param));
+	init_compressor(pvp);
 
 #ifdef HAVE_HTTPD
 	return (voss_httpd_start(ptr));
@@ -1844,17 +1870,12 @@ virtual_cuse_process(void *arg)
 }
 
 static void
-virtual_cuse_init_profile(struct virtual_profile *pvp, int clear)
+virtual_cuse_init_profile(struct virtual_profile *pvp)
 {
-	int x;
+	memset(pvp, 0, sizeof(*pvp));
 
-	if (clear != 0)
-		memset(pvp, 0, sizeof(*pvp));
-	for (x = 0; x != VMAX_CHAN; x++) {
-		pvp->rx_src[x] = x;
-		pvp->tx_dst[x] = x;
-		pvp->rx_compressor_gain[x] = 1.0;
-	}
+	init_compressor(pvp);
+	init_mapping(pvp);
 }
 
 static const char *
@@ -1878,7 +1899,7 @@ parse_options(int narg, char **pparg, int is_main)
 	else
 		optstr = "F:G:w:e:p:a:c:b:f:m:M:d:l:L:s:O:P:R:";
 
-	virtual_cuse_init_profile(&profile, 1);
+	virtual_cuse_init_profile(&profile);
 
 	/* reset getopt parsing */
 	optreset = 1;
@@ -2157,7 +2178,7 @@ parse_options(int narg, char **pparg, int is_main)
 			ptr = optarg;
 			val = 0;
 			idx = 0;
-			virtual_cuse_init_profile(&profile, 0);
+			init_mapping(&profile);
 			while (1) {
 				c = *ptr++;
 				if (c == ',' || c == 0) {
