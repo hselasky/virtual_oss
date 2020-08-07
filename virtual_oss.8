@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd August 3, 2020
+.Dd August 7, 2020
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -78,9 +78,6 @@ Size is specified as <samples> or <milliseconds>ms.
 Set real-time priority.
 .It Fl a Ar amp
 Set default DSP device amplification as power of two value.
-.It Fl g Ar groups
-Set default DSP device group.
-Useful when a channel is limited to identify stereo pairs.
 .It Fl p Ar polarity
 Set default polarity of DSP device.
 .It Fl e Ar mute
@@ -124,6 +121,26 @@ Set receive filter size in number of samples or <milliseconds>ms for the next de
 Set transmit filter size in number of samples or <milliseconds>ms for the next device to be created.
 .It Fl D Ar file
 Write process ID of virtual_oss to file.
+.It Fl g Ar knee,attack,decay
+Enable device compressor in receive direction.
+See description of -x option.
+.It Fl x Ar knee,attack,decay
+Enable output compressor and set knee, attack and decay.
+Knee is in the range 0..255, while attack and decay are between 0 and 62.
+Samples having an absolute value lower than the knee are transmitted
+unchanged.
+Sample values over the knee are lowered "a little bit".
+You can think about attack and decay as a measure of how fast or slow the
+gain of the compressor will work.
+It is advised that attack is low, so it reacts fast once too high
+sample values appear.
+It is also advised that the decay value is higher than the attack value so
+that the gain reduction is gradually removed.
+The reasoning behind this is that the compressor should react almost
+immediately when high volume signals arrive to protect the hardware,
+but it slowly changes gain when there are no loud signals to avoid
+distorting the signal.
+The default values are 85,3,20 .
 .It Fl h
 Show usage and all available options.
 .El
@@ -159,7 +176,7 @@ mixer -f /dev/mixerX -s pcm 100
 virtual_oss \\
 	-S \\
 	-i 8 \\
-	-g 1,1 \\
+	-x 85,3,20 \\
 	-C 16 -c 8 -r 48000 -b 32 -s 768 -f /dev/dspX \\
 	-a 12 -b 16 -c 2 -m 0,4,1,5 -d dsp \\
 	-a 12 -b 16 -c 2 -m 8,8,9,9 -d vdsp \\
