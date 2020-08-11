@@ -1,4 +1,5 @@
 #!/bin/sh
+# $FreeBSD$
 #
 # PROVIDE: virtual_oss
 # BEFORE: LOGIN sndiod
