@@ -28,7 +28,7 @@
 
 .PATH: . backend_oss backend_bt backend_null equalizer frontend_http
 
-VERSION=1.2.6
+VERSION=1.2.7
 PROG=virtual_oss
 MAN=${PROG}.8
 PACKAGE=${PROG}-${VERSION}
