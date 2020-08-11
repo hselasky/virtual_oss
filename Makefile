@@ -104,7 +104,7 @@ help:
 
 package: clean
 	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch] \
-		equalizer/*.[ch] rc.d/virtual_oss.in
+		frontend_*/*.[ch] equalizer/*.[ch] rc.d/virtual_oss.in
 	rm -rf ${PACKAGE}
 	mkdir ${PACKAGE}
 	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
