@@ -33,6 +33,10 @@
 #include <signal.h>
 #include <fcntl.h>
 
+#ifdef HAVE_SNDSTAT
+#include <sys/nv.h>
+#include <sys/sndstat.h>
+#endif
 #include <sys/soundcard.h>
 #include <sys/queue.h>
 #include <sys/types.h>
@@ -1721,6 +1725,91 @@ init_mapping(struct virtual_profile *pvp)
 	}
 }
 
+static void
+init_sndstat(vprofile_t *ptr)
+{
+#ifdef HAVE_SNDSTAT
+	int err;
+	int unit;
+	nvlist_t *nvl;
+	nvlist_t *di = NULL;
+	struct sndstat_nvlbuf_arg arg;
+
+	nvl = nvlist_create(0);
+	if (nvl == NULL) {
+		warn("Failed to create nvlist");
+		goto done;
+	}
+
+	di = nvlist_create(0);
+	if (di == NULL) {
+		warn("Failed to create nvlist");
+		goto done;
+	}
+
+	if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
+		nvlist_add_stringf(di, SNDSTAT_LABEL_DEVNODE,
+		    "pcm%d", unit);
+		nvlist_add_string(di, SNDSTAT_LABEL_DESC, "Virtual OSS");
+		nvlist_add_number(di, SNDSTAT_LABEL_PCHAN, ptr->channels);
+		nvlist_add_number(di, SNDSTAT_LABEL_RCHAN, ptr->channels);
+		nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
+		if (nvlist_error(di) == 0) {
+			nvlist_free_string(di, SNDSTAT_LABEL_DEVNODE);
+			nvlist_add_string(di, SNDSTAT_LABEL_DEVNODE, ptr->oss_name);
+			nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
+		}
+	} else {
+		nvlist_add_string(di, SNDSTAT_LABEL_DEVNODE,
+		    ptr->oss_name);
+		nvlist_add_string(di, SNDSTAT_LABEL_DESC, "Virtual OSS");
+		nvlist_add_number(di, SNDSTAT_LABEL_PCHAN, ptr->channels);
+		nvlist_add_number(di, SNDSTAT_LABEL_RCHAN, ptr->channels);
+		nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
+	}
+
+	if (nvlist_error(nvl)) {
+		warn("Failed building nvlist");
+		goto done;
+	}
+
+	arg.buf = nvlist_pack(nvl, &arg.nbytes);
+	if (arg.buf == NULL) {
+		warn("Failed to pack nvlist");
+		goto done;
+	}
+	err = ioctl(ptr->fd_sta, SNDSTAT_ADD_USER_DEVS, &arg);
+	free(arg.buf);
+	if (err != 0) {
+		warn("Failed to issue ioctl(SNDSTAT_ADD_USER_DEVS)");
+		goto done;
+	}
+
+done:
+	nvlist_destroy(di);
+	nvlist_destroy(nvl);
+#else
+	char temp[128];
+	int unit;
+
+	if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
+		snprintf(temp, sizeof(temp),
+		    "pcm%d: <Virtual OSS> (play/rec)\n"
+		    "%s: <Virtual OSS> (play/rec)\n",
+		    unit, ptr->oss_name);
+	} else {
+		snprintf(temp, sizeof(temp),
+		    "%s: <Virtual OSS> (play/rec)\n",
+		    ptr->oss_name);
+	}
+	if (write(ptr->fd_sta, temp, strlen(temp)) != (int)strlen(temp)) {
+		warn("Could not register virtual OSS device");
+		close(ptr->fd_sta);
+		ptr->fd_sta = -1;
+	}
+#endif
+}
+
 static const char *
 dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
     int tx_mute, int synchronized, int is_client)
@@ -1780,23 +1869,7 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
 			if (ptr->fd_sta < 0) {
 				warn("Could not open '%s'", voss_sta_device);
 			} else {
-				char temp[128];
-				int unit;
-				if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
-					snprintf(temp, sizeof(temp),
-					    "pcm%d: <Virtual OSS> (play/rec)\n"
-					    "%s: <Virtual OSS> (play/rec)\n",
-					    unit, ptr->oss_name);
-				} else {
-					snprintf(temp, sizeof(temp),
-					    "%s: <Virtual OSS> (play/rec)\n",
-					    ptr->oss_name);
-				}
-				if (write(ptr->fd_sta, temp, strlen(temp)) != (int)strlen(temp)) {
-					warn("Could not register virtual OSS device");
-					close(ptr->fd_sta);
-					ptr->fd_sta = -1;
-				}
+				init_sndstat(ptr);
 			}
 		}
 	}

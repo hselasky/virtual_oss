@@ -52,6 +52,11 @@ virtual_ring.c \
 backend_oss.c \
 backend_null.c
 
+.if defined(HAVE_SNDSTAT)
+CFLAGS += -DHAVE_SNDSTAT
+LDFLAGS += -lnv
+.endif
+
 .if defined(HAVE_BLUETOOTH)
 SRCS += backend_bt.c avdtp.c sbc_encode.c
 CFLAGS += -DHAVE_BLUETOOTH
