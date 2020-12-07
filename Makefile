@@ -28,10 +28,8 @@
 
 .PATH: . backend_oss backend_bt backend_null equalizer frontend_http
 
-VERSION=1.2.7
 PROG=virtual_oss
 MAN=${PROG}.8
-PACKAGE=${PROG}-${VERSION}
 PTHREAD_LIBS?= -lpthread
 PREFIX?=        /usr/local
 LOCALBASE?=     /usr/local
@@ -105,13 +103,4 @@ LDFLAGS += -L${LIBDIR} ${PTHREAD_LIBS} -lm -lsamplerate
 .include <bsd.prog.mk>
 
 help:
-	@echo "Targets are: all, install, clean, package, help"
-
-package: clean
-	tar -cvf ${PACKAGE}.tar Makefile virtual*.[ch8] backend_*/*.[ch] \
-		frontend_*/*.[ch] equalizer/*.[ch] rc.d/virtual_oss.in
-	rm -rf ${PACKAGE}
-	mkdir ${PACKAGE}
-	tar -xvf ${PACKAGE}.tar -C ${PACKAGE}
-	rm -rf ${PACKAGE}.tar
-	tar -jcvf ${PACKAGE}.tar.bz2 --uid 0 --gid 0 ${PACKAGE}
+	@echo "Targets are: all, install, clean, help"
