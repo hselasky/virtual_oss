@@ -30,11 +30,7 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 
-#ifdef HAVE_CUSE
 #include <cuse.h>
-#else
-#include <cuse4bsd.h>
-#endif
 
 #include "virtual_int.h"
 

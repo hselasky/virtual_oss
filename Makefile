@@ -86,19 +86,12 @@ SRCS += virtual_httpd.c
 CFLAGS += -DHAVE_HTTPD
 .endif
 
-.if defined(HAVE_CUSE)
-CFLAGS+= -DHAVE_CUSE
-LDFLAGS+= -lcuse
-.else
-LDFLAGS+= -lcuse4bsd
-.endif
-
 .if defined(HAVE_DEBUG)
 DEBUG_FLAGS=-g -O0 -ferror-limit=-1
 .endif
 
 CFLAGS += -I${LOCALBASE}/include
-LDFLAGS += -L${LIBDIR} ${PTHREAD_LIBS} -lm -lsamplerate
+LDFLAGS += -L${LIBDIR} ${PTHREAD_LIBS} -lm -lsamplerate -lcuse
 
 .include <bsd.prog.mk>
 
