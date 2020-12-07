@@ -1,5 +1,5 @@
 .\"
-.\" Copyright (c) 2017 Hans Petter Selasky <hselasky@freebsd.org>
+.\" Copyright (c) 2017-2020 Hans Petter Selasky <hselasky@freebsd.org>
 .\"
 .\" All rights reserved.
 .\"
@@ -68,9 +68,9 @@ Enable automatic DSP rate resampling.
 .It Fl Q Ar quality
 Set resampling quality: 0=best, 1=medium and 2=fastest (default).
 .It Fl b Ar bits
-Set sample-depth in bits for the proceeding commands.
+Set sample-depth in bits for the subsequent commands.
 .It Fl r Ar rate
-Set default sample-rate for the proceeding commands.
+Set default sample-rate for the subsequent commands.
 .It Fl s Ar size
 Set default buffer size.
 Size is specified as <samples> or <milliseconds>ms.
@@ -87,7 +87,7 @@ Set default channel mapping of DSP device.
 .It Fl C Ar num
 Set maximum number of mix channels.
 .It Fl c Ar num
-Set mix channels for the proceeding commands.
+Set mix channels for the subsequent commands.
 .It Fl M Ar filter
 Add a monitoring filter.
 .It Fl t Ar devname
