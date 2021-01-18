@@ -44,16 +44,11 @@ ways.
 .Pp
 .Nm
 requires the
-.Xr cuse4bsd 3
-or
 .Xr cuse 3
-kernel module. To load the driver as a
-module at boot time, place onf of the following lines in
+kernel module.
+To load the driver as a module at boot time, place the following line in
 .Xr loader.conf 5 :
 .Pp
-       # FreeBSD < 11
-       cuse4bsd_load="YES"
-       # FreeBSD >= 11
        cuse_load="YES"
 .Pp
 All channel numbers start at zero.
@@ -242,8 +237,6 @@ everyone in the system access.
 .Xr virtual_bt_speaker 8 ,
 .Xr virtual_equalizer 8 ,
 .Xr cuse 3
-and
-.Xr cuse4bsd 3
 .Sh AUTHORS
 .Nm
 was written by
