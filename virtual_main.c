@@ -1199,6 +1199,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.audioinfo.enabled = 1;
 		data.audioinfo.min_rate = (int)8000;
 		data.audioinfo.max_rate = (int)voss_dsp_sample_rate;
+		data.audioinfo.max_channels = pvc->profile->channels;
 		/* range check */
 		if (voss_libsamplerate_enable == 0 ||
 		    data.audioinfo.min_rate > data.audioinfo.max_rate)
