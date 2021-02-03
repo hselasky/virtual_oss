@@ -1405,15 +1405,21 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		/* compute input samples */
+		/* compute input samples per channel */
 		data.oss_count.samples =
 		    vclient_scale(pvc->rx_samples, pvc->sample_rate, voss_dsp_sample_rate);
+		data.oss_count.samples /= pvc->channels;
+		data.oss_count.fifo_samples =
+		    vclient_input_delay(pvc) / (pvc->channels * vclient_sample_bytes(pvc));
 		break;
 	case SNDCTL_DSP_CURRENT_OPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));
-		/* compute input samples */
+		/* compute output samples per channel */
 		data.oss_count.samples =
 		    vclient_scale(pvc->tx_samples, pvc->sample_rate, voss_dsp_sample_rate);
+		data.oss_count.samples /= pvc->channels;
+		data.oss_count.fifo_samples =
+		    vclient_output_delay(pvc) / (pvc->channels * vclient_sample_bytes(pvc));
 		break;
 	case SNDCTL_DSP_GETIPTR:
 		memset(&data.oss_count_info, 0, sizeof(data.oss_count_info));
