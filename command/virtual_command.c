@@ -82,7 +82,9 @@ command_main(int argc, char **argv)
 	/* execute options */
 	if (ioctl(fd, VIRTUAL_OSS_ADD_OPTIONS, options) < 0)
 		errx(EX_SOFTWARE, "One or more invalid options");
-
+	/* show error, if any */
+	if (options[0] != '\0')
+		errx(EX_SOFTWARE, "%s", options);
 	close(fd);
 	return (0);
 }
