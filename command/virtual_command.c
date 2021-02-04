@@ -74,7 +74,7 @@ command_main(int argc, char **argv)
 		if (tmp > len)
 			errx(EX_SOFTWARE, "Too many options passed");
 		memcpy(options + offset, argv[x], tmp);
-		options[tmp - 1] = ' ';
+		options[offset + tmp - 1] = ' ';
 		offset += tmp;
 		len -= tmp;
 	}
