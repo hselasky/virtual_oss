@@ -38,25 +38,25 @@ pass additional command line arguments to a running
 instance via its control device.
 Supported command line arguments:
 .Bl -tag -width indent
-.It E xxx
-.It F xxx
-.It G xxx
-.It L xxx
-.It M xxx
-.It O xxx
-.It P xxx
-.It R xxx
-.It a xxx
-.It b xxx
-.It c xxx
-.It d xxx
-.It e xxx
-.It f xxx
-.It l xxx
-.It m xxx
-.It p xxx
-.It s xxx
-.It w xxx
+.It Fl E Ar xxx
+.It Fl F Ar xxx
+.It Fl G Ar xxx
+.It Fl L Ar xxx
+.It Fl M Ar xxx
+.It Fl O Ar xxx
+.It Fl P Ar xxx
+.It Fl R Ar xxx
+.It Fl a Ar xxx
+.It Fl b Ar xxx
+.It Fl c Ar xxx
+.It Fl d Ar xxx
+.It Fl e Ar xxx
+.It Fl f Ar xxx
+.It Fl l Ar xxx
+.It Fl m Ar xxx
+.It Fl p Ar xxx
+.It Fl s Ar xxx
+.It Fl w Ar xxx
 .El
 Refer to
 .Xr virtual_oss 8
@@ -65,22 +65,27 @@ for a detailed description of the command line arguments.
 To change the recording device:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -R /dev/dsp4
+
 .Ed
 To change the playback device:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -P /dev/dsp4
+
 .Ed
 To enable recording:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -E 1
+
 .Ed
 To disable recording:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -E 0
+
 .Ed
 To create a new DSP device on the fly:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -b 16 -c 2 -d dsp.new
+
 .Ed
 .Sh FILES
 .Sh SEE ALSO
