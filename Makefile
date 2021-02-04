@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+# Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -26,7 +26,7 @@
 # Makefile for virtual_oss
 #
 
-.PATH: . backend_oss backend_bt backend_null equalizer frontend_http
+.PATH: . backend_oss backend_bt backend_null command equalizer frontend_http
 
 PROG=virtual_oss
 MAN=${PROG}.8
@@ -74,6 +74,13 @@ CFLAGS += -DHAVE_EQUALIZER
 LDFLAGS += -lfftw3
 LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_equalizer
 MAN += virtual_equalizer.8
+.endif
+
+.if defined(HAVE_COMMAND)
+SRCS += virtual_command.c
+CFLAGS += -DHAVE_COMMAND
+LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_oss_cmd
+MAN += virtual_oss_cmd.8
 .endif
 
 .if defined(HAVE_FFMPEG)

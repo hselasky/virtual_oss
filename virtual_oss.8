@@ -1,5 +1,5 @@
 .\"
-.\" Copyright (c) 2017-2020 Hans Petter Selasky <hselasky@freebsd.org>
+.\" Copyright (c) 2017-2021 Hans Petter Selasky <hselasky@freebsd.org>
 .\"
 .\" All rights reserved.
 .\"
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd August 7, 2020
+.Dd February 4, 2021
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -136,6 +136,10 @@ immediately when high volume signals arrive to protect the hardware,
 but it slowly changes gain when there are no loud signals to avoid
 distorting the signal.
 The default values are 85,3,20 .
+.It Fl E Ar enable_recording
+If the value passed is non-zero, recording is enabled.
+Else recording is disabled.
+This can be used to synchronize multiple recording streams.
 .It Fl h
 Show usage and all available options.
 .El
@@ -236,6 +240,8 @@ everyone in the system access.
 .Sh SEE ALSO
 .Xr virtual_bt_speaker 8 ,
 .Xr virtual_equalizer 8 ,
+.Xr virtual_oss_cmd 8 ,
+and
 .Xr cuse 3
 .Sh AUTHORS
 .Nm

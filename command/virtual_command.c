@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,11 +23,66 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _VIRTUAL_UTILS_H_
-#define	_VIRTUAL_UTILS_H_
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <err.h>
+#include <sysexits.h>
+#include <stdarg.h>
+#include <fcntl.h>
 
-int bt_speaker_main(int argc, char **argv);
-int equalizer_main(int argc, char **argv);
-int command_main(int argc, char **argv);
+#include "../virtual_utils.h"
+#include "../virtual_oss.h"
 
-#endif					/* _VIRTUAL_UTILS_H_ */
+static void
+message(const char *fmt, ...)
+{
+	va_list list;
+
+	va_start(list, fmt);
+	vfprintf(stderr, fmt, list);
+	va_end(list);
+}
+
+static void
+usage()
+{
+	message("Usage: virtual_oss_cmd /dev/vdsp.ctl [command line arguments to pass to virtual_oss]\n");
+	exit(EX_USAGE);
+}
+
+int
+command_main(int argc, char **argv)
+{
+	char options[VIRTUAL_OSS_OPTIONS_MAX] = {};
+	size_t offset = 0;
+	size_t len = VIRTUAL_OSS_OPTIONS_MAX - 1;
+	int fd;
+
+	/* check if no options */
+	if (argc < 2)
+		return (0);
+
+	fd = open(argv[1], O_RDWR);
+	if (fd < 0)
+		errx(EX_SOFTWARE, "Could not open '%s'", argv[1]);
+
+	for (int x = 2; x != argc; x++) {
+		size_t tmp = strlen(argv[x]) + 1;
+		if (tmp > len)
+			errx(EX_SOFTWARE, "Too many options passed");
+		memcpy(options + offset, argv[x], tmp);
+		options[tmp - 1] = ' ';
+		offset += tmp;
+		len -= tmp;
+	}
+
+	/* execute options */
+	if (ioctl(fd, VIRTUAL_OSS_ADD_OPTIONS, options) < 0)
+		errx(EX_SOFTWARE, "One or more invalid options");
+
+	close(fd);
+	return (0);
+}

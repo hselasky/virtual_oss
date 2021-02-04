@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1687,6 +1687,7 @@ usage(void)
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-F <rx_filter_samples> or <milliseconds>ms \\\n"
 	    "\t" "-G <tx_filter_samples> or <milliseconds>ms \\\n"
+	    "\t" "-E <enable_recording, 0 or 1> \\\n"
 #ifdef HAVE_HTTPD
 	    "\t" "-N <max HTTP connections, default is 1> \\\n"
 	    "\t" "-H <bind HTTP server to this host> \\\n"
@@ -1984,9 +1985,9 @@ parse_options(int narg, char **pparg, int is_main)
 	float samples_ms;
 
 	if (is_main)
-		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:x:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:";
+		optstr = "N:J:k:H:o:F:G:w:e:p:a:C:c:r:b:f:g:x:i:m:M:d:l:L:s:t:h?O:P:Q:R:ST:BD:E:";
 	else
-		optstr = "F:G:w:e:p:a:c:b:f:m:M:d:l:L:s:O:P:R:";
+		optstr = "F:G:w:e:p:a:c:b:f:m:M:d:l:L:s:O:P:R:E:";
 
 	virtual_cuse_init_profile(&profile);
 
@@ -2013,6 +2014,9 @@ parse_options(int narg, char **pparg, int is_main)
 			break;
 		case 'a':
 			opt_amp = atoi(optarg);
+			break;
+		case 'E':
+			voss_is_recording = (atoi(optarg) != 0);
 			break;
 		case 'e':
 			idx = 0;
@@ -2514,6 +2518,12 @@ main(int argc, char **argv)
 	} else if (argc > 0 && ends_with(argv[0], "virtual_equalizer")) {
 #ifdef HAVE_EQUALIZER
 		return (equalizer_main(argc, argv));
+#else
+		return (EX_USAGE);
+#endif
+	} else if (argc > 0 && ends_with(argv[0], "virtual_oss_cmd")) {
+#ifdef HAVE_COMMAND
+		return (command_main(argc, argv));
 #else
 		return (EX_USAGE);
 #endif

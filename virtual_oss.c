@@ -328,7 +328,9 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_temp, pvp->rx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				if (pvc->rx_enabled == 0)
+				/* check if recording is disabled */
+				if (pvc->rx_enabled == 0 ||
+				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
 					continue;
 
 				pvc->rx_timestamp = last_timestamp;
@@ -705,7 +707,9 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_monitor, pvp->rx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				if (pvc->rx_enabled == 0)
+				/* check if recording is disabled */
+				if (pvc->rx_enabled == 0 ||
+				    (voss_is_recording == 0 && pvc->type != VTYPE_OSS_DAT))
 					continue;
 
 				pvc->rx_timestamp = last_timestamp;
