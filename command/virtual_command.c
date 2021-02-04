@@ -63,7 +63,7 @@ command_main(int argc, char **argv)
 
 	/* check if no options */
 	if (argc < 2)
-		return (0);
+		usage();
 
 	fd = open(argv[1], O_RDWR);
 	if (fd < 0)
