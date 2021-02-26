@@ -164,6 +164,7 @@ struct virtual_client {
 	uint64_t tx_timestamp;
 	uint32_t buffer_frags;
 	uint32_t buffer_size;
+	uint32_t low_water;
 	uint32_t rec_delay;
 	uint32_t noise_rem;
 	int	rx_busy;
