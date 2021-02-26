@@ -393,6 +393,8 @@ vclient_setup_buffers(vclient_t *pvc, int size, int frags,
 	} else if (pvc->buffer_size_set == 0)
 		pvc->buffer_size = vclient_bufsize_scaled(pvc);
 
+	pvc->low_water = pvc->buffer_size;
+
 	if (frags > 0) {
 		pvc->buffer_frags = frags;
 		pvc->buffer_frags_set = 1;
@@ -1448,6 +1450,11 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		pvc->rx_enabled = 0;
 		break;
 	case SNDCTL_DSP_LOW_WATER:
+		if (data.val > 0 && data.val < (pvc->buffer_frags * pvc->buffer_size)) {
+			pvc->low_water = data.val;
+		} else {
+			error = CUSE_ERR_INVALID;
+		}
 		break;
 	case SNDCTL_DSP_GETERROR:
 		memset(&data.errinfo, 0, sizeof(data.errinfo));
@@ -1557,11 +1564,12 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 	atomic_lock();
 	if (events & CUSE_POLL_READ) {
 		pvc->rx_enabled = 1;
-		if (vclient_input_delay(pvc) >= pvc->buffer_size)
+		if (vclient_input_delay(pvc) >= pvc->low_water)
 			retval |= CUSE_POLL_READ;
 	}
 	if (events & CUSE_POLL_WRITE) {
-		if (vclient_output_delay(pvc) < (pvc->buffer_frags * pvc->buffer_size))
+		uint32_t total_buffer = pvc->buffer_frags * pvc->buffer_size;
+		if (vclient_output_delay(pvc) <= (total_buffer - pvc->low_water))
 			retval |= CUSE_POLL_WRITE;
 	}
 	atomic_unlock();
