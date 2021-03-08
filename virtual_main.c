@@ -1600,6 +1600,7 @@ vprofile_head_t virtual_profile_loopback_head;
 
 vmonitor_head_t virtual_monitor_input;
 vmonitor_head_t virtual_monitor_output;
+vmonitor_head_t virtual_monitor_local;
 
 uint32_t voss_max_channels;
 uint32_t voss_mix_channels;
@@ -1693,6 +1694,7 @@ usage(void)
 	    "\t" "-M <monitorfilter> \\\n"
 	    "\t" "-M i,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-M o,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
+	    "\t" "-M x,<src>,<dst>,<pol>,<mute>,<amp> \\\n"
 	    "\t" "-F <rx_filter_samples> or <milliseconds>ms \\\n"
 	    "\t" "-G <tx_filter_samples> or <milliseconds>ms \\\n"
 	    "\t" "-E <enable_recording, 0 or 1> \\\n"
@@ -2304,7 +2306,7 @@ parse_options(int narg, char **pparg, int is_main)
 		case 'M':
 			ptr = optarg;
 			type = *ptr;
-			if (type == 'i' || type == 'o') {
+			if (type == 'i' || type == 'o' || type == 'x') {
 				vmonitor_t *pvm;
 
 				int src = 0;
@@ -2369,6 +2371,7 @@ parse_options(int narg, char **pparg, int is_main)
 
 				pvm = vmonitor_alloc(&idx,
 				    (type == 'i') ? &virtual_monitor_input :
+				    (type == 'x') ? &virtual_monitor_local :
 				    &virtual_monitor_output);
 
 				if (pvm == NULL)
@@ -2544,6 +2547,7 @@ main(int argc, char **argv)
 
 	TAILQ_INIT(&virtual_monitor_input);
 	TAILQ_INIT(&virtual_monitor_output);
+	TAILQ_INIT(&virtual_monitor_local);
 
 	atomic_init();
 

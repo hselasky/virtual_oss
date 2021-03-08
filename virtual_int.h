@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -197,6 +197,7 @@ extern vprofile_head_t virtual_profile_client_head;
 extern vprofile_head_t virtual_profile_loopback_head;
 
 extern vmonitor_head_t virtual_monitor_input;
+extern vmonitor_head_t virtual_monitor_local;
 extern vmonitor_head_t virtual_monitor_output;
 
 extern const struct cuse_methods vctl_methods;

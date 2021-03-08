@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -160,6 +160,8 @@ virtual_oss_process(void *arg)
 	int64_t *buffer_monitor;
 	int64_t *buffer_temp;
 	int64_t *buffer_data;
+	int64_t *buffer_local;
+	int64_t *buffer_orig;
 
 	bool need_delay = false;
 	
@@ -171,10 +173,13 @@ virtual_oss_process(void *arg)
 	buffer_dsp = malloc(buffer_dsp_max_size);
 	buffer_temp = malloc(voss_dsp_samples * voss_max_channels * 8);
 	buffer_monitor = malloc(voss_dsp_samples * voss_max_channels * 8);
+	buffer_local = malloc(voss_dsp_samples * voss_max_channels * 8);
 	buffer_data = malloc(voss_dsp_samples * voss_max_channels * 8);
+	buffer_orig = malloc(voss_dsp_samples * voss_max_channels * 8);
 
 	if (buffer_dsp == NULL || buffer_temp == NULL ||
-	    buffer_monitor == NULL || buffer_data == NULL)
+	    buffer_monitor == NULL || buffer_local == NULL ||
+	    buffer_data == NULL || buffer_orig == NULL)
 		errx(1, "Cannot allocate buffer memory");
 
 	while (1) {
@@ -216,6 +221,9 @@ virtual_oss_process(void *arg)
 		/* reset compressor gain */
 		for (x = 0; x != VMAX_CHAN; x++)
 			voss_output_compressor_gain[x] = 1.0;
+
+		/* reset local buffer */
+		memset(buffer_local, 0, 8 * voss_dsp_samples * voss_max_channels);
 
 		while (1) {
 			uint64_t delta_time;
@@ -262,8 +270,72 @@ virtual_oss_process(void *arg)
 
 			atomic_lock();
 
+			if (TAILQ_FIRST(&virtual_monitor_input) != NULL) {
+				/* make a copy of the input data, in case of remote monitoring */
+				memcpy(buffer_monitor, buffer_data, 8 * samples * src_chans);
+			}
+
+			/* (0) Check for local monitoring of output data */
+
+			TAILQ_FOREACH(pvm, &virtual_monitor_local, entry) {
+
+				int64_t val;
+
+				if (pvm->mute != 0 || pvm->src_chan >= src_chans ||
+				    pvm->dst_chan >= src_chans)
+					continue;
+
+				src = pvm->src_chan;
+				shift = pvm->shift;
+				x = pvm->dst_chan;
+
+				if (pvm->pol) {
+					if (shift < 0) {
+						shift = -shift;
+						for (y = 0; y != samples; y++) {
+							val = -(buffer_local[(y * src_chans) + src] >> shift);
+							buffer_data[(y * src_chans) + x] += val;
+							if (val < 0)
+								val = -val;
+							if (val > pvm->peak_value)
+								pvm->peak_value = val;
+						}
+					} else {
+						for (y = 0; y != samples; y++) {
+							val = -(buffer_local[(y * src_chans) + src] << shift);
+							buffer_data[(y * src_chans) + x] += val;
+							if (val < 0)
+								val = -val;
+							if (val > pvm->peak_value)
+								pvm->peak_value = val;
+						}
+					}
+				} else {
+					if (shift < 0) {
+						shift = -shift;
+						for (y = 0; y != samples; y++) {
+							val = (buffer_local[(y * src_chans) + src] >> shift);
+							buffer_data[(y * src_chans) + x] += val;
+							if (val < 0)
+								val = -val;
+							if (val > pvm->peak_value)
+								pvm->peak_value = val;
+						}
+					} else {
+						for (y = 0; y != samples; y++) {
+							val = (buffer_local[(y * src_chans) + src] << shift);
+							buffer_data[(y * src_chans) + x] += val;
+							if (val < 0)
+								val = -val;
+							if (val > pvm->peak_value)
+								pvm->peak_value = val;
+						}
+					}
+				}
+			}
+
 			/* make a copy of the input data */
-			memcpy(buffer_monitor, buffer_data, 8 * samples * src_chans);
+			memcpy(buffer_orig, buffer_data, 8 * samples * src_chans);
 
 			/* (1) Distribute input samples to all clients */
 
@@ -343,7 +415,7 @@ virtual_oss_process(void *arg)
 
 			    /* restore buffer, if any */
 			    if (pvp->rx_compressor_param.enabled)
-				memcpy(buffer_data, buffer_monitor, 8 * samples * src_chans);
+				memcpy(buffer_data, buffer_orig, 8 * samples * src_chans);
 			}
 
 			/* fill main output buffer with silence */
@@ -643,6 +715,10 @@ virtual_oss_process(void *arg)
 
 			/* make a copy of the output data */
 			memcpy(buffer_data, buffer_temp, 8 * samples * src_chans);
+
+			/* make a copy for local monitoring, if any */
+			if (TAILQ_FIRST(&virtual_monitor_local) != NULL)
+				memcpy(buffer_local, buffer_temp, 8 * voss_dsp_samples * voss_max_channels);
 
 			/* (7) Check for output recording */
 

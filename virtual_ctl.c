@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -250,6 +250,35 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		pvm->mute = data.mon_info.mute ? 1 : 0;
 		pvm->shift = data.mon_info.amp;
 		break;
+	case VIRTUAL_OSS_GET_LOCAL_MON_INFO:
+		pvm = vmonitor_by_index(data.mon_info.number,
+		    &virtual_monitor_local);
+		if (pvm == NULL) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.mon_info.src_chan = pvm->src_chan;
+		data.mon_info.dst_chan = pvm->dst_chan;
+		data.mon_info.pol = pvm->pol;
+		data.mon_info.mute = pvm->mute;
+		data.mon_info.amp = pvm->shift;
+		data.mon_info.bits = voss_dsp_bits;
+		break;
+	case VIRTUAL_OSS_SET_LOCAL_MON_INFO:
+		pvm = vmonitor_by_index(data.mon_info.number,
+		    &virtual_monitor_local);
+		if (pvm == NULL ||
+		    data.mon_info.amp < -31 ||
+		    data.mon_info.amp > 31) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		pvm->src_chan = data.mon_info.src_chan;
+		pvm->dst_chan = data.mon_info.dst_chan;
+		pvm->pol = data.mon_info.pol ? 1 : 0;
+		pvm->mute = data.mon_info.mute ? 1 : 0;
+		pvm->shift = data.mon_info.amp;
+		break;
 	case VIRTUAL_OSS_GET_DEV_PEAK:
 	case VIRTUAL_OSS_GET_LOOP_PEAK:
 		if (pvp == NULL ||
@@ -288,6 +317,17 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		data.mon_peak.bits = voss_dsp_bits;
 		pvm->peak_value = 0;
 		break;
+	case VIRTUAL_OSS_GET_LOCAL_MON_PEAK:
+		pvm = vmonitor_by_index(data.mon_peak.number,
+		    &virtual_monitor_local);
+		if (pvm == NULL) {
+			error = CUSE_ERR_INVALID;
+			break;
+		}
+		data.mon_peak.peak_value = pvm->peak_value;
+		data.mon_peak.bits = voss_dsp_bits;
+		pvm->peak_value = 0;
+		break;
 	case VIRTUAL_OSS_ADD_INPUT_MON:
 		pvm = vmonitor_alloc(&data.val,
 		    &virtual_monitor_input);
@@ -297,6 +337,12 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 	case VIRTUAL_OSS_ADD_OUTPUT_MON:
 		pvm = vmonitor_alloc(&data.val,
 		    &virtual_monitor_output);
+		if (pvm == NULL)
+			error = CUSE_ERR_INVALID;
+		break;
+	case VIRTUAL_OSS_ADD_LOCAL_MON:
+		pvm = vmonitor_alloc(&data.val,
+		    &virtual_monitor_local);
 		if (pvm == NULL)
 			error = CUSE_ERR_INVALID;
 		break;

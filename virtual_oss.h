@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2020 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -74,6 +74,9 @@ struct virtual_oss_mon_info {
 #define	VIRTUAL_OSS_GET_OUTPUT_MON_INFO	_IOWR('O', 7, struct virtual_oss_mon_info)
 #define	VIRTUAL_OSS_SET_OUTPUT_MON_INFO	 _IOW('O', 8, struct virtual_oss_mon_info)
 
+#define	VIRTUAL_OSS_GET_LOCAL_MON_INFO	_IOWR('O', 43, struct virtual_oss_mon_info)
+#define	VIRTUAL_OSS_SET_LOCAL_MON_INFO	 _IOW('O', 44, struct virtual_oss_mon_info)
+
 struct virtual_oss_io_peak {
 	int	number;			/* must be first */
 	int	channel;
@@ -94,9 +97,11 @@ struct virtual_oss_mon_peak {
 
 #define	VIRTUAL_OSS_GET_INPUT_MON_PEAK	_IOWR('O', 11, struct virtual_oss_mon_peak)
 #define	VIRTUAL_OSS_GET_OUTPUT_MON_PEAK	_IOWR('O', 12, struct virtual_oss_mon_peak)
+#define	VIRTUAL_OSS_GET_LOCAL_MON_PEAK	_IOWR('O', 45, struct virtual_oss_mon_peak)
 
 #define	VIRTUAL_OSS_ADD_INPUT_MON	 _IOR('O', 13, int)
 #define	VIRTUAL_OSS_ADD_OUTPUT_MON	 _IOR('O', 14, int)
+#define	VIRTUAL_OSS_ADD_LOCAL_MON	 _IOR('O', 46, int)
 
 struct virtual_oss_compressor {
 	int	enabled;

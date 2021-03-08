@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd February 4, 2021
+.Dd March 8, 2021
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -85,6 +85,21 @@ Set maximum number of mix channels.
 Set mix channels for the subsequent commands.
 .It Fl M Ar filter
 Add a monitoring filter.
+The filter consists of a list of comma separated arguments.
+The first argument indicates the type of monitoring filter:
+.Bl -tag -width indent
+.It i
+Feedback one mix input channel into another mix output channel, for remote feedback.
+.It o
+Add one mix output channel into another mix output channel, for creating a mix of multiple output channels.
+.It x
+Feedback one mix output channel into another mix input channel, for local feedback.
+.El
+The second argument gives the source mix channel.
+The third argument gives the destination mix channel.
+The fourth argument gives the polarity, default is zero.
+The fifth argument gives the mute state, default is one or muted.
+The sixth argument gives the amplitude, default is zero or no gain.
 .It Fl t Ar devname
 Set control device name.
 .It Fl P Ar devname
@@ -199,8 +214,29 @@ virtual_oss \\
 	-M o,15,1,0,0,0 \\
 	-M i,14,14,0,1,0 \\
 	-M i,15,15,0,1,0 \\
+	-M x,8,0,0,1,0 \\
+	-M x,8,1,0,1,0 \\
 	-t vdsp.ctl
 
+.Ed
+.Pp
+Create a secondary audio device sending its output audio into both
+input and output channels of the main DSP device.
+.Bd -literal -offset indent
+virtual_oss \\
+	-C 4 -c 2 \\
+	-r 48000 \\
+	-b 24 \\
+	-s 8.0ms \\
+	-f /dev/dsp3 \\
+	-c 2 \\
+	-d dsp \\
+	-m 2,2,3,3 \\
+	-d dsp.speech \\
+	-M o,2,0,0,0,0 \\
+	-M o,3,1,0,0,0 \\
+	-M x,2,0,0,0,0 \\
+	-M x,3,1,0,0,0
 .Ed
 .Pp
 Connect to a bluetooth audio headset, playback only:
