@@ -1743,7 +1743,6 @@ static void
 init_sndstat(vprofile_t *ptr)
 {
 #ifdef HAVE_SNDSTAT
-#if __FreeBSD_version >= 1400010
 	int err;
 	int unit;
 	nvlist_t *nvl;
@@ -1824,80 +1823,6 @@ done:
 	nvlist_destroy(di);
 	nvlist_destroy(dichild);
 	nvlist_destroy(nvl);
-#else /* __FreeBSD_version */
-	int err;
-	int unit;
-	nvlist_t *nvl;
-	nvlist_t *di = NULL;
-	struct sndstat_nvlbuf_arg arg;
-	unsigned int min_rate, max_rate;
-
-	nvl = nvlist_create(0);
-	if (nvl == NULL) {
-		warn("Failed to create nvlist");
-		goto done;
-	}
-
-	di = nvlist_create(0);
-	if (di == NULL) {
-		warn("Failed to create nvlist");
-		goto done;
-	}
-
-	nvlist_add_string(di, SNDSTAT_LABEL_PROVIDER, "virtual_oss");
-	nvlist_add_string(di, SNDSTAT_LABEL_DESC, "Virtual OSS");
-	nvlist_add_number(di, SNDSTAT_LABEL_PCHAN, ptr->channels);
-	nvlist_add_number(di, SNDSTAT_LABEL_RCHAN, ptr->channels);
-	min_rate = 8000;
-	max_rate = voss_dsp_sample_rate;
-	if (voss_libsamplerate_enable == 0 ||
-	    min_rate > max_rate)
-		min_rate = max_rate;
-	if (voss_libsamplerate_enable != 0 && max_rate < 96000)
-		max_rate = 96000;
-	nvlist_add_number(di, SNDSTAT_LABEL_PMINRATE, min_rate);
-	nvlist_add_number(di, SNDSTAT_LABEL_PMAXRATE, max_rate);
-	nvlist_add_number(di, SNDSTAT_LABEL_PFMTS, VSUPPORTED_AFMT);
-	nvlist_add_number(di, SNDSTAT_LABEL_RMINRATE, min_rate);
-	nvlist_add_number(di, SNDSTAT_LABEL_RMAXRATE, max_rate);
-	nvlist_add_number(di, SNDSTAT_LABEL_RFMTS, VSUPPORTED_AFMT);
-
-	if (sscanf(ptr->oss_name, "dsp%d", &unit) == 1) {
-		nvlist_add_stringf(di, SNDSTAT_LABEL_DEVNODE,
-		    "pcm%d", unit);
-		nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
-		if (nvlist_error(di) == 0) {
-			nvlist_free_string(di, SNDSTAT_LABEL_DEVNODE);
-			nvlist_add_string(di, SNDSTAT_LABEL_DEVNODE, ptr->oss_name);
-			nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
-		}
-	} else {
-		nvlist_add_string(di, SNDSTAT_LABEL_DEVNODE,
-		    ptr->oss_name);
-		nvlist_append_nvlist_array(nvl, SNDSTAT_LABEL_DSPS, di);
-	}
-
-	if (nvlist_error(nvl)) {
-		warn("Failed building nvlist");
-		goto done;
-	}
-
-	arg.buf = nvlist_pack(nvl, &arg.nbytes);
-	if (arg.buf == NULL) {
-		warn("Failed to pack nvlist");
-		goto done;
-	}
-	err = ioctl(ptr->fd_sta, SNDSTAT_ADD_USER_DEVS, &arg);
-	free(arg.buf);
-	if (err != 0) {
-		warn("Failed to issue ioctl(SNDSTAT_ADD_USER_DEVS)");
-		goto done;
-	}
-
-done:
-	nvlist_destroy(di);
-	nvlist_destroy(nvl);
-#endif /* __FreeBSD_version */
 #else /* HAVE_SNDSTAT */
 	char temp[128];
 	int unit;
