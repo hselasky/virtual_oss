@@ -1742,7 +1742,7 @@ init_mapping(struct virtual_profile *pvp)
 static void
 init_sndstat(vprofile_t *ptr)
 {
-#ifdef HAVE_SNDSTAT
+#if defined(HAVE_SNDSTAT) && defined(SNDST_DSPS_PROVIDER)
 	int err;
 	int unit;
 	nvlist_t *nvl;
