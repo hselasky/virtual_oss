@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2019 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2021 Hans Petter Selasky. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -108,7 +108,7 @@ vclient_rx_equalizer(struct virtual_client *pvc,
 
 	f_size = pvc->profile->rx_filter_size;
 
-	if (f_size == 0 || total == 0 || 1)
+	if (f_size == 0 || total == 0)
 		return;
 
 	channels = pvc->channels;
