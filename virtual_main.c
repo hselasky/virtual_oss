@@ -1682,6 +1682,8 @@ usage(void)
 	    "\t" "-r <rate> \\\n"
 	    "\t" "-i <rtprio> \\\n"
 	    "\t" "-a <amp -63..63> \\\n"
+	    "\t" "-a i,<rx_amp -63..63> \\\n"
+	    "\t" "-a o,<tx_amp -63..63> \\\n"
 	    "\t" "-g <knee,attack,decay> # enable device RX compressor\\\n"
 	    "\t" "-x <knee,attack,decay> # enable output compressor\\\n"
 	    "\t" "-p <pol 0..1> \\\n"
@@ -1846,7 +1848,7 @@ done:
 }
 
 static const char *
-dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
+dup_profile(vprofile_t *pvp, int *pamp, int pol, int rx_mute,
     int tx_mute, int synchronized, int is_client)
 {
 	vprofile_t *ptr;
@@ -1857,10 +1859,13 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
 	tx_mute = tx_mute ? 1 : 0;
 	pol = pol ? 1 : 0;
 
-	if (amp < -63)
-		amp = -63;
-	else if (amp > 63)
-		amp = 63;
+	/* Range check amplitude argument. */
+	for (x = 0; x != 2; x++) {
+		if (pamp[x] < -63)
+			pamp[x] = -63;
+		else if (pamp[x] > 63)
+			pamp[x] = 63;
+	}
 
 	ptr = malloc(sizeof(*ptr));
 	if (ptr == NULL)
@@ -1875,8 +1880,8 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
 	for (x = 0; x != ptr->channels; x++) {
 		ptr->tx_mute[x] = tx_mute;
 		ptr->rx_mute[x] = rx_mute;
-		ptr->tx_shift[x] = amp;
-		ptr->rx_shift[x] = -amp;
+		ptr->tx_shift[x] = pamp[1];
+		ptr->rx_shift[x] = pamp[0];
 		ptr->tx_pol[x] = pol;
 		ptr->rx_pol[x] = pol;
 	}
@@ -1942,6 +1947,10 @@ dup_profile(vprofile_t *pvp, int amp, int pol, int rx_mute,
 	pvp->http.rtp_ifname = NULL;
 	pvp->http.rtp_port = NULL;
 
+	/* need to specify new amplification next time */
+	pamp[0] = 0;
+	pamp[1] = 0;
+
 	/* need to set new compressor parameters next time */
 	init_compressor(pvp);
 
@@ -1995,7 +2004,7 @@ parse_options(int narg, char **pparg, int is_main)
 	int idx;
 	int type;
 	int opt_mute[2] = {0, 0};
-	int opt_amp = 0;
+	int opt_amp[2] = {0, 0};
 	int opt_pol = 0;
 	const char *optstr;
 	struct virtual_profile profile;
@@ -2031,7 +2040,32 @@ parse_options(int narg, char **pparg, int is_main)
 			}
 			break;
 		case 'a':
-			opt_amp = atoi(optarg);
+			switch (optarg[0]) {
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				opt_amp[0] = -(opt_amp[1] = atoi(optarg));
+				break;
+			case 'i':
+				if (optarg[1] != ',')
+					return ("Expected comma after 'i'");
+				opt_amp[0] = atoi(optarg + 2);
+				break;
+			case 'o':
+				if (optarg[1] != ',')
+					return ("Expected comma after 'o'");
+				opt_amp[1] = atoi(optarg + 2);
+				break;
+			default:
+				return ("Invalid syntax for amplitude argument");
+			}
 			break;
 		case 'E':
 			voss_is_recording = (atoi(optarg) != 0);
@@ -2327,6 +2361,12 @@ parse_options(int narg, char **pparg, int is_main)
 				ptr++;
 				if (*ptr == ',')
 					ptr++;
+				else if (type == 'i')
+					return ("Expected comma after 'i'");
+				else if (type == 'o')
+					return ("Expected comma after 'o'");
+				else
+					return ("Expected comma after 'x'");
 
 				val = 0;
 				neg = 0;

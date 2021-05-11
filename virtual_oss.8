@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd March 8, 2021
+.Dd May 11, 2021
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -63,24 +63,57 @@ Enable automatic DSP rate resampling.
 .It Fl Q Ar quality
 Set resampling quality: 0=best, 1=medium and 2=fastest (default).
 .It Fl b Ar bits
-Set sample-depth in bits for the subsequent commands.
+Set sample depth to
+.Fa bits
+for the subsequent commands.
+Valid values are 8, 16, 24 and 32.
 .It Fl r Ar rate
 Set default sample-rate for the subsequent commands.
-.It Fl s Ar size
-Set default buffer size.
-Size is specified as <samples> or <milliseconds>ms.
+.It Fl s Ar value
+Set default buffer size to
+.Fa value .
+If the argument is suffixed by "ms" it is interpreted as milliseconds.
+Else the argument gives number of samples.
+The buffer size specified is per channel.
+If there are multiple channels, the total buffer size will be larger.
 .It Fl i Ar priority
-Set real-time priority.
-.It Fl a Ar amp
-Set default DSP device amplification as power of two value.
+Set real-time priority to
+.Fa priority .
+Refer to
+.Xr rtprio 1
+for more information.
+.It Fl a Ar log2_amp
+Set the default DSP output and input device amplification to
+.Fa log2_amp .
+The specified amplification is logarithmic.
+Valid values range from -63 to 63 inclusivly.
+The device input amplification gets set to minus
+.Fa log2_amp
+and the device output amplification gets set to
+.Fa log2_amp .
+.It Fl a Ar i,log2_amp
+Set the default DSP input device amplification to
+.Fa log2_amp .
+The specified amplification is logarithmic.
+Valid values range from -63 to 63 inclusivly.
+.It Fl a Ar o,log2_amp
+Set default DSP output device amplification to
+.Fa log2_amp .
+The specified amplification is logarithmic.
+Valid values range from -63 to 63 inclusivly.
 .It Fl p Ar polarity
 Set default polarity of DSP device.
+A value of zero means normal polarity.
+A value of one means negative polarity.
 .It Fl e Ar mute
 Set default mute state of DSP device.
+A value of zero means unmuted.
+A value of one means muted.
 .It Fl m Ar channels
-Set default channel mapping of DSP device.
+Set default channel mapping of DSP device, as a comma separated list of integers.
 .It Fl C Ar num
-Set maximum number of mix channels.
+Set the maximum number of mix channels to
+.Fa num .
 .It Fl c Ar num
 Set mix channels for the subsequent commands.
 .It Fl M Ar filter
