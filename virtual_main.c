@@ -2041,6 +2041,7 @@ parse_options(int narg, char **pparg, int is_main)
 			break;
 		case 'a':
 			switch (optarg[0]) {
+			case '-':
 			case '0':
 			case '1':
 			case '2':
