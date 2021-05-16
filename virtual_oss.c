@@ -837,7 +837,7 @@ virtual_oss_process(void *arg)
 			 */
 			if (blocks == 0)
 				blocks = 2;	/* buffer is empty */
-			else if (blocks > (4 * buffer_dsp_tx_size_ref))
+			else if (blocks >= (3 * buffer_dsp_tx_size_ref))
 				blocks = 0;	/* too much data */
 			else
 				blocks = 1;	/* normal */
