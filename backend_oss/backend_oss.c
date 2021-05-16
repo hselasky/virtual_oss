@@ -142,6 +142,7 @@ static int
 oss_play_open(struct voss_backend *pbe, const char *devname, int samplerate,
     int bufsize, int *pchannels, int *pformat)
 {
+	bufsize *= 2;	/* XXX allow extra space for jitter */
 	return (oss_open(pbe, devname, samplerate, bufsize, pchannels, pformat, O_WRONLY, 0));
 }
 
