@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <err.h>
 #include <time.h>
+#include <assert.h>
 
 #include <sys/queue.h>
 #include <sys/types.h>
@@ -717,8 +718,18 @@ virtual_oss_process(void *arg)
 			memcpy(buffer_data, buffer_temp, 8 * samples * src_chans);
 
 			/* make a copy for local monitoring, if any */
-			if (TAILQ_FIRST(&virtual_monitor_local) != NULL)
-				memcpy(buffer_local, buffer_temp, 8 * voss_dsp_samples * voss_max_channels);
+			if (TAILQ_FIRST(&virtual_monitor_local) != NULL) {
+				const int end = src_chans * (voss_dsp_samples - samples);
+				const int off = src_chans * samples;
+
+				assert(end >= 0);
+
+				/* shift down samples */
+				for (int x = 0; x != end; x++)
+					buffer_local[x] = buffer_local[x + off];
+				/* copy in new ones */
+				memcpy(buffer_local + end, buffer_temp, 8 * samples * src_chans);
+			}
 
 			/* (7) Check for output recording */
 
