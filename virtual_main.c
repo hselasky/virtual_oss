@@ -1195,6 +1195,8 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		memset(&data.audioinfo, 0, sizeof(data.audioinfo));
 		strlcpy(data.audioinfo.name, pvc->profile->oss_name,
 		    sizeof(data.audioinfo.name));
+		strlcpy(data.audioinfo.devnode, pvc->profile->oss_name,
+		    sizeof(data.audioinfo.devnode));
 		data.audioinfo.caps = DSP_CAP_INPUT | DSP_CAP_OUTPUT;
 		data.audioinfo.iformats = VSUPPORTED_AFMT;
 		data.audioinfo.oformats = VSUPPORTED_AFMT;
