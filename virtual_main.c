@@ -32,6 +32,7 @@
 #include <sysexits.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <paths.h>
 
 #ifdef HAVE_SNDSTAT
 #include <sys/nv.h>
@@ -1195,8 +1196,8 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		memset(&data.audioinfo, 0, sizeof(data.audioinfo));
 		strlcpy(data.audioinfo.name, pvc->profile->oss_name,
 		    sizeof(data.audioinfo.name));
-		strlcpy(data.audioinfo.devnode, pvc->profile->oss_name,
-		    sizeof(data.audioinfo.devnode));
+		snprintf(data.audioinfo.devnode, sizeof(data.audioinfo.devnode),
+		    _PATH_DEV "%s", pvc->profile->oss_name);
 		data.audioinfo.caps = DSP_CAP_INPUT | DSP_CAP_OUTPUT;
 		data.audioinfo.iformats = VSUPPORTED_AFMT;
 		data.audioinfo.oformats = VSUPPORTED_AFMT;
