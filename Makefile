@@ -26,7 +26,7 @@
 # Makefile for virtual_oss
 #
 
-.PATH: . backend_oss backend_bt backend_null command equalizer frontend_http
+.PATH: . backend_oss backend_bt backend_null backend_sndio command equalizer frontend_http
 
 PROG=virtual_oss
 MAN=${PROG}.8
@@ -66,6 +66,12 @@ SRCS += bt_speaker.c
 CFLAGS += -DHAVE_BLUETOOTH_SPEAKER
 LINKS += ${BINDIR}/virtual_oss ${BINDIR}/virtual_bt_speaker
 MAN += virtual_bt_speaker.8
+.endif
+
+.if defined(HAVE_SNDIO)
+SRCS += backend_sndio.c
+CFLAGS += -DHAVE_SNDIO
+LDFLAGS += -lsndio
 .endif
 
 .if defined(HAVE_EQUALIZER)
