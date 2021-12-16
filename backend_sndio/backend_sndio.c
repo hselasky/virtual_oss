@@ -34,7 +34,7 @@
 #include "../virtual_int.h"
 #include "../virtual_backend.h"
 
-static struct sio_hdl*
+static struct sio_hdl *
 get_sio_hdl(struct voss_backend *pbe)
 {
 	if (pbe)
@@ -50,13 +50,15 @@ sndio_close(struct voss_backend *pbe)
 	if (!pbe)
 		return;
 
-    if (get_sio_hdl(pbe))
-        sio_close(get_sio_hdl(pbe));
+	if (get_sio_hdl(pbe))
+		sio_close(get_sio_hdl(pbe));
 }
 
-static int sndio_get_signedness(int *fmt)
+static int
+sndio_get_signedness(int *fmt)
 {
 	int s_fmt = *fmt & (VPREFERRED_SLE_AFMT | VPREFERRED_SBE_AFMT);
+
 	if (s_fmt) {
 		*fmt = s_fmt;
 		return (1);
@@ -65,9 +67,11 @@ static int sndio_get_signedness(int *fmt)
 	return (0);
 }
 
-static int sndio_get_endianness_is_le(int *fmt)
+static int
+sndio_get_endianness_is_le(int *fmt)
 {
 	int le_fmt = *fmt & (VPREFERRED_SLE_AFMT | VPREFERRED_ULE_AFMT);
+
 	if (le_fmt) {
 		*fmt = le_fmt;
 		return (1);
@@ -76,7 +80,8 @@ static int sndio_get_endianness_is_le(int *fmt)
 	return (0);
 }
 
-static int sndio_get_bits(int *fmt)
+static int
+sndio_get_bits(int *fmt)
 {
 	if (*fmt & (AFMT_S16_LE | AFMT_U16_LE | AFMT_S16_BE | AFMT_U16_BE)) {
 		return (16);
@@ -97,10 +102,10 @@ static int
 sndio_open(struct voss_backend *pbe, const char *devname,
     int samplerate, int bufsize, int *pchannels, int *pformat)
 {
-    const char *sndio_name = devname + strlen("/dev/sndio/");
+	const char *sndio_name = devname + strlen("/dev/sndio/");
 
 	int sig = sndio_get_signedness(pformat);
-	int le  = sndio_get_endianness_is_le(pformat);
+	int le = sndio_get_endianness_is_le(pformat);
 	int bits = sndio_get_bits(pformat);
 
 	if (bits == -1) {
@@ -108,15 +113,17 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 		return (-1);
 	}
 
-    struct sio_hdl* hdl =
-        sio_open(sndio_name, SIO_PLAY, 0);
-    if (hdl == 0) {
-        warn("sndio: failed to open device");
-        return (-1);
-    }
+	struct sio_hdl *hdl =
+	sio_open(sndio_name, SIO_PLAY, 0);
 
-    struct sio_par par;
-    sio_initpar(&par);
+	if (hdl == 0) {
+		warn("sndio: failed to open device");
+		return (-1);
+	}
+
+	struct sio_par par;
+
+	sio_initpar(&par);
 	par.pchan = *pchannels;
 	par.sig = sig;
 	par.bits = bits;
@@ -136,7 +143,7 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 	if (par.bits != bits)
 		errx(1, "couldn't set precision");
 	if (par.rate < samplerate * 995 / 1000 ||
-			par.rate > samplerate * 1005 / 1000)
+	    par.rate > samplerate * 1005 / 1000)
 		errx(1, "couldn't set rate");
 	if (par.xrun != SIO_SYNC)
 		errx(1, "couldn't set xun policy");
@@ -144,7 +151,7 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 	/* Save the device handle with the backend */
 	pbe->arg = hdl;
 
-	/* Start the device.*/
+	/* Start the device. */
 	if (!sio_start(hdl))
 		errx(1, "couldn't start device");
 
@@ -154,7 +161,7 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 static int
 sndio_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-    return sio_write(get_sio_hdl(pbe), ptr, len);
+	return sio_write(get_sio_hdl(pbe), ptr, len);
 }
 
 static void
