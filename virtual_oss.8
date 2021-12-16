@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd May 11, 2021
+.Dd December 16, 2021
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -312,6 +312,14 @@ server:
 virtual_oss \\
 	-b 16 -c 2 -r 44100 -s 50ms \\
 	-R /dev/null -O /dev/sndio/snd@remotehost/0 -d dsp
+.Ed
+.Pp
+Create a full-duplex audio device exchanging audio using the default
+.Xr sndio 7
+server:
+.Bd -literal -offset indent
+virtual_oss -S -b 16 -C 2 -c 2 -r 48000 -s 8ms \\
+	-f /dev/sndio/default -d dsp
 .Ed
 .Pp
 .Sh NOTES

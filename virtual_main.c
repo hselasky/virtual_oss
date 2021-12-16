@@ -1645,8 +1645,8 @@ voss_rx_backend_refresh(void)
 		voss_rx_backend = &voss_backend_bt_rec;
 #endif
 #ifdef HAVE_SNDIO
-	} else if (strstr(voss_dsp_tx_device, "/dev/sndio/") == voss_dsp_tx_device) {
-		warn("sndio recording not implemented");
+	} else if (strstr(voss_dsp_rx_device, "/dev/sndio/") == voss_dsp_rx_device) {
+		voss_rx_backend = &voss_backend_sndio_rec;
 #endif
 	} else {
 		voss_rx_backend = &voss_backend_oss_rec;

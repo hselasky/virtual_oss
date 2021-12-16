@@ -43,7 +43,6 @@ get_sio_hdl(struct voss_backend *pbe)
 	return (NULL);
 }
 
-
 static void
 sndio_close(struct voss_backend *pbe)
 {
@@ -100,7 +99,7 @@ sndio_get_bits(int *fmt)
 
 static int
 sndio_open(struct voss_backend *pbe, const char *devname,
-    int samplerate, int bufsize, int *pchannels, int *pformat)
+    int samplerate, int bufsize, int *pchannels, int *pformat, int direction)
 {
 	const char *sndio_name = devname + strlen("/dev/sndio/");
 
@@ -113,8 +112,7 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 		return (-1);
 	}
 
-	struct sio_hdl *hdl =
-	sio_open(sndio_name, SIO_PLAY, 0);
+	struct sio_hdl *hdl = sio_open(sndio_name, direction, 0);
 
 	if (hdl == 0) {
 		warn("sndio: failed to open device");
@@ -159,9 +157,29 @@ sndio_open(struct voss_backend *pbe, const char *devname,
 }
 
 static int
+sndio_open_play(struct voss_backend *pbe, const char *devname,
+    int samplerate, int bufsize, int *pchannels, int *pformat)
+{
+	return (sndio_open(pbe, devname, samplerate, bufsize, pchannels, pformat, SIO_PLAY));
+}
+
+static int
+sndio_open_rec(struct voss_backend *pbe, const char *devname,
+    int samplerate, int bufsize, int *pchannels, int *pformat)
+{
+	return (sndio_open(pbe, devname, samplerate, bufsize, pchannels, pformat, SIO_REC));
+}
+
+static int
 sndio_play_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
-	return sio_write(get_sio_hdl(pbe), ptr, len);
+	return (sio_write(get_sio_hdl(pbe), ptr, len));
+}
+
+static int
+sndio_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
+{
+	return (sio_read(get_sio_hdl(pbe), ptr, len));
 }
 
 static void
@@ -170,9 +188,18 @@ sndio_delay(struct voss_backend *pbe, int *pdelay)
 	*pdelay = -1;
 }
 
+struct voss_backend voss_backend_sndio_rec = {
+	.open = sndio_open_rec,
+	.close = sndio_close,
+	.transfer = sndio_rec_transfer,
+	.delay = sndio_delay,
+	.fd = -1,
+};
+
 struct voss_backend voss_backend_sndio_play = {
-	.open = sndio_open,
+	.open = sndio_open_play,
 	.close = sndio_close,
 	.transfer = sndio_play_transfer,
 	.delay = sndio_delay,
+	.fd = -1,
 };
