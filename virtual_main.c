@@ -1434,7 +1434,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		    vclient_sample_bytes(pvc);
 		data.oss_count_info.bytes = bytes;
 		data.oss_count_info.blocks = bytes / pvc->buffer_size;
-		data.oss_count_info.ptr = bytes;
+		data.oss_count_info.ptr = bytes % (pvc->buffer_size * pvc->buffer_frags);
 		break;
 	case SNDCTL_DSP_GETOPTR:
 		memset(&data.oss_count_info, 0, sizeof(data.oss_count_info));
@@ -1444,7 +1444,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		    vclient_sample_bytes(pvc);
 		data.oss_count_info.bytes = bytes;
 		data.oss_count_info.blocks = bytes / pvc->buffer_size;
-		data.oss_count_info.ptr = bytes;
+		data.oss_count_info.ptr = bytes % (pvc->buffer_size * pvc->buffer_frags);
 		break;
 	case SNDCTL_DSP_HALT_OUTPUT:
 		pvc->tx_enabled = 0;

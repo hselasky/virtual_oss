@@ -448,13 +448,14 @@ virtual_oss_process(void *arg)
 				if (dst_chans > voss_max_channels)
 					continue;
 
+				/* update counters regardless of data presence */
+				pvc->tx_timestamp = last_timestamp;
+				pvc->tx_samples += samples * dst_chans;
+
 				/* read data from ring buffer */
 				if (vclient_read_linear(pvc, &pvc->tx_ring[0],
 				    buffer_data, samples * dst_chans) == 0)
 					continue;
-
-				pvc->tx_timestamp = last_timestamp;
-				pvc->tx_samples += samples * dst_chans;
 
 				shift_fmt = pvp->bits - (vclient_sample_bytes(pvc) * 8);
 
