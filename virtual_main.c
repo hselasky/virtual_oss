@@ -1337,11 +1337,12 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		memset(&data.buf_info, 0, sizeof(data.buf_info));
 		data.buf_info.fragsize = pvc->buffer_size;
 		data.buf_info.fragstotal = pvc->buffer_frags;
-		temp = vclient_input_delay(pvc) / pvc->buffer_size;
-		if (temp > data.buf_info.fragstotal)
-			temp = data.buf_info.fragstotal;
-		data.buf_info.fragments = temp;
-		data.buf_info.bytes = temp * pvc->buffer_size;
+		bytes = (pvc->buffer_size * pvc->buffer_frags);
+		temp = vclient_input_delay(pvc);
+		if (temp < 0 || (uint64_t)temp > bytes)
+			temp = bytes;
+		data.buf_info.fragments = temp / pvc->buffer_size;
+		data.buf_info.bytes = temp;
 		break;
 	case SNDCTL_DSP_GETOSPACE:
 		memset(&data.buf_info, 0, sizeof(data.buf_info));
@@ -1349,7 +1350,7 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 		data.buf_info.fragstotal = pvc->buffer_frags;
 		bytes = (pvc->buffer_size * pvc->buffer_frags);
 		temp = vclient_output_delay(pvc);
-		if (temp >= bytes) {
+		if (temp < 0 || (uint64_t)temp >= bytes) {
 			/* buffer is full */
 			data.buf_info.fragments = 0;
 			data.buf_info.bytes = 0;
