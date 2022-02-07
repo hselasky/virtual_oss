@@ -1566,14 +1566,16 @@ vclient_poll(struct cuse_dev *pdev, int fflags, int events)
 		return (retval);
 
 	atomic_lock();
-	if (events & CUSE_POLL_READ) {
+	if ((events & CUSE_POLL_READ) && (fflags & CUSE_FFLAG_READ)) {
 		pvc->rx_enabled = 1;
 		if (vclient_input_delay(pvc) >= pvc->low_water)
 			retval |= CUSE_POLL_READ;
 	}
-	if (events & CUSE_POLL_WRITE) {
-		uint32_t total_buffer = pvc->buffer_frags * pvc->buffer_size;
-		if (vclient_output_delay(pvc) <= (total_buffer - pvc->low_water))
+	if ((events & CUSE_POLL_WRITE) && (fflags & CUSE_FFLAG_WRITE)) {
+		const uint32_t out_dly = vclient_output_delay(pvc);
+		const uint32_t out_buf = (pvc->buffer_frags * pvc->buffer_size);
+
+		if (out_dly < out_buf && (out_buf - out_dly) >= pvc->low_water)
 			retval |= CUSE_POLL_WRITE;
 	}
 	atomic_unlock();
