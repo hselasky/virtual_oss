@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   version="1.1"
+   id="svg2"
+   width="48"
+   height="48"
+   viewBox="0 0 48 48"
+   sodipodi:docname="virtual_oss_ctl.svg"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs6">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient5117">
+      <stop
+         style="stop-color:#ffdd55;stop-opacity:1;"
+         offset="0"
+         id="stop5113" />
+      <stop
+         style="stop-color:#ffdd55;stop-opacity:0;"
+         offset="1"
+         id="stop5115" />
+    </linearGradient>
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient5117"
+       id="radialGradient5119"
+       cx="24"
+       cy="24"
+       fx="24"
+       fy="24"
+       r="24"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0.86486486,0.12355212)" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="8.09375"
+     inkscape:cx="31.752896"
+     inkscape:cy="23.042471"
+     inkscape:window-width="1680"
+     inkscape:window-height="999"
+     inkscape:window-x="0"
+     inkscape:window-y="27"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g8" />
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="Image"
+     id="g8">
+    <rect
+       style="fill:#cccccc;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:9.72632"
+       id="rect10616"
+       width="47.976372"
+       height="22.01968"
+       x="0.12960637"
+       y="25.895142" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:38.394px;line-height:1.25;font-family:sans-serif;fill:#0000d4;fill-opacity:1;stroke:none;stroke-width:0.959847"
+       x="-0.29839715"
+       y="28.055508"
+       id="text1026"
+       transform="scale(1.2428194,0.80462213)"><tspan
+         sodipodi:role="line"
+         id="tspan1024"
+         x="-0.29839715"
+         y="28.055508"
+         style="fill:#0000d4;stroke-width:0.959847">V</tspan></text>
+    <g
+       id="g5488"
+       transform="translate(-5.065637,0.61776062)"
+       style="fill:#5599ff">
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:38.394px;line-height:1.25;font-family:sans-serif;fill:#5599ff;fill-opacity:1;stroke:none;stroke-width:0.959847"
+         x="6.7596049"
+         y="27.200245"
+         id="text1026-3"
+         transform="scale(1.2428194,0.80462213)"><tspan
+           sodipodi:role="line"
+           id="tspan1024-6"
+           x="6.7596049"
+           y="27.200245"
+           style="fill:#5599ff;stroke-width:0.959847">V</tspan></text>
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:38.394px;line-height:1.25;font-family:sans-serif;fill:#aaccff;fill-opacity:1;stroke:none;stroke-width:0.959847"
+       x="5.2239795"
+       y="28.026585"
+       id="text1026-8"
+       transform="scale(1.2428194,0.80462213)"><tspan
+         sodipodi:role="line"
+         id="tspan1024-4"
+         x="5.2239795"
+         y="28.026585"
+         style="fill:#aaccff;stroke-width:0.959847">V</tspan></text>
+    <circle
+       style="fill:url(#radialGradient5119);fill-opacity:1;stroke:none;stroke-width:10.3294"
+       id="path2068"
+       cx="24.864864"
+       cy="24.123552"
+       r="24" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:22.7946px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#4d4d4d;fill-opacity:1;stroke:none;stroke-width:0.553784"
+       x="-0.87463862"
+       y="44.685608"
+       id="text1732"
+       transform="scale(0.98423579,1.0160167)"><tspan
+         sodipodi:role="line"
+         id="tspan1730"
+         x="-0.87463862"
+         y="44.685608"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:22.7946px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.553784;fill:#4d4d4d">OSS</tspan></text>
+    <rect
+       style="fill:#0b2228;stroke-width:9.03871"
+       id="rect1946"
+       width="47.976372"
+       height="3.4105196"
+       x="0.12960637"
+       y="22.484621" />
+  </g>
+</svg>
