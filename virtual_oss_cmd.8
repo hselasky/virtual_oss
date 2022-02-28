@@ -1,6 +1,5 @@
 .\"
-.\" Copyright (c) 2021 Hans Petter Selasky <hselasky@freebsd.org>
-.\" All rights reserved.
+.\" Copyright (c) 2021-2022 Hans Petter Selasky <hselasky@freebsd.org>
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -24,7 +23,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd February 4, 2021
+.Dd February 28, 2022
 .Dt VIRTUAL_OSS_CMD 8
 .Os FreeBSD
 .Sh NAME
@@ -85,6 +84,11 @@ virtual_oss_cmd /dev/vdsp.ctl -E 0
 To create a new DSP device on the fly:
 .Bd -literal -offset indent
 virtual_oss_cmd /dev/vdsp.ctl -b 16 -c 2 -d dsp.new
+
+.Ed
+To show system information:
+.Bd -literal -offset indent
+virtual_oss_cmd /dev/vdsp.ctl
 
 .Ed
 .Sh FILES

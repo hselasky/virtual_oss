@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2021-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -79,12 +79,36 @@ command_main(int argc, char **argv)
 		len -= tmp;
 	}
 
-	/* execute options */
-	if (ioctl(fd, VIRTUAL_OSS_ADD_OPTIONS, options) < 0)
-		errx(EX_SOFTWARE, "One or more invalid options");
-	/* show error, if any */
-	if (options[0] != '\0')
-		errx(EX_SOFTWARE, "%s", options);
+	if (options[0] == 0) {
+		struct virtual_oss_system_info info;
+		if (ioctl(fd, VIRTUAL_OSS_GET_SYSTEM_INFO, &info) < 0)
+			errx(EX_SOFTWARE, "Cannot get system information");
+
+		info.rx_device_name[sizeof(info.rx_device_name) - 1] = 0;
+		info.tx_device_name[sizeof(info.tx_device_name) - 1] = 0;
+
+		printf("Sample rate: %u Hz\n"
+		       "Sample width: %u bits\n"
+		       "Sample channels: %u\n"
+		       "Output jitter: %u / %u\n"
+		       "Input device name: %s\n"
+		       "Output device name: %s\n",
+		       info.sample_rate,
+		       info.sample_bits,
+		       info.sample_channels,
+		       info.tx_jitter_down,
+		       info.tx_jitter_up,
+		       info.rx_device_name,
+		       info.tx_device_name);
+	} else {
+		/* execute options */
+		if (ioctl(fd, VIRTUAL_OSS_ADD_OPTIONS, options) < 0)
+			errx(EX_SOFTWARE, "One or more invalid options");
+		/* show error, if any */
+		if (options[0] != '\0')
+			errx(EX_SOFTWARE, "%s", options);
+	}
+
 	close(fd);
 	return (0);
 }
