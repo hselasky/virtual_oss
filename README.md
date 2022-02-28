@@ -28,7 +28,7 @@ audio devices.
 
 ## Dependencies
 <ul>
-  <li>libcuse</li>
+  <li><A HREF="https://www.freebsd.org/cgi/man.cgi?query=cuse&sektion=3&manpath=freebsd-release-ports">libcuse</A> </li>
   <li><A HREF="http://www.fftw.org">FFTW3</A> </li>
 </ul>
 
