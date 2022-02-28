@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -847,12 +847,15 @@ virtual_oss_process(void *arg)
 			 * little. Skip data when too much. This
 			 * should not happen during normal operation.
 			 */
-			if (blocks == 0)
+			if (blocks == 0) {
 				blocks = 2;	/* buffer is empty */
-			else if (blocks >= (3 * buffer_dsp_tx_size_ref))
+				voss_jitter_up++;
+			} else if (blocks >= (3 * buffer_dsp_tx_size_ref)) {
 				blocks = 0;	/* too much data */
-			else
+				voss_jitter_down++;
+			} else {
 				blocks = 1;	/* normal */
+			}
 
 			len = 0;
 			while (blocks--) {

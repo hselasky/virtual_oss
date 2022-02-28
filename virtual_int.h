@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -206,6 +206,8 @@ extern struct virtual_compressor voss_output_compressor_param;
 extern double voss_output_compressor_gain[VMAX_CHAN];
 extern int64_t voss_output_peak[VMAX_CHAN];
 extern int64_t voss_input_peak[VMAX_CHAN];
+extern uint32_t voss_jitter_up;
+extern uint32_t voss_jitter_down;
 extern uint32_t voss_max_channels;
 extern uint32_t voss_mix_channels;
 extern uint32_t voss_dsp_samples;

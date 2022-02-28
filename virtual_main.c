@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1631,6 +1631,9 @@ char voss_dsp_rx_device[VMAX_STRING];
 char voss_dsp_tx_device[VMAX_STRING];
 char voss_ctl_device[VMAX_STRING];
 char voss_sta_device[VMAX_STRING];
+
+uint32_t voss_jitter_up;
+uint32_t voss_jitter_down;
 
 struct voss_backend *voss_rx_backend;
 struct voss_backend *voss_tx_backend;

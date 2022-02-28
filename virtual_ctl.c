@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -90,6 +90,7 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 		struct virtual_oss_master_peak master_peak;
 		struct virtual_oss_audio_delay_locator ad_locator;
 		struct virtual_oss_fir_filter fir_filter;
+		struct virtual_oss_system_info sys_info;
 		char	options[VIRTUAL_OSS_OPTIONS_MAX];
 	}     data;
 
@@ -582,6 +583,18 @@ vctl_ioctl(struct cuse_dev *pdev, int fflags,
 
 	case VIRTUAL_OSS_GET_SAMPLE_RATE:
 		data.val = voss_dsp_sample_rate;
+		break;
+
+	case VIRTUAL_OSS_GET_SYSTEM_INFO:
+		data.sys_info.tx_jitter_up = voss_jitter_up;
+		data.sys_info.tx_jitter_down = voss_jitter_down;
+		data.sys_info.sample_rate = voss_dsp_sample_rate;
+		data.sys_info.sample_bits = voss_dsp_bits;
+		data.sys_info.sample_channels = voss_mix_channels;
+		strlcpy(data.sys_info.rx_device_name, voss_dsp_rx_device,
+		    sizeof(data.sys_info.rx_device_name));
+		strlcpy(data.sys_info.tx_device_name, voss_dsp_tx_device,
+		    sizeof(data.sys_info.tx_device_name));
 		break;
 
 	default:

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2012-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,7 +29,7 @@
 #include <sys/ioccom.h>
 
 #define	VIRTUAL_OSS_NAME_MAX	32
-#define	VIRTUAL_OSS_VERSION 0x00010007
+#define	VIRTUAL_OSS_VERSION 0x00010008
 #define	VIRTUAL_OSS_OPTIONS_MAX	1024	/* bytes */
 #define	VIRTUAL_OSS_FILTER_MAX 65536	/* samples */
 
@@ -190,5 +190,17 @@ struct virtual_oss_fir_filter {
 #define	VIRTUAL_OSS_SET_TX_LOOP_FIR_FILTER	_IOWR('O', 41, struct virtual_oss_fir_filter)
 
 #define	VIRTUAL_OSS_GET_SAMPLE_RATE		_IOR('O', 42, int)
-  
+
+struct virtual_oss_system_info {
+	unsigned tx_jitter_up;
+	unsigned tx_jitter_down;
+	unsigned sample_rate;
+	unsigned sample_bits;
+	unsigned sample_channels;
+	char rx_device_name[64];
+	char tx_device_name[64];
+};
+
+#define	VIRTUAL_OSS_GET_SYSTEM_INFO		_IOR('O', 43, struct virtual_oss_system_info)
+
 #endif					/* _VIRTUAL_OSS_H_ */
