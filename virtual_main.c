@@ -929,7 +929,7 @@ vclient_import_write_locked(vclient_t *pvc)
 			vring_inc_write(&pvc->tx_ring[0], dst_len);
 		}
 	} else {
-		vresample_t *pvr = &pvc->rx_resample;
+		vresample_t *pvr = &pvc->tx_resample;
 
 		if (vresample_setup(pvc, pvr, MAX_FRAME * pvc->channels) != 0)
 			return;
