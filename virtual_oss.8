@@ -1,7 +1,5 @@
 .\"
-.\" Copyright (c) 2017-2021 Hans Petter Selasky <hselasky@freebsd.org>
-.\"
-.\" All rights reserved.
+.\" Copyright (c) 2017-2022 Hans Petter Selasky <hselasky@freebsd.org>
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -25,7 +23,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd December 16, 2021
+.Dd April 2, 2022
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -111,6 +109,8 @@ A value of zero means unmuted.
 A value of one means muted.
 .It Fl m Ar channels
 Set default channel mapping of DSP device, as a comma separated list of integers.
+The first integer selects the receive channel, the second value selects the transmit channel and then it repeats.
+A value of zero indicates the first receive or transmit channel.
 .It Fl C Ar num
 Set the maximum number of mix channels to
 .Fa num .
