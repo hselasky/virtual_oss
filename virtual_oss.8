@@ -23,7 +23,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd April 2, 2022
+.Dd April 3, 2022
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -103,11 +103,11 @@ Valid values range from -63 to 63 inclusivly.
 Set default polarity of DSP device.
 A value of zero means normal polarity.
 A value of one means negative polarity.
-.It Fl e Ar mute
+.It Fl e Ar rx_mute,tx_mute
 Set default mute state of DSP device.
 A value of zero means unmuted.
 A value of one means muted.
-.It Fl m Ar channels
+.It Fl m Ar rx_ch,tx_ch,....
 Set default channel mapping of DSP device, as a comma separated list of integers.
 The first integer selects the receive channel, the second value selects the transmit channel and then it repeats.
 A value of zero indicates the first receive or transmit channel.
@@ -116,7 +116,7 @@ Set the maximum number of mix channels to
 .Fa num .
 .It Fl c Ar num
 Set mix channels for the subsequent commands.
-.It Fl M Ar filter
+.It Fl M Ar type,src_ch,dst_ch,pol,mute,log2_gain
 Add a monitoring filter.
 The filter consists of a list of comma separated arguments.
 The first argument indicates the type of monitoring filter:
@@ -200,7 +200,7 @@ Split a 2-channel OSS compatible sound device into multiple subdevices:
 .Bd -literal -offset indent
 virtual_oss \\
 	-S \\
-	-c 2 -r 48000 -b 16 -s 768 -f /dev/dspX \\
+	-c 2 -r 48000 -b 16 -s 4ms -f /dev/dspX \\
 	-a 0 -b 16 -c 2 -m 0,0,1,1 -d vdsp.zyn \\
 	-a 0 -b 16 -c 2 -m 0,0,1,1 -d vdsp.fld \\
 	-a 0 -b 16 -c 2 -m 0,0,1,1 -d dsp \\
@@ -227,13 +227,12 @@ virtual_oss \\
 	-S \\
 	-i 8 \\
 	-x 85,3,20 \\
-	-C 16 -c 8 -r 48000 -b 32 -s 768 -f /dev/dspX \\
+	-C 16 -c 8 -r 48000 -b 32 -s 4ms -f /dev/dspX \\
 	-a 12 -b 16 -c 2 -m 0,4,1,5 -d dsp \\
 	-a 12 -b 16 -c 2 -m 8,8,9,9 -d vdsp \\
 	-a 13 -b 16 -c 2 -m 10,10,11,11 -d vdsp.fld \\
 	-a 0 -b 32 -c 4 -m 4,2,5,3,6,4,7,5 -d vdsp.jack \\
-	-a -3 -b 32 -c 2 -m 14,14,15,15 -d vdsp.zyn.base \\
-	-a -3 -b 32 -c 2 -m 14,14,15,15 -d vdsp.zyn.synth \\
+	-a -3 -b 32 -c 2 -m 14,14,15,15 -d vdsp.zyn \\
 	-e 0,1 \\
 	-a 0 -b 32 -c 8 -m 0,8,1,9,2,8,3,9,4,8,5,9,6,8,7,9 -w vdsp.rec.mic.wav -d vdsp.rec.mic \\
 	-a 0 -b 32 -c 2 -m 0,8,1,9 -w vdsp.rec.master.wav -d vdsp.master.mic \\
@@ -263,7 +262,7 @@ virtual_oss \\
 	-C 4 -c 2 \\
 	-r 48000 \\
 	-b 24 \\
-	-s 8.0ms \\
+	-s 4ms \\
 	-f /dev/dsp3 \\
 	-c 2 \\
 	-d dsp \\
@@ -278,21 +277,21 @@ virtual_oss \\
 Connect to a bluetooth audio headset, playback only:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
 	-R /dev/null -P /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
 .Ed
 .Pp
 Connect to a bluetooth audio headset, playback and recording:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
 	-f /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
 .Ed
 .Pp
 Create recording device which outputs a WAV-formatted file:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 1024 \\
+	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
 	-f /dev/dspX -w dsp.wav -d dsp
 .Ed
 .Pp
@@ -318,7 +317,7 @@ Create a full-duplex audio device exchanging audio using the default
 .Xr sndio 7
 server:
 .Bd -literal -offset indent
-virtual_oss -S -b 16 -C 2 -c 2 -r 48000 -s 8ms \\
+virtual_oss -S -b 16 -C 2 -c 2 -r 48000 -s 4ms \\
 	-f /dev/sndio/default -d dsp
 .Ed
 .Pp
