@@ -35,6 +35,8 @@
 #include <sys/queue.h>
 #include <sys/types.h>
 
+#include <sys/soundcard.h>
+
 #include "virtual_int.h"
 #include "virtual_backend.h"
 
@@ -196,7 +198,31 @@ virtual_oss_process(void *arg)
 		rx_be = voss_rx_backend;
 		tx_be = voss_tx_backend;
 
-		rx_fmt = voss_dsp_rx_fmt;
+		switch (voss_dsp_bits) {
+		case 8:
+			rx_fmt = tx_fmt =
+			    AFMT_S8 | AFMT_U8;
+			break;
+		case 16:
+			rx_fmt = tx_fmt =
+			    AFMT_S16_BE | AFMT_S16_LE |
+			    AFMT_U16_BE | AFMT_U16_LE;
+			break;
+		case 24:
+			rx_fmt = tx_fmt =
+			    AFMT_S24_BE | AFMT_S24_LE |
+			    AFMT_U24_BE | AFMT_U24_LE;
+			break;
+		case 32:
+			rx_fmt = tx_fmt =
+			    AFMT_S32_BE | AFMT_S32_LE |
+			    AFMT_U32_BE | AFMT_U32_LE;
+			break;
+		default:
+			rx_fmt = tx_fmt = 0;
+			break;
+		}
+
 		rx_chn = voss_dsp_max_channels;
 
 		if (rx_be->open(rx_be, voss_dsp_rx_device, voss_dsp_sample_rate,
@@ -208,7 +234,6 @@ virtual_oss_process(void *arg)
 		buffer_dsp_rx_sample_size = rx_chn * (voss_dsp_bits / 8);
 		buffer_dsp_rx_size = voss_dsp_samples * buffer_dsp_rx_sample_size;
 
-		tx_fmt = voss_dsp_tx_fmt;
 		tx_chn = voss_dsp_max_channels;
 		if (tx_be->open(tx_be, voss_dsp_tx_device, voss_dsp_sample_rate,
 		    buffer_dsp_max_size, &tx_chn, &tx_fmt) < 0) {

@@ -1614,8 +1614,6 @@ uint32_t voss_dsp_samples;
 uint32_t voss_dsp_max_channels;
 uint32_t voss_dsp_sample_rate;
 uint32_t voss_dsp_bits;
-uint32_t voss_dsp_rx_fmt;
-uint32_t voss_dsp_tx_fmt;
 uint8_t	voss_libsamplerate_enable;
 uint8_t	voss_libsamplerate_quality = SRC_SINC_FASTEST;
 int	voss_is_recording = 1;
@@ -2199,33 +2197,6 @@ parse_options(int narg, char **pparg, int is_main)
 				if (profile.channels == 0)
 					return ("Missing -c parameter");
 				voss_dsp_max_channels = profile.channels;
-			}
-			switch (voss_dsp_bits) {
-			case 8:
-				voss_dsp_rx_fmt =
-				    voss_dsp_tx_fmt =
-				    AFMT_S8 | AFMT_U8;
-				break;
-			case 16:
-				voss_dsp_rx_fmt =
-				    voss_dsp_tx_fmt =
-				    AFMT_S16_BE | AFMT_S16_LE |
-				    AFMT_U16_BE | AFMT_U16_LE;
-				break;
-			case 24:
-				voss_dsp_rx_fmt =
-				    voss_dsp_tx_fmt =
-				    AFMT_S24_BE | AFMT_S24_LE |
-				    AFMT_U24_BE | AFMT_U24_LE;
-				break;
-			case 32:
-				voss_dsp_rx_fmt =
-				    voss_dsp_tx_fmt =
-				    AFMT_S32_BE | AFMT_S32_LE |
-				    AFMT_U32_BE | AFMT_U32_LE;
-				break;
-			default:
-				return ("Invalid number of sample bits");
 			}
 			if (c == 'f' || c == 'R') {
 				if (strlen(optarg) > VMAX_STRING - 1)

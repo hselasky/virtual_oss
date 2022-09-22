@@ -214,8 +214,6 @@ extern uint32_t voss_dsp_samples;
 extern uint32_t voss_dsp_max_channels;
 extern uint32_t voss_dsp_sample_rate;
 extern uint32_t voss_dsp_bits;
-extern uint32_t voss_dsp_rx_fmt;
-extern uint32_t voss_dsp_tx_fmt;
 extern uint8_t voss_libsamplerate_enable;
 extern uint8_t voss_libsamplerate_quality;
 extern int voss_is_recording;
