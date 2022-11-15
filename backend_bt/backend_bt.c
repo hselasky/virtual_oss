@@ -460,7 +460,7 @@ retry:
 			DPRINTF("Could not get MTU\n");
 			goto error;
 		}
-		temp = cfg->mtu * 2;
+		temp = cfg->mtu * 16;
 		if (setsockopt(cfg->fd, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(temp)) == -1) {
 			DPRINTF("Could not set send buffer size\n");
 			goto error;
@@ -483,6 +483,11 @@ retry:
 		temp = 1;
 		if (setsockopt(cfg->fd, SOL_SOCKET, SO_RCVLOWAT, &temp, sizeof(temp)) == -1) {
 			DPRINTF("Could not set low water mark\n");
+			goto error;
+		}
+		temp = 1;
+		if (ioctl(cfg->fd, FIONBIO, &temp) == -1) {
+			DPRINTF("Could not set non-blocking I/O for receive direction\n");
 			goto error;
 		}
 	}
@@ -672,7 +677,7 @@ av_error_0:
 }
 
 int
-bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block)
+bt_receive(struct bt_config *cfg, void *ptr, int len, int use_delay)
 {
 	struct sbc_header *phdr = (struct sbc_header *)cfg->mtu_data;
 	struct sbc_encode *sbc = cfg->handle.sbc_enc;
@@ -680,6 +685,10 @@ bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block)
 	int delta;
 	int err;
 	int i;
+
+	/* wait for service interval, if any */
+	if (use_delay)
+		virtual_oss_wait();
 
 	switch (cfg->blocks) {
 	case BLOCKS_4:
@@ -734,20 +743,16 @@ bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block)
 			continue;
 		}
 		/* TODO: Support fragmented SBC frames */
-		do {
-			err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
-		} while (may_block && err < 0 && errno == EAGAIN);
+		err = read(cfg->fd, cfg->mtu_data, cfg->mtu);
 
-		if (!may_block) {
-			if (err == 0) {
+		if (err == 0) {
+			break;
+		} else if (err < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
 				break;
-			} else if (err < 0) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK)
-					break;
-			}
+			else
+				return (-1);	/* disconnected */
 		}
-		if (err < 0)
-			return (-1);
 
 		/* verify RTP header */
 		if (err < (int)sizeof(*phdr) || phdr->id != 0x80)

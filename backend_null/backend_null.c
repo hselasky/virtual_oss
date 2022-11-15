@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015 Hans Petter Selasky
+ * Copyright (c) 2015-2022 Hans Petter Selasky
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -63,30 +63,12 @@ null_open(struct voss_backend *pbe, const char *devname,
 	return (-1);
 }
 
-static void
-null_wait(void)
-{
-	struct timespec ts;
-	uint64_t delay;
-	uint64_t nsec;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-
-	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
-
-	delay = voss_dsp_samples;
-	delay *= 1000000000ULL;
-	delay /= voss_dsp_sample_rate;
-
-	usleep((delay - (nsec % delay)) / 1000);
-}
-
 static int
 null_rec_transfer(struct voss_backend *pbe, void *ptr, int len)
 {
 
 	if (voss_has_synchronization == 0)
-		null_wait();
+		virtual_oss_wait();
 	memset(ptr, 0, len);
 	return (len);
 }

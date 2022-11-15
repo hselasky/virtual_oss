@@ -40,8 +40,8 @@
 #include "virtual_int.h"
 #include "virtual_backend.h"
 
-static uint64_t
-virtual_oss_delay(void)
+uint64_t
+virtual_oss_delay_ns(void)
 {
 	uint64_t delay;
 
@@ -50,6 +50,24 @@ virtual_oss_delay(void)
 	delay /= voss_dsp_sample_rate;
 
 	return (delay);
+}
+
+void
+virtual_oss_wait(void)
+{
+	struct timespec ts;
+	uint64_t delay;
+	uint64_t nsec;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
+
+	delay = voss_dsp_samples;
+	delay *= 1000000000ULL;
+	delay /= voss_dsp_sample_rate;
+
+	usleep((delay - (nsec % delay)) / 1000);
 }
 
 uint64_t
@@ -262,7 +280,7 @@ virtual_oss_process(void *arg)
 			delta_time = nice_timeout - virtual_oss_timestamp();
 
 			/* Don't service more than 2x sample rate */
-			nice_timeout = virtual_oss_delay() / 2;
+			nice_timeout = virtual_oss_delay_ns() / 2;
 			if (delta_time >= 1000 && delta_time <= nice_timeout) {
 				/* convert from ns to us */
 				usleep(delta_time / 1000);

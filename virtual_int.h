@@ -284,6 +284,8 @@ extern double voss_ad_getput_sample(double);
 extern void voss_add_options(char *);
 
 /* Get current timestamp */
+extern uint64_t virtual_oss_delay_ns(void);
+extern void virtual_oss_wait(void);
 extern uint64_t virtual_oss_timestamp(void);
 
 /* Fast array multiplication */

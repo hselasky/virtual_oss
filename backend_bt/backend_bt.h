@@ -111,6 +111,6 @@ struct bt_config {
 size_t	sbc_encode_frame(struct bt_config *);
 size_t	sbc_decode_frame(struct bt_config *, int);
 
-int	bt_receive(struct bt_config *cfg, void *ptr, int len, int may_block);
+int	bt_receive(struct bt_config *cfg, void *ptr, int len, int use_delay);
 
 #endif					/* _BACKEND_BT_H_ */
