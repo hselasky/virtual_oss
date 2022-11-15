@@ -61,7 +61,7 @@ virtual_oss_wait(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
-	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
+	nsec = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 
 	delay = voss_dsp_samples;
 	delay *= 1000000000ULL;
@@ -78,7 +78,7 @@ virtual_oss_timestamp(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
-	nsec = ((unsigned)ts.tv_sec) * 1000000000ULL + ts.tv_nsec;
+	nsec = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 	return (nsec);
 }
 
