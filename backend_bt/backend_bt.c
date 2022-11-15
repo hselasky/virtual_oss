@@ -1,7 +1,7 @@
 /*-
- * Copyright (c) 2015-2019 Hans Petter Selasky. All rights reserved.
- * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>. All rights reserved.
- * Copyright (c) 2006 Itronix Inc. All rights reserved.
+ * Copyright (c) 2015-2019 Hans Petter Selasky
+ * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>
+ * Copyright (c) 2006 Itronix Inc
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2021 Tim Creech <tcreech@tcreech.com>. All rights reserved.
+ * Copyright (c) 2021 Tim Creech <tcreech@tcreech.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

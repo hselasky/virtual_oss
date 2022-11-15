@@ -4,7 +4,6 @@
  * Copyright (c) 2015-2016 Nathanial Sloss <nathanialsloss@yahoo.com.au>
  * Copyright (c) 2016-2019 Hans Petter Selasky <hps@selasky.org>
  * Copyright (c) 2019 Google LLC, written by Richard Kralovic <riso@google.com>
- * All rights reserved.
  *
  *		This software is dedicated to the memory of -
  *	   Baron James Anlezark (Barry) - 1 Jan 1949 - 13 May 2012.

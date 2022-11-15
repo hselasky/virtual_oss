@@ -1,6 +1,5 @@
 /*-
  * Copyright (c) 2015 Nathanial Sloss <nathanialsloss@yahoo.com.au>
- * All rights reserved.
  *
  *		This software is dedicated to the memory of -
  *	   Baron James Anlezark (Barry) - 1 Jan 1949 - 13 May 2012.
