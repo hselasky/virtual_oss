@@ -2599,6 +2599,12 @@ main(int argc, char **argv)
 
 	atomic_init();
 
+	/* automagically load the cuse.ko module, if any */
+	if (feature_present("cuse") == 0) {
+		if (system("kldload cuse") == -1)
+			warn("Failed to kldload cuse");
+	}
+
 	if (cuse_init() != 0)
 		errx(EX_USAGE, "Could not connect to cuse module");
 
