@@ -505,18 +505,29 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_data, pvp->tx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				for (x = x_off = 0; x != pvp->channels; x++, x_off++) {
+				for (x = 0; x != pvp->channels; x++) {
 					src = pvp->tx_dst[x];
 					shift_orig = pvp->tx_shift[x] + shift_fmt;
 					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
+					/*
+					 * Automagically re-map
+					 * channels when the client is
+					 * requesting fewer channels
+					 * than specified in the
+					 * profile. This typically
+					 * allows automagic mono to
+					 * stereo conversion.
+					 */
+					if (x >= dst_chans)
+						x_off = x % dst_chans;
+					else
+						x_off = x;
+
 					if (pvp->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
-						if (x_off >= dst_chans)
-							x_off -= dst_chans;
-
 						if (pvp->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
@@ -583,18 +594,29 @@ virtual_oss_process(void *arg)
 				format_maximum(buffer_data, pvp->tx_peak_value,
 				    dst_chans, samples, shift_fmt);
 
-				for (x = x_off = 0; x != pvp->channels; x++, x_off++) {
+				for (x = 0; x != pvp->channels; x++) {
 					src = pvp->tx_dst[x];
 					shift_orig = pvp->tx_shift[x] + shift_fmt;
 					shift = shift_orig - 7;
 					volume = pvc->tx_volume;
 
+					/*
+					 * Automagically re-map
+					 * channels when the client is
+					 * requesting fewer channels
+					 * than specified in the
+					 * profile. This typically
+					 * allows automagic mono to
+					 * stereo conversion.
+					 */
+					if (x >= dst_chans)
+						x_off = x % dst_chans;
+					else
+						x_off = x;
+
 					if (pvp->tx_mute[x] || src >= src_chans) {
 						continue;
 					} else {
-						if (x_off >= dst_chans)
-							x_off -= dst_chans;
-
 						if (pvp->tx_pol[x]) {
 							if (shift < 0) {
 								shift = -shift;
