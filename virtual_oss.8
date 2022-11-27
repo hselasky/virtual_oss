@@ -23,7 +23,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd April 3, 2022
+.Dd November 27, 2022
 .Dt VIRTUAL_OSS 8
 .Os FreeBSD
 .Sh NAME
@@ -219,6 +219,7 @@ sysctl dev.pcm.X.rec.vchanformat=s24le:7.1
 sysctl dev.pcm.X.rec.vchanrate=48000
 sysctl dev.pcm.X.play.vchanformat=s24le:7.1
 sysctl dev.pcm.X.play.vchanrate=48000
+sysctl dev.pcm.X.bitperfect=1
 
 mixer -f /dev/mixerX -s vol 100
 mixer -f /dev/mixerX -s pcm 100
@@ -277,21 +278,21 @@ virtual_oss \\
 Connect to a bluetooth audio headset, playback only:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
+	-C 2 -c 2 -r 48000 -b 16 -s 4ms \\
 	-R /dev/null -P /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
 .Ed
 .Pp
 Connect to a bluetooth audio headset, playback and recording:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
+	-C 2 -c 2 -r 48000 -b 16 -s 4ms \\
 	-f /dev/bluetooth/xx:xx:xx:xx:xx:xx -d dsp
 .Ed
 .Pp
 Create recording device which outputs a WAV-formatted file:
 .Bd -literal -offset indent
 virtual_oss \\
-	-C 2 -c 2 -r 48000 -b 16 -s 20ms \\
+	-C 2 -c 2 -r 48000 -b 16 -s 4ms \\
 	-f /dev/dspX -w dsp.wav -d dsp
 .Ed
 .Pp
@@ -321,11 +322,23 @@ virtual_oss -S -b 16 -C 2 -c 2 -r 48000 -s 4ms \\
 	-f /dev/sndio/default -d dsp
 .Ed
 .Pp
+How to set intel based CPUs in performance mode:
+.Bd -literal -offset indent
+sysctl -aN | fgrep dev.hwpstate | fgrep epp | \
+while read OID
+do
+sysctl ${OID}=0
+done
+
+sysctl kern.sched.preempt_thresh=224
+.Ed
+.Pp
 .Sh NOTES
 All character devices are created using the 0666 mode which gives
 everyone in the system access.
 .Sh FILES
 .Sh SEE ALSO
+.Xr sysctl 8 ,
 .Xr virtual_bt_speaker 8 ,
 .Xr virtual_equalizer 8 ,
 .Xr virtual_oss_cmd 8 ,
