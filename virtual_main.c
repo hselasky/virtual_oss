@@ -209,17 +209,17 @@ vmonitor_alloc(int *pid, vmonitor_head_t *phead)
 }
 
 int64_t
-vclient_noise(vclient_t *pvc, int64_t volume, int8_t shift)
+vclient_noise(uint32_t *pnoise, int64_t volume, int8_t shift)
 {
 	const uint32_t prime = 0xFFFF1DU;
 	int64_t temp;
 
 	/* compute next noise sample */
-	temp = pvc->noise_rem;
+	temp = *pnoise;
 	if (temp & 1)
 		temp += prime;
 	temp /= 2;
-	pvc->noise_rem = temp;
+	*pnoise = temp;
 
 	/* unsigned to signed conversion */
 	temp ^= 0x800000ULL;
@@ -229,11 +229,16 @@ vclient_noise(vclient_t *pvc, int64_t volume, int8_t shift)
 	/* properly amplify */
 	temp *= volume;
 
-	/* properly shift noise */
-	if (shift > (23 + 7))
-		temp <<= (shift - (23 + 7));
+	/* bias shift */
+	shift -= 23 + VVOLUME_UNIT_SHIFT;
+
+	/* range check and shift noise */
+	if (__predict_false(shift < -63 || shift > 63))
+		temp = 0;
+	else if (shift < 0)
+		temp >>= -shift;
 	else
-		temp >>= ((23 + 7) - shift);
+		temp <<= shift;
 
 	return (temp);
 }
@@ -294,7 +299,6 @@ vclient_t *
 vclient_alloc(void)
 {
 	vclient_t *pvc;
-	int x;
 
 	pvc = malloc(sizeof(*pvc));
 	if (pvc == NULL)
@@ -302,8 +306,10 @@ vclient_alloc(void)
 
 	memset(pvc, 0, sizeof(*pvc));
 
-	pvc->tx_volume = 128;
-	pvc->noise_rem = 1;
+	pvc->rx_noise_rem = 1;
+	pvc->tx_noise_rem = 1;
+	pvc->rx_volume = 1 << VVOLUME_UNIT_SHIFT;
+	pvc->tx_volume = 1 << VVOLUME_UNIT_SHIFT;
 
 	return (pvc);
 }
@@ -1399,15 +1405,20 @@ vclient_ioctl_oss(struct cuse_dev *pdev, int fflags,
 	case SNDCTL_DSP_SETDUPLEX:
 		break;
 	case SNDCTL_DSP_GETRECVOL:
-		data.val = 128 | (128 << 8);
+		temp = (pvc->rx_volume * 100) >> VVOLUME_UNIT_SHIFT;
+		data.val = (temp & 0x00FF) |
+		    ((temp << 8) & 0xFF00);
+		break;
+	case SNDCTL_DSP_SETRECVOL:
+		pvc->rx_volume = ((data.val & 0xFF) << VVOLUME_UNIT_SHIFT) / 100;
 		break;
 	case SNDCTL_DSP_GETPLAYVOL:
-		temp = (pvc->tx_volume * 100) / 128;
+		temp = (pvc->tx_volume * 100) >> VVOLUME_UNIT_SHIFT;
 		data.val = (temp & 0x00FF) |
 		    ((temp << 8) & 0xFF00);
 		break;
 	case SNDCTL_DSP_SETPLAYVOL:
-		pvc->tx_volume = ((data.val & 0xFF) * 128) / 100;
+		pvc->tx_volume = ((data.val & 0xFF) << VVOLUME_UNIT_SHIFT) / 100;
 		break;
 	case SNDCTL_DSP_CURRENT_IPTR:
 		memset(&data.oss_count, 0, sizeof(data.oss_count));

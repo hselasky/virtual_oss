@@ -142,6 +142,70 @@ vclient_write_linear(struct virtual_client *pvc, struct virtual_ring *pvr,
 	return (total_written);
 }
 
+static inline void
+virtual_oss_mixer_core_sub(const int64_t *src, int64_t *dst,
+    uint32_t *pnoise, int src_chan, int dst_chan, int num,
+    int64_t volume, int shift, int shift_orig, bool pol,
+    bool assign)
+{
+	if (pol)
+		volume = -volume;
+
+	if (shift < 0) {
+		shift = -shift;
+		while (num--) {
+			if (assign)
+				*dst = (*src * volume) >> shift;
+			else
+				*dst += (*src * volume) >> shift;
+			if (__predict_true(pnoise != NULL))
+				*dst += vclient_noise(pnoise, volume, shift_orig);
+			src += src_chan;
+			dst += dst_chan;
+		}
+	} else {
+		while (num--) {
+			if (assign)
+				*dst = (*src * volume) << shift;
+			else
+				*dst += (*src * volume) << shift;
+			if (__predict_true(pnoise != NULL))
+				*dst += vclient_noise(pnoise, volume, shift_orig);
+			src += src_chan;
+			dst += dst_chan;
+		}
+	}
+}
+
+static inline void
+virtual_oss_mixer_core(const int64_t *src, int64_t *dst,
+    uint32_t *pnoise, int src_chan, int dst_chan, int num,
+    int64_t volume, int shift, int shift_orig, bool pol,
+    bool assign)
+{
+	const uint8_t selector = (shift_orig > 0) + assign * 2;
+
+	/* optimize some cases */
+	switch (selector) {
+	case 0:
+		virtual_oss_mixer_core_sub(src, dst, NULL, src_chan, dst_chan,
+		    num, volume, shift, shift_orig, pol, false);
+		break;
+	case 1:
+		virtual_oss_mixer_core_sub(src, dst, pnoise, src_chan, dst_chan,
+		    num, volume, shift, shift_orig, pol, false);
+		break;
+	case 2:
+		virtual_oss_mixer_core_sub(src, dst, NULL, src_chan, dst_chan,
+		    num, volume, shift, shift_orig, pol, true);
+		break;
+	case 3:
+		virtual_oss_mixer_core_sub(src, dst, pnoise, src_chan, dst_chan,
+		    num, volume, shift, shift_orig, pol, true);
+		break;
+	}
+}
+
 void   *
 virtual_oss_process(void *arg)
 {
@@ -404,41 +468,19 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvp->rx_src[x];
-					shift = pvp->rx_shift[x] - shift_fmt;
+					shift_orig = pvp->rx_shift[x] - shift_fmt;
+					shift = shift_orig - VVOLUME_UNIT_SHIFT;
+					volume = pvc->rx_volume;
 
-					if (pvp->rx_mute[x] || src >= src_chans) {
-						for (y = 0; y != samples; y++) {
-							buffer_temp[(y * dst_chans) + x] = 0;
-						}
-					} else {
-						if (pvp->rx_pol[x]) {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] =
-									    -(buffer_data[(y * src_chans) + src] >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] =
-									    -(buffer_data[(y * src_chans) + src] << shift);
-								}
-							}
-						} else {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] =
-									    (buffer_data[(y * src_chans) + src] >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * dst_chans) + x] =
-									    (buffer_data[(y * src_chans) + src] << shift);
-								}
-							}
-						}
+					if (pvp->rx_mute[x] || src >= src_chans || volume == 0) {
+						for (y = 0; y != (samples * dst_chans); y += dst_chans)
+							buffer_temp[y + x] = 0;
+						continue;
 					}
+
+					virtual_oss_mixer_core(buffer_data + src, buffer_temp + x,
+					    &pvc->rx_noise_rem, src_chans, dst_chans, samples,
+					    volume, shift, shift_orig, pvp->rx_pol[x], true);
 				}
 
 				format_maximum(buffer_temp, pvp->rx_peak_value,
@@ -508,8 +550,11 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != pvp->channels; x++) {
 					src = pvp->tx_dst[x];
 					shift_orig = pvp->tx_shift[x] + shift_fmt;
-					shift = shift_orig - 7;
+					shift = shift_orig - VVOLUME_UNIT_SHIFT;
 					volume = pvc->tx_volume;
+
+					if (pvp->tx_mute[x] || src >= src_chans || volume == 0)
+						continue;
 
 					/*
 					 * Automagically re-map
@@ -520,50 +565,14 @@ virtual_oss_process(void *arg)
 					 * allows automagic mono to
 					 * stereo conversion.
 					 */
-					if (x >= dst_chans)
+					if (__predict_false(x >= dst_chans))
 						x_off = x % dst_chans;
 					else
 						x_off = x;
 
-					if (pvp->tx_mute[x] || src >= src_chans) {
-						continue;
-					} else {
-						if (pvp->tx_pol[x]) {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) << shift);
-								}
-							}
-						} else {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) << shift);
-								}
-							}
-						}
-						if (shift_orig > 0) {
-							buffer_temp[(y * src_chans) + src] +=
-							    vclient_noise(pvc, volume, shift_orig);
-						}
-					}
+					virtual_oss_mixer_core(buffer_data + x_off, buffer_temp + src,
+					    &pvc->tx_noise_rem, dst_chans, src_chans, samples,
+					    volume, shift, shift_orig, pvp->tx_pol[x], false);
 				}
 			    }
 			}
@@ -597,8 +606,11 @@ virtual_oss_process(void *arg)
 				for (x = 0; x != pvp->channels; x++) {
 					src = pvp->tx_dst[x];
 					shift_orig = pvp->tx_shift[x] + shift_fmt;
-					shift = shift_orig - 7;
+					shift = shift_orig - VVOLUME_UNIT_SHIFT;
 					volume = pvc->tx_volume;
+
+					if (pvp->tx_mute[x] || src >= src_chans || volume == 0)
+						continue;
 
 					/*
 					 * Automagically re-map
@@ -609,50 +621,14 @@ virtual_oss_process(void *arg)
 					 * allows automagic mono to
 					 * stereo conversion.
 					 */
-					if (x >= dst_chans)
+					if (__predict_false(x >= dst_chans))
 						x_off = x % dst_chans;
 					else
 						x_off = x;
 
-					if (pvp->tx_mute[x] || src >= src_chans) {
-						continue;
-					} else {
-						if (pvp->tx_pol[x]) {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    -((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) << shift);
-								}
-							}
-						} else {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_temp[(y * src_chans) + src] +=
-									    ((buffer_data[(y * dst_chans) + x_off] *
-									    (int64_t)volume) << shift);
-								}
-							}
-						}
-						if (shift_orig > 0) {
-							buffer_temp[(y * src_chans) + src] +=
-							    vclient_noise(pvc, volume, shift_orig);
-						}
-					}
+					virtual_oss_mixer_core(buffer_data + x_off, buffer_temp + src,
+					    &pvc->tx_noise_rem, dst_chans, src_chans, samples,
+					    volume, shift, shift_orig, pvp->tx_pol[x], false);
 				}
 			    }
 			}
@@ -820,41 +796,19 @@ virtual_oss_process(void *arg)
 
 				for (x = 0; x != dst_chans; x++) {
 					src = pvp->rx_src[x];
-					shift = pvp->rx_shift[x] - shift_fmt;
+					shift_orig = pvp->rx_shift[x] - shift_fmt;
+					shift = shift_orig - VVOLUME_UNIT_SHIFT;
+					volume = pvc->rx_volume;
 
-					if (pvp->rx_mute[x] || src >= src_chans) {
-						for (y = 0; y != samples; y++) {
-							buffer_monitor[(y * dst_chans) + x] = 0;
-						}
-					} else {
-						if (pvp->rx_pol[x]) {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_monitor[(y * dst_chans) + x] =
-									    -(buffer_temp[(y * src_chans) + src] >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_monitor[(y * dst_chans) + x] =
-									    -(buffer_temp[(y * src_chans) + src] << shift);
-								}
-							}
-						} else {
-							if (shift < 0) {
-								shift = -shift;
-								for (y = 0; y != samples; y++) {
-									buffer_monitor[(y * dst_chans) + x] =
-									    (buffer_temp[(y * src_chans) + src] >> shift);
-								}
-							} else {
-								for (y = 0; y != samples; y++) {
-									buffer_monitor[(y * dst_chans) + x] =
-									    (buffer_temp[(y * src_chans) + src] << shift);
-								}
-							}
-						}
+					if (pvp->rx_mute[x] || src >= src_chans || volume == 0) {
+						for (y = 0; y != (samples * dst_chans); y += dst_chans)
+							buffer_monitor[y + x] = 0;
+						continue;
 					}
+
+					virtual_oss_mixer_core(buffer_temp + src, buffer_monitor + x,
+					    &pvc->rx_noise_rem, src_chans, dst_chans, samples,
+					    volume, shift, shift_orig, pvp->rx_pol[x], true);
 				}
 
 				format_maximum(buffer_monitor, pvp->rx_peak_value,

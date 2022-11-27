@@ -54,6 +54,8 @@
   AFMT_S32_BE | AFMT_S32_LE | AFMT_U32_BE | AFMT_U32_LE | \
   AFMT_U8 | AFMT_S8)
 
+#define	VVOLUME_UNIT_SHIFT 7
+
 struct virtual_profile;
 
 #if 0
@@ -166,13 +168,15 @@ struct virtual_client {
 	uint32_t buffer_size;
 	uint32_t low_water;
 	uint32_t rec_delay;
-	uint32_t noise_rem;
+	uint32_t rx_noise_rem;
+	uint32_t tx_noise_rem;
 	int	rx_busy;
 	int	tx_busy;
 	int	channels;
 	int	format;
 	int	rx_enabled;
 	int	tx_enabled;
+	int	rx_volume;
 	int	tx_volume;
 	int	type;		/* VTYPE_XXX */
 	int	sample_rate;
@@ -254,7 +258,7 @@ extern uint32_t vclient_sample_bytes(vclient_t *);
 extern uint32_t vclient_bufsize_internal(vclient_t *);
 extern uint32_t vclient_bufsize_scaled(vclient_t *);
 
-extern int64_t vclient_noise(vclient_t *, int64_t, int8_t);
+extern int64_t vclient_noise(uint32_t *, int64_t, int8_t);
 
 extern vmonitor_t *vmonitor_alloc(int *, vmonitor_head_t *);
 
