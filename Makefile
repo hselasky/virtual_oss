@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Hans Petter Selasky. All rights reserved.
+# Copyright (c) 2012-2023 Hans Petter Selasky. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -100,7 +100,7 @@ CFLAGS += -DHAVE_HTTPD
 .endif
 
 .if defined(HAVE_DEBUG)
-DEBUG_FLAGS=-g -O0 -ferror-limit=-1
+DEBUG_FLAGS=-g -O0
 .endif
 
 CFLAGS += -I${LOCALBASE}/include
