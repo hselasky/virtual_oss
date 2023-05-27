@@ -78,8 +78,11 @@ register_sdp(struct bt_audio_receiver *r)
 	struct sdp_audio_sink_profile record = {};
 
 	r->sdp_session = sdp_open_local(r->sdp_socket_path);
-	if (r->sdp_session == NULL || sdp_error(r->sdp_session))
+	if (r->sdp_session == NULL || sdp_error(r->sdp_session)) {
+		sdp_close(r->sdp_session);
+		r->sdp_session = NULL;
 		return (0);
+	}
 
 	record.psm = r->l2cap_psm;
 	record.protover = 0x100;
@@ -92,6 +95,7 @@ register_sdp(struct bt_audio_receiver *r)
 		message("SDP failed to register: %s\n",
 		    strerror(sdp_error(r->sdp_session)));
 		sdp_close(r->sdp_session);
+		r->sdp_session = NULL;
 		return (0);
 	}
 	return (1);
@@ -102,6 +106,7 @@ unregister_sdp(struct bt_audio_receiver *r)
 {
 	sdp_unregister_service(r->sdp_session, r->sdp_handle);
 	sdp_close(r->sdp_session);
+	r->sdp_session = NULL;
 }
 
 static int

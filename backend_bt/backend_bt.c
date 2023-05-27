@@ -238,6 +238,7 @@ bt_query(struct l2cap_info *info, uint16_t service_class)
 	ss = sdp_open(&info->laddr, &info->raddr);
 	if (ss == NULL || sdp_error(ss) != 0) {
 		DPRINTF("Could not open SDP\n");
+		sdp_close(ss);
 		return (psm);
 	}
 	/* Initialize attribute values array */
